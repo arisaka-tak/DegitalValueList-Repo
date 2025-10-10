@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+
+{% block title %}商品マスタ管理 - デジタル価格表システム{% endblock %}
+
+{% block breadcrumb %}
+    {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
+{% endblock %}
+
+{% block content %}
+    {% include 'components/page_header.html' with page_title="商品マスタ管理" page_subtitle="商品情報と価格履歴の管理" %}
+    
+    <div class="container">
+        <div class="row g-4">
+            <!-- 商品管理 -->
+            <div class="col-md-6">
+                <div class="card card-hover h-100">
+                    <div class="card-body text-center p-5">
+                        <div class="mb-3" style="font-size: 3rem;">📦</div>
+                        <h4 class="card-title mb-3">商品管理</h4>
+                        <p class="text-muted mb-4">商品マスタの登録・編集・削除</p>
+                        <div class="d-grid gap-2">
+                            <a href="{% url 'products_master:product_list' %}" class="btn btn-primary">商品一覧</a>
+                            <a href="{% url 'products_master:product_create' %}" class="btn btn-outline-primary">新規登録</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 統合価格表 -->
+            <div class="col-md-6">
+                <div class="card card-hover h-100">
+                    <div class="card-body text-center p-5">
+                        <div class="mb-3" style="font-size: 3rem;">📊</div>
+                        <h4 class="card-title mb-3">統合価格表</h4>
+                        <p class="text-muted mb-4">商品マスタと価格履歴の統合表示</p>
+                        <div class="d-grid gap-2">
+                            <a href="{% url 'products_master:integrated_pricelist' %}" class="btn btn-info">統合価格表</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI機能 -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col">
+                                <h5 class="card-title mb-1">🤖 AI価格抽出機能</h5>
+                                <p class="text-muted mb-0">PDF価格改定通知から自動で価格情報を抽出します</p>
+                            </div>
+                            <div class="col-auto">
+                                <button class="btn btn-warning" disabled>準備中</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

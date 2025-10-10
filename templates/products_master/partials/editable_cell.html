@@ -1,0 +1,76 @@
+{% load price_filters %}
+<div class="price-cell">
+{% if field == 'wholesale_price' %}
+    <span class="price-display {% if history.is_editable %}editable{% endif %}" onclick="editCell(this, '{{ history.pk }}', 'wholesale_price')">
+        {{ history.wholesale_price|default:"-" }}
+    </span>
+    {% if history.is_editable %}
+        <input type="text" class="price-input" 
+               name="value"
+               value="{{ history.wholesale_price|default:'' }}"
+               data-original-value="{{ history.wholesale_price|default:'' }}"
+               data-history-id="{{ history.pk }}"
+               data-field="wholesale_price"
+               onblur="cancelEdit(this)">
+    {% endif %}
+{% elif field == 'kenren_price' %}
+    <span class="price-display {% if history.is_editable %}editable{% endif %}" onclick="editCell(this, '{{ history.pk }}', 'kenren_price')">
+        {% if history.kenren_price %}
+            {{ history.kenren_price }}
+        {% else %}
+            {% with calc_price=history.wholesale_price|calc_kenren_price:history.gross_margin_rate %}
+                {% if calc_price %}
+                    <span class="text-success">{{ calc_price|format_price }}</span>
+                {% else %}
+                    <span class="text-muted">要見積</span>
+                {% endif %}
+            {% endwith %}
+        {% endif %}
+    </span>
+    {% if history.is_editable %}
+        <input type="text" class="price-input" 
+               name="value"
+               value="{{ history.kenren_price|default:'' }}"
+               data-original-value="{{ history.kenren_price|default:'' }}"
+               data-history-id="{{ history.pk }}"
+               data-field="kenren_price"
+               onblur="cancelEdit(this)">
+    {% endif %}
+{% elif field == 'revision_reason' %}
+    <span class="price-display {% if history.is_editable %}editable{% endif %}" onclick="editCell(this, '{{ history.pk }}', 'revision_reason')">
+        {{ history.revision_reason|default:"-" }}
+    </span>
+    {% if history.is_editable %}
+        <input type="text" class="price-input" 
+               name="value"
+               value="{{ history.revision_reason|default:'' }}"
+               data-original-value="{{ history.revision_reason|default:'' }}"
+               data-history-id="{{ history.pk }}"
+               data-field="revision_reason"
+               onblur="cancelEdit(this)">
+    {% endif %}
+{% endif %}
+</div>
+
+<script>
+function editCell(span, historyId, field) {
+    if (!span.nextElementSibling) return;
+    
+    const input = span.nextElementSibling;
+    span.style.display = 'none';
+    input.style.display = 'block';
+    input.focus();
+    input.select();
+}
+
+function cancelEdit(input) {
+    const span = input.previousElementSibling;
+    input.style.display = 'none';
+    span.style.display = 'block';
+}
+
+// HTMX更新後にスタイルを再適用
+document.addEventListener('htmx:afterSwap', function(evt) {
+    // 新しく追加された要素にもイベントリスナーが適用される
+});
+</script>

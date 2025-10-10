@@ -1,0 +1,23 @@
+{% load price_filters %}
+<tr data-id="{{ history.pk }}" {% if not history.is_editable %}class="table-secondary text-muted"{% endif %}>
+    <td>{{ history.period_year }}年度</td>
+    <td>{{ history.effective_year_month }}{% if not history.is_editable %} <small>(編集不可)</small>{% endif %}</td>
+    <td>
+        {% include 'products_master/partials/editable_cell.html' with field='wholesale_price' %}
+    </td>
+    <td>
+        {% include 'products_master/partials/editable_cell.html' with field='kenren_price' %}
+    </td>
+    <td>{{ history.gross_margin_rate|default:"-" }}</td>
+    <td>{{ history.revision_amount|default:"-" }}</td>
+    <td>
+        {% if history.is_deletable %}
+            <button class="btn btn-sm btn-outline-danger" 
+                    hx-delete="{% url 'products_master:price_history_delete' history.pk %}"
+                    hx-target="closest tr"
+                    hx-confirm="この価格履歴を削除しますか？">
+                削除
+            </button>
+        {% endif %}
+    </td>
+</tr>

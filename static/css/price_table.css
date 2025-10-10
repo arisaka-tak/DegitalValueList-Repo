@@ -1,0 +1,31 @@
+/* 価格テーブル用CSS */
+.price-cell {
+    min-width: 120px;
+    position: relative;
+}
+
+.price-display {
+    display: block;
+    min-height: 31px;
+    padding: 0.25rem 0.5rem;
+    margin: 0;
+    box-sizing: border-box;
+    line-height: 1.5;
+}
+
+.price-display.editable {
+    cursor: pointer;
+    border-bottom: 1px dashed #007bff;
+}
+
+.price-input {
+    display: none;
+    width: 100%;
+    height: 31px;
+    border: 1px solid #ced4da;
+    border-radius: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+    box-sizing: border-box;
+    margin: 0;
+}

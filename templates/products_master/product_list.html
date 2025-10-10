@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+
+{% block title %}商品一覧 - デジタル価格表システム{% endblock %}
+
+{% block breadcrumb %}
+    {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
+{% endblock %}
+
+{% block content %}
+    {% include 'components/page_header.html' with page_title="商品一覧" page_subtitle="登録されている商品の一覧" header_actions='<a href="/products/products/create/" class="btn btn-primary">新規登録</a>' %}
+    
+    <div class="container">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <div class="card">
+            <div class="card-body">
+                {% if page_obj %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>商品番号</th>
+                                    <th>商品コード</th>
+                                    <th>商品名</th>
+                                    <th>畜種</th>
+                                    <th>分類</th>
+                                    <th>メーカー</th>
+                                    <th>発送単位</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for product in page_obj %}
+                                    <tr>
+                                        <td>{{ product.product_number }}</td>
+                                        <td>{{ product.product_code|default:"未設定" }}</td>
+                                        <td>
+                                            <a href="{% url 'products_master:product_detail' product.pk %}" class="text-decoration-none">
+                                                {{ product.product_name }}
+                                            </a>
+                                        </td>
+                                        <td>{{ product.livestock_type }}</td>
+                                        <td>{{ product.category }}</td>
+                                        <td>{{ product.manufacturer }}</td>
+                                        <td>{{ product.shipping_unit }}</td>
+                                        <td>
+                                            <div class="btn-group btn-group-sm">
+                                                <a href="{% url 'products_master:product_detail' product.pk %}" class="btn btn-outline-primary">詳細</a>
+                                                <a href="{% url 'products_master:product_edit' product.pk %}" class="btn btn-outline-secondary">編集</a>
+                                                <a href="{% url 'products_master:product_copy' product.pk %}" class="btn btn-outline-success">コピー</a>
+                                                <a href="{% url 'products_master:product_delete' product.pk %}" class="btn btn-outline-danger">削除</a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- ページネーション -->
+                    {% if page_obj.has_other_pages %}
+                        <nav aria-label="商品一覧ページネーション" class="mt-4">
+                            <ul class="pagination justify-content-center">
+                                {% if page_obj.has_previous %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page=1">最初</a>
+                                    </li>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}">前へ</a>
+                                    </li>
+                                {% endif %}
+
+                                <li class="page-item active">
+                                    <span class="page-link">
+                                        {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}
+                                    </span>
+                                </li>
+
+                                {% if page_obj.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.next_page_number }}">次へ</a>
+                                    </li>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">最後</a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    {% endif %}
+                {% else %}
+                    <div class="text-center py-5">
+                        <div class="mb-3" style="font-size: 3rem; color: #6c757d;">📦</div>
+                        <h5 class="text-muted">商品が登録されていません</h5>
+                        <p class="text-muted">最初の商品を登録してください。</p>
+                        <a href="{% url 'products_master:product_create' %}" class="btn btn-primary">新規登録</a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+{% endblock %}

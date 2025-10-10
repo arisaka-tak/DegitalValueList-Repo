@@ -1,0 +1,177 @@
+{% extends 'base.html' %}
+{% load price_filters %}
+
+{% block title %}統合価格表 - デジタル価格表システム{% endblock %}
+
+{% block breadcrumb %}
+    {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
+{% endblock %}
+
+{% block content %}
+    {% include 'components/page_header.html' with page_title="統合価格表" page_subtitle="商品マスタと価格履歴の統合表示" %}
+    
+    <div class="container">
+        <!-- フィルター -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <form method="get" class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label for="year" class="form-label">年度</label>
+                        <select class="form-select" id="year" name="year">
+                            <option value="">全年度</option>
+                            {% for year in available_years %}
+                                <option value="{{ year }}" {% if year == selected_year %}selected{% endif %}>
+                                    {{ year }}年度
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="month" class="form-label">適用年月</label>
+                        <select class="form-select" id="month" name="month">
+                            <option value="">全期間</option>
+                            {% for month in available_months %}
+                                <option value="{{ month }}" {% if month == selected_month %}selected{% endif %}>
+                                    {{ month }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-primary">絞り込み</button>
+                        <a href="{% url 'products_master:integrated_pricelist' %}" class="btn btn-outline-secondary">クリア</a>
+                    </div>
+                    <div class="col-md-3 text-end">
+                        <button type="button" class="btn btn-success" disabled>Excel出力</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 統合価格表 -->
+        <div class="card">
+            <div class="card-body">
+                {% if page_obj %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead class="table-primary">
+                                <tr>
+                                    <th rowspan="2" class="align-middle">№</th>
+                                    <th rowspan="2" class="align-middle">畜種</th>
+                                    <th rowspan="2" class="align-middle">分類</th>
+                                    <th rowspan="2" class="align-middle">メーカー</th>
+                                    <th rowspan="2" class="align-middle">商品名</th>
+                                    <th rowspan="2" class="align-middle">型式</th>
+                                    <th rowspan="2" class="align-middle">規格</th>
+                                    <th rowspan="2" class="align-middle">発送単位</th>
+                                    <th rowspan="2" class="align-middle">年度</th>
+                                    <th rowspan="2" class="align-middle">適用年月</th>
+                                    <th rowspan="2" class="align-middle">粗利率</th>
+                                    <th colspan="3" class="text-center">価格情報</th>
+                                    <th rowspan="2" class="align-middle">改定額</th>
+                                    <th rowspan="2" class="align-middle">送料</th>
+                                    <th rowspan="2" class="align-middle">備考</th>
+                                </tr>
+                                <tr>
+                                    <th>仕切価格</th>
+                                    <th>県連価格</th>
+                                    <th>参考小売価格</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for history in page_obj %}
+                                    <tr>
+                                        <td>{{ history.product.product_number }}</td>
+                                        <td>{{ history.product.livestock_type }}</td>
+                                        <td>{{ history.product.category }}</td>
+                                        <td>{{ history.product.manufacturer }}</td>
+                                        <td>
+                                            <a href="{% url 'products_master:product_detail' history.product.pk %}" 
+                                               class="text-decoration-none">
+                                                {{ history.product.product_name }}
+                                            </a>
+                                        </td>
+                                        <td>{{ history.product.model_number|default:"-" }}</td>
+                                        <td>{{ history.product.specification|default:"-" }}</td>
+                                        <td>{{ history.product.shipping_unit }}</td>
+                                        <td>{{ history.period_year }}年度</td>
+                                        <td>{{ history.effective_year_month }}</td>
+                                        <td>{{ history.gross_margin_rate|floatformat:6 }}</td>
+                                        <td class="text-end">{{ history.wholesale_price|format_price }}</td>
+                                        <td class="text-end">
+                                            {% if history.kenren_price %}
+                                                {{ history.kenren_price|format_price }}
+                                            {% else %}
+                                                {% with calc_price=history.wholesale_price|calc_kenren_price:history.gross_margin_rate %}
+                                                    {% if calc_price %}
+                                                        <span class="text-success">{{ calc_price|format_price }}</span>
+                                                    {% else %}
+                                                        <span class="text-muted">要見積</span>
+                                                    {% endif %}
+                                                {% endwith %}
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ history.retail_price|default:"-" }}</td>
+                                        <td class="text-end">{{ history.revision_amount|floatformat:0 }}</td>
+                                        <td>{{ history.product.shipping_fee|default:"-" }}</td>
+                                        <td>
+                                            {% if history.product.remarks %}
+                                                <span class="text-truncate d-inline-block" style="max-width: 100px;" 
+                                                      title="{{ history.product.remarks }}">
+                                                    {{ history.product.remarks }}
+                                                </span>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- ページネーション -->
+                    {% if page_obj.has_other_pages %}
+                        <nav aria-label="統合価格表ページネーション" class="mt-4">
+                            <ul class="pagination justify-content-center">
+                                {% if page_obj.has_previous %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page=1{% if selected_year %}&year={{ selected_year }}{% endif %}{% if selected_month %}&month={{ selected_month }}{% endif %}">最初</a>
+                                    </li>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if selected_year %}&year={{ selected_year }}{% endif %}{% if selected_month %}&month={{ selected_month }}{% endif %}">前へ</a>
+                                    </li>
+                                {% endif %}
+
+                                <li class="page-item active">
+                                    <span class="page-link">
+                                        {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}
+                                    </span>
+                                </li>
+
+                                {% if page_obj.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if selected_year %}&year={{ selected_year }}{% endif %}{% if selected_month %}&month={{ selected_month }}{% endif %}">次へ</a>
+                                    </li>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if selected_year %}&year={{ selected_year }}{% endif %}{% if selected_month %}&month={{ selected_month }}{% endif %}">最後</a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    {% endif %}
+                {% else %}
+                    <div class="text-center py-5">
+                        <div class="mb-3" style="font-size: 3rem; color: #6c757d;">📊</div>
+                        <h5 class="text-muted">価格データがありません</h5>
+                        <p class="text-muted">商品と価格履歴を登録してください。</p>
+                        <div class="d-flex gap-2 justify-content-center">
+                            <a href="{% url 'products_master:product_create' %}" class="btn btn-primary">商品登録</a>
+                            <a href="{% url 'products_master:product_list' %}" class="btn btn-outline-primary">商品一覧</a>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+{% endblock %}
