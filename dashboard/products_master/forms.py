@@ -42,14 +42,13 @@ class PriceHistoryForm(forms.ModelForm):
     class Meta:
         model = PriceHistory
         fields = [
-            'period_year', 'effective_year_month', 'end_year_month',
+            'period_year', 'effective_year_month',
             'gross_margin_rate', 'wholesale_price', 'kenren_price',
             'retail_price', 'revision_amount', 'revision_reason'
         ]
         widgets = {
             'period_year': forms.NumberInput(attrs={'class': 'form-control', 'min': 2020, 'max': 2030}),
             'effective_year_month': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'YYYY/MM'}),
-            'end_year_month': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'YYYY/MM'}),
             'gross_margin_rate': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.000001'}),
             'wholesale_price': forms.TextInput(attrs={'class': 'form-control'}),
             'kenren_price': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '空欄で自動計算'}),

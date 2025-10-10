@@ -60,58 +60,6 @@ class PriceHistory(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name='商品', related_name='price_histories')
     period_year = models.IntegerField('年度', help_text='2025年度 = 2025/04～2026/03')
     effective_year_month = models.CharField('適用年月', max_length=7, help_text='YYYY/MM形式')  # 2025/03
-    end_year_month = models.CharField('終了年月', max_length=7, blank=True, null=True, help_text='YYYY/MM形式')
-    
-    # 粗利率（年度ごと）
-    gross_margin_rate = models.DecimalField('粗利率', max_digits=10, decimal_places=6, validators=[MinValueValidator(Decimal('0'))], help_text='前年度最終県連価格÷年度初め仕切価格（年度初めに1度計算、年度中は固定）')
-    
-    # 仕切価格（仕入価格）
-    wholesale_price = models.CharField('仕切価格', max_length=50, help_text='メーカーからの仕入価格（"都度見積"等の文字列含む）')
-    
-    # 県連価格（販売価格）
-    kenren_price = models.CharField('県連価格', max_length=50, blank=True, null=True, help_text='nullなら粗利率×仕切価格で自動計算、値があるならその値を表示（"都度見積"等の文字列含む）')
-    
-    # 参考小売価格（一般市場価格）
-    retail_price = models.CharField('参考小売価格', max_length=50, blank=True, null=True, help_text='一般商流での参考価格（"オープン"等の文字列含む）')
-    
-    # 改定額
-    revision_amount = models.DecimalField('改定額', max_digits=12, decimal_places=0, default=0, help_text='県連価格の前月からの変動額')
-    
-    # 改定理由
-    revision_reason = models.TextField('改定理由', blank=True, null=True)
-    
-    # 論理削除用フィールド
-    is_active = models.BooleanField('有効', default=True, help_text='無効にすると論理削除されます')
-    deleted_at = models.DateTimeField('削除日時', null=True, blank=True)
-    
-    created_at = models.DateTimeField('作成日時', auto_now_add=True)
-    updated_at = models.DateTimeField('更新日時', auto_now=True)
-    
-    class Meta:
-        verbose_name = '価格改定履歴'
-        verbose_name_plural = '価格改定履歴'
-        ordering = ['-effective_year_month', 'product__product_number']
-        indexes = [
-            models.Index(fields=['period_year', 'product']),
-        ]
-    
-    def __str__(self):
-        return f"{self.product.product_name} - {self.effective_year_month}"
-    
-    def save(self, *args, **kwargs):
-        # 新規作成時に商品番号を自動採番
-        if not self.pk and not self.product_number:
-            last_product = Product.objects.order_by('-product_number').first()
-            self.product_number = (last_product.product_number + 1) if last_product else 1
-        
-        super().save(*args, **kwargs)
-
-class PriceHistory(models.Model):
-    """価格改定履歴"""
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name='商品', related_name='price_histories')
-    period_year = models.IntegerField('年度', help_text='2025年度 = 2025/04～2026/03')
-    effective_year_month = models.CharField('適用年月', max_length=7, help_text='YYYY/MM形式')  # 2025/03
-    end_year_month = models.CharField('終了年月', max_length=7, blank=True, null=True, help_text='YYYY/MM形式')
     
     # 粗利率（年度ごと）
     gross_margin_rate = models.DecimalField('粗利率', max_digits=10, decimal_places=6, validators=[MinValueValidator(Decimal('0'))], help_text='前年度最終県連価格÷年度初め仕切価格（年度初めに1度計算、年度中は固定）')
@@ -153,21 +101,7 @@ class PriceHistory(models.Model):
         # 改定額を自動計算
         self._calculate_revision_amount()
         
-        # 新規作成時に適用終了月を自動設定
-        if not self.pk:  # 新規作成時
-            # 同一商品の既存価格履歴の適用終了月を更新
-            previous_histories = PriceHistory.objects.filter(
-                product=self.product,
-                end_year_month='2999/12'
-            )
-            
-            for history in previous_histories:
-                history.end_year_month = self.effective_year_month
-                history.save()
-            
-            # 新規レコードは2999/12まで有効
-            if not self.end_year_month:
-                self.end_year_month = '2999/12'
+
         
         super().save(*args, **kwargs)
     
@@ -257,3 +191,56 @@ class PriceHistory(models.Model):
         self.is_active = False
         self.deleted_at = timezone.now()
         self.save()
+
+class ProductApproval(models.Model):
+    """商品マスタ承認テーブル"""
+    product_number = models.IntegerField('商品番号', help_text='システム自動採番の商品番号')
+    product_code = models.CharField('商品コード', max_length=50, blank=True, null=True, help_text='ユーザー管理用の商品コード')
+    livestock_type = models.CharField('畜種', max_length=50)
+    category = models.CharField('分類', max_length=100)
+    manufacturer = models.CharField('メーカー', max_length=100)
+    product_name = models.CharField('商品名', max_length=200)
+    model_number = models.CharField('型式', max_length=100, blank=True, null=True)
+    specification = models.CharField('規格', max_length=100, blank=True, null=True)
+    shipping_unit = models.CharField('発送単位', max_length=50)
+    shipping_fee = models.CharField('送料', max_length=100, blank=True, null=True)
+    remarks = models.TextField('備考', blank=True, null=True)
+    
+    is_active = models.BooleanField('有効', default=True)
+    deleted_at = models.DateTimeField('削除日時', null=True, blank=True)
+    created_at = models.DateTimeField('作成日時', auto_now_add=True)
+    updated_at = models.DateTimeField('更新日時', auto_now=True)
+    
+    class Meta:
+        verbose_name = '商品マスタ承認'
+        verbose_name_plural = '商品マスタ承認'
+        ordering = ['product_number']
+    
+    def __str__(self):
+        return f"{self.product_number}: {self.product_name}"
+
+class PriceHistoryApproval(models.Model):
+    """価格改定履歴承認テーブル"""
+    product = models.ForeignKey(ProductApproval, on_delete=models.CASCADE, verbose_name='商品', related_name='price_histories')
+    period_year = models.IntegerField('年度', help_text='2025年度 = 2025/04～2026/03')
+    effective_year_month = models.CharField('適用年月', max_length=7, help_text='YYYY/MM形式')
+    
+    gross_margin_rate = models.DecimalField('粗利率', max_digits=10, decimal_places=6, validators=[MinValueValidator(Decimal('0'))])
+    wholesale_price = models.CharField('仕切価格', max_length=50)
+    kenren_price = models.CharField('県連価格', max_length=50, blank=True, null=True)
+    retail_price = models.CharField('参考小売価格', max_length=50, blank=True, null=True)
+    revision_amount = models.DecimalField('改定額', max_digits=12, decimal_places=0, default=0)
+    revision_reason = models.TextField('改定理由', blank=True, null=True)
+    
+    is_active = models.BooleanField('有効', default=True)
+    deleted_at = models.DateTimeField('削除日時', null=True, blank=True)
+    created_at = models.DateTimeField('作成日時', auto_now_add=True)
+    updated_at = models.DateTimeField('更新日時', auto_now=True)
+    
+    class Meta:
+        verbose_name = '価格改定履歴承認'
+        verbose_name_plural = '価格改定履歴承認'
+        ordering = ['-effective_year_month', 'product__product_number']
+    
+    def __str__(self):
+        return f"{self.product.product_name} - {self.effective_year_month}"
