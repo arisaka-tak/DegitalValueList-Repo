@@ -15,28 +15,10 @@
         </thead>
         <tbody>
             {% if show_new_row %}
-                <tr data-id="new" class="table-warning">
-                    <td class="text-muted">自動算出</td>
-                    <td><input type="text" class="form-control form-control-sm" name="new_effective_year_month_0" placeholder="YYYY/MM" required></td>
-                    <td><input type="text" class="form-control form-control-sm" name="new_wholesale_price_0" placeholder="仕切価格"></td>
-                    <td><input type="text" class="form-control form-control-sm" name="new_kenren_price_0" placeholder="県連価格"></td>
-                    <td class="text-muted">自動算出</td>
-                    <td class="text-muted">自動算出</td>
-                    <td><input type="text" class="form-control form-control-sm" name="new_revision_reason_0" placeholder="改定理由"></td>
-                    <td><span class="badge bg-success">新規</span></td>
-                </tr>
+                {% include 'products_master/partials/price_history_new_row.html' with index=0 %}
             {% endif %}
             {% for preview in preview_histories %}
-                <tr data-id="new" class="table-warning">
-                    <td class="text-muted">自動算出</td>
-                    <td><input type="text" class="form-control form-control-sm" name="new_effective_year_month_{{ preview.index }}" value="{{ preview.effective_year_month }}" placeholder="YYYY/MM" required></td>
-                    <td><input type="text" class="form-control form-control-sm" name="new_wholesale_price_{{ preview.index }}" value="{{ preview.wholesale_price }}" placeholder="仕切価格"></td>
-                    <td><input type="text" class="form-control form-control-sm" name="new_kenren_price_{{ preview.index }}" value="{{ preview.kenren_price }}" placeholder="県連価格"></td>
-                    <td class="text-muted">自動算出</td>
-                    <td class="text-muted">自動算出</td>
-                    <td><input type="text" class="form-control form-control-sm" name="new_revision_reason_{{ preview.index }}" value="{{ preview.revision_reason }}" placeholder="改定理由"></td>
-                    <td><span class="badge bg-success">新規</span></td>
-                </tr>
+                {% include 'products_master/partials/price_history_new_row.html' with index=preview.index effective_year_month=preview.effective_year_month wholesale_price=preview.wholesale_price kenren_price=preview.kenren_price revision_reason=preview.revision_reason %}
             {% endfor %}
             {% for history in price_histories %}
                 {% include 'products_master/partials/price_history_row_editable.html' %}

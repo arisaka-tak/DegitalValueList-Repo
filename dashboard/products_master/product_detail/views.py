@@ -15,13 +15,7 @@ def product_detail(request, pk):
     product = get_object_or_404(Product, pk=pk)
     price_histories = product.price_histories.filter(is_active=True).order_by('-effective_year_month')
     
-    if request.method == 'POST':
-        print("=== POST request detected, calling save_product_and_histories ===")
-        # 一括保存処理
-        return save_product_and_histories(request, product)
-    else:
-        print("=== GET request, rendering form ===")
-        form = ProductForm(instance=product)
+    form = ProductForm(instance=product)
     
     context = {
         'current_user': get_current_user(),
@@ -105,22 +99,27 @@ def save_product_and_histories(request, product=None):
                         print(f"History {history_id} error: {e}")
         
         # 4. 削除処理
+        print(f"=== 削除処理開始 ===")
         for key, value in request.POST.items():
-            if key.startswith('delete_') and value == 'true':
-                print(f"Delete history: {key} = {value}")
-                history_id = key.split('_')[1]
-                try:
-                    history = PriceHistory.objects.get(pk=history_id, product=product)
-                    if hasattr(history, 'is_deletable') and history.is_deletable():
-                        if hasattr(history, 'soft_delete'):
-                            history.soft_delete()
-                        else:
+            if key.startswith('delete_'):
+                print(f"Found delete key: {key} = {value}")
+                if value == 'true':
+                    print(f"Delete history: {key} = {value}")
+                    history_id = key.split('_')[1]
+                    try:
+                        history = PriceHistory.objects.get(pk=history_id, product=product)
+                        print(f"Found history {history_id}: {history.effective_year_month}")
+                        print(f"is_deletable: {history.is_deletable()}")
+                        if history.is_deletable():
                             history.is_active = False
                             history.save()
-                        print(f"Deleted history {history_id}")
-                except (PriceHistory.DoesNotExist, ValueError) as e:
-                    print(f"History {history_id} delete error: {e}")
+                            print(f"Successfully deleted history {history_id}")
+                        else:
+                            print(f"History {history_id} is not deletable")
+                    except (PriceHistory.DoesNotExist, ValueError) as e:
+                        print(f"History {history_id} delete error: {e}")
         
+        print("=== 削除処理終了 ===")
         print("=== RETURNING SUCCESS ===")
         # 新規作成の場合は詳細画面にリダイレクト
         if request.path.endswith('/new/'):
@@ -652,15 +651,37 @@ def submit_approval(request, pk=None):
 
 def calculate_gross_margin_rate(product, period_year, wholesale_price, request=None):
     """粗利率を算定"""
-    # 都度見積等の文字列の場合はデフォルト値
+    # 現在入力されている県連価格を取得
+    current_kenren_price = None
+    if request:
+        for key, value in request.POST.items():
+            if key.startswith('new_wholesale_price_') and value.strip() == wholesale_price:
+                current_index = key.split('_')[-1]
+                kenren_value = request.POST.get(f'new_kenren_price_{current_index}', '').strip()
+                if kenren_value:
+                    try:
+                        current_kenren_price = float(kenren_value.replace(',', ''))
+                    except (ValueError, AttributeError):
+                        # パターン2: 県連価格が文字列の場合はデフォルト値
+                        return Decimal('1.0')
+                break
+    
+    # 仕切価格のチェック
     try:
         wholesale_numeric = float(wholesale_price.replace(',', ''))
     except (ValueError, AttributeError):
-        # 数値でない場合（都度見積等）はデフォルト値
+        # パターン2: 仕切価格が文字列の場合はデフォルト値
         return Decimal('1.0')
     
     if wholesale_numeric <= 0:
-        return Decimal('1.0')  # 0以下の場合もデフォルト値
+        return Decimal('1.0')
+    
+    # パターン1: どちらも数字の場合は直接計算
+    if current_kenren_price is not None:
+        gross_margin_rate = current_kenren_price / wholesale_numeric
+        return Decimal(str(round(gross_margin_rate, 6)))
+    
+    # パターン3: 仕切価格あり、県連価格空の場合は過去データで算定
     
     # 前年度最終県連価格を取得
     prev_year = period_year - 1
@@ -674,18 +695,30 @@ def calculate_gross_margin_rate(product, period_year, wholesale_price, request=N
         ).order_by('-effective_year_month').first()
         
         if prev_history:
-            prev_kenren_price = prev_history._get_numeric_kenren_price()
+            try:
+                prev_kenren_price = prev_history._get_numeric_kenren_price()
+                # 県連価格が文字列の場合はデフォルト値を使用
+                if prev_kenren_price is None:
+                    return Decimal('1.0')
+            except (ValueError, AttributeError):
+                return Decimal('1.0')
     
-    # 前年度データがない場合、対象年度の最初の県連価格を使用
+    # 前年度データがない場合、対象年度の「数字が入っている」最初の県連価格を使用
     if prev_kenren_price is None and product:
-        first_history = PriceHistory.objects.filter(
+        histories = PriceHistory.objects.filter(
             product=product,
             period_year=period_year,
             is_active=True
-        ).order_by('effective_year_month').first()
+        ).order_by('effective_year_month')
         
-        if first_history:
-            prev_kenren_price = first_history._get_numeric_kenren_price()
+        for history in histories:
+            try:
+                numeric_kenren = history._get_numeric_kenren_price()
+                if numeric_kenren is not None:
+                    prev_kenren_price = numeric_kenren
+                    break
+            except (ValueError, AttributeError):
+                continue
     
     # 新商品の場合、現在入力されている県連価格を使用
     if prev_kenren_price is None and request:
@@ -702,7 +735,8 @@ def calculate_gross_margin_rate(product, period_year, wholesale_price, request=N
                 try:
                     prev_kenren_price = float(kenren_value.replace(',', ''))
                 except (ValueError, AttributeError):
-                    pass
+                    # 県連価格が「都度見積」等の文字列の場合はデフォルト値を使用
+                    return Decimal('1.0')
     
     # 年度初め仕切価格を取得
     year_start_wholesale = None
@@ -715,36 +749,40 @@ def calculate_gross_margin_rate(product, period_year, wholesale_price, request=N
             is_active=True
         ).first()
         
-        if april_history and april_history.wholesale_price != '都度見積':
+        if april_history:
             try:
                 year_start_wholesale = float(april_history.wholesale_price.replace(',', ''))
             except (ValueError, AttributeError):
+                # 仕切価格が「都度見積」等の文字列の場合は「ない」と判断
                 pass
     
-    # 4月データがない場合、年度内最初の仕切価格を使用
+    # 4月データがない場合、年度内「数字が入っている」最初の仕切価格を使用
     if year_start_wholesale is None and product:
-        first_history = PriceHistory.objects.filter(
+        histories = PriceHistory.objects.filter(
             product=product,
             period_year=period_year,
             is_active=True
-        ).order_by('effective_year_month').first()
+        ).order_by('effective_year_month')
         
-        if first_history and first_history.wholesale_price != '都度見積':
+        for history in histories:
             try:
-                year_start_wholesale = float(first_history.wholesale_price.replace(',', ''))
+                numeric_wholesale = float(history.wholesale_price.replace(',', ''))
+                year_start_wholesale = numeric_wholesale
+                break
             except (ValueError, AttributeError):
-                pass
+                # 仕切価格が「都度見積」等の文字列の場合はスキップ
+                continue
     
     # 新商品の場合、現在の仕切価格を使用
     if year_start_wholesale is None:
         year_start_wholesale = wholesale_numeric
     
-    # 粗利率を算定
+    # パターン3-1: 過去データで粗利算定可能
     if prev_kenren_price is not None and year_start_wholesale > 0:
         gross_margin_rate = prev_kenren_price / year_start_wholesale
         return Decimal(str(round(gross_margin_rate, 6)))
     
-    # 算定不可の場合はエラー
+    # パターン3-2: 過去データで粗利算定不可
     raise ValueError('粗利率を算定できません。県連価格を手動で入力してください。')
 
 def approval_list(request):
@@ -858,20 +896,26 @@ def approve_application(request, pk):
         if approval.product_number > 0:
             # 既存商品の更新
             product = Product.objects.get(product_number=approval.product_number)
-            product.product_code = approval.product_code
-            product.livestock_type = approval.livestock_type
-            product.category = approval.category
-            product.manufacturer = approval.manufacturer
-            product.product_name = approval.product_name
-            product.model_number = approval.model_number
-            product.specification = approval.specification
-            product.shipping_unit = approval.shipping_unit
-            product.shipping_fee = approval.shipping_fee
-            product.remarks = approval.remarks
-            product.status = ''  # ステータスをクリア
-            product.applicant = approval.applicant  # 申請者をセット
-            product.approver = get_current_user()  # 承認者をセット
-            product.save()
+            
+            # 削除申請の場合は論理削除を実行
+            if approval.status == '削除申請':
+                product.soft_delete()
+            else:
+                # 通常の更新申請の場合
+                product.product_code = approval.product_code
+                product.livestock_type = approval.livestock_type
+                product.category = approval.category
+                product.manufacturer = approval.manufacturer
+                product.product_name = approval.product_name
+                product.model_number = approval.model_number
+                product.specification = approval.specification
+                product.shipping_unit = approval.shipping_unit
+                product.shipping_fee = approval.shipping_fee
+                product.remarks = approval.remarks
+                product.status = ''  # ステータスをクリア
+                product.applicant = approval.applicant  # 申請者をセット
+                product.approver = get_current_user()  # 承認者をセット
+                product.save()
         else:
             # 新規商品の作成（正規番号を自動採番）
             product = Product.objects.create(
@@ -1031,20 +1075,26 @@ def bulk_approve(request):
                 # 既存商品を更新または新規作成
                 if approval.product_number > 0:
                     product = Product.objects.get(product_number=approval.product_number)
-                    product.product_code = approval.product_code
-                    product.livestock_type = approval.livestock_type
-                    product.category = approval.category
-                    product.manufacturer = approval.manufacturer
-                    product.product_name = approval.product_name
-                    product.model_number = approval.model_number
-                    product.specification = approval.specification
-                    product.shipping_unit = approval.shipping_unit
-                    product.shipping_fee = approval.shipping_fee
-                    product.remarks = approval.remarks
-                    product.status = ''  # ステータスをクリア
-                    product.applicant = approval.applicant  # 申請者をセット
-                    product.approver = get_current_user()  # 承認者をセット
-                    product.save()
+                    
+                    # 削除申請の場合は論理削除を実行
+                    if approval.status == '削除申請':
+                        product.soft_delete()
+                    else:
+                        # 通常の更新申請の場合
+                        product.product_code = approval.product_code
+                        product.livestock_type = approval.livestock_type
+                        product.category = approval.category
+                        product.manufacturer = approval.manufacturer
+                        product.product_name = approval.product_name
+                        product.model_number = approval.model_number
+                        product.specification = approval.specification
+                        product.shipping_unit = approval.shipping_unit
+                        product.shipping_fee = approval.shipping_fee
+                        product.remarks = approval.remarks
+                        product.status = ''  # ステータスをクリア
+                        product.applicant = approval.applicant  # 申請者をセット
+                        product.approver = get_current_user()  # 承認者をセット
+                        product.save()
                 else:
                     product = Product.objects.create(
                         product_code=approval.product_code,

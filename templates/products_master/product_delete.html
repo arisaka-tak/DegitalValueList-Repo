@@ -1,13 +1,13 @@
 {% extends 'base.html' %}
 
-{% block title %}{{ product.product_name }} - 削除確認 - デジタル価格表システム{% endblock %}
+{% block title %}{{ product.product_name }} - 削除申請 - デジタル価格表システム{% endblock %}
 
 {% block breadcrumb %}
     {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
 {% endblock %}
 
 {% block content %}
-    {% include 'components/page_header.html' with page_title="商品削除確認" page_subtitle="以下の商品を削除しますか？" %}
+    {% include 'components/page_header.html' with page_title="商品削除申請" page_subtitle="以下の商品の削除申請を行いますか？" %}
     
     <div class="container">
         {% if messages %}
@@ -23,11 +23,11 @@
             <div class="col-md-8">
                 <div class="card">
                     <div class="card-header bg-danger text-white">
-                        <h5 class="mb-0">⚠️ 削除確認</h5>
+                        <h5 class="mb-0">⚠️ 削除申請</h5>
                     </div>
                     <div class="card-body">
                         <div class="alert alert-warning">
-                            <strong>注意:</strong> この操作は取り消すことができません。商品を削除すると、関連する価格履歴も非表示になります。
+                            <strong>注意:</strong> この操作は商品の削除申請を行います。承認されると商品が削除されます。
                         </div>
 
                         <!-- 商品情報表示 -->
@@ -75,7 +75,7 @@
                                     キャンセル
                                 </a>
                                 <button type="submit" class="btn btn-danger">
-                                    削除する
+                                    削除申請
                                 </button>
                             </div>
                         </form>

@@ -75,16 +75,39 @@ def product_copy(request, pk):
     return HttpResponseRedirect(url)
 
 def product_delete(request, pk):
-    """商品論理削除"""
+    """商品削除申請"""
+    from dashboard.products_master.models import ProductApproval
+    
     product = get_object_or_404(Product, pk=pk)
     
     if request.method == 'POST':
         try:
-            product.soft_delete()
-            messages.success(request, f'商品「{product.product_name}」を削除しました。')
-            return redirect('products_master:product_list')
+            # 削除申請を作成
+            ProductApproval.objects.create(
+                product_number=product.product_number,
+                product_code=product.product_code,
+                livestock_type=product.livestock_type,
+                category=product.category,
+                manufacturer=product.manufacturer,
+                product_name=product.product_name,
+                model_number=product.model_number,
+                specification=product.specification,
+                shipping_unit=product.shipping_unit,
+                shipping_fee=product.shipping_fee,
+                remarks=product.remarks,
+                applicant=get_current_user(),
+                status='削除申請'
+            )
+            
+            # 商品マスタのステータスを更新
+            product.status = '削除申請中'
+            product.approver = ''
+            product.save()
+            
+            messages.success(request, f'商品「{product.product_name}」の削除申請を行いました。')
+            return redirect('products_master:approval_list')
         except Exception as e:
-            messages.error(request, f'削除に失敗しました: {str(e)}')
+            messages.error(request, f'削除申請に失敗しました: {str(e)}')
     
     context = {
         'current_user': get_current_user(),
@@ -93,7 +116,7 @@ def product_delete(request, pk):
             {'title': '商品マスタ管理', 'url': '/products/'},
             {'title': '商品一覧', 'url': '/products/products/'},
             {'title': f'{product.product_name}', 'url': f'/products/products/{pk}/'},
-            {'title': '削除確認', 'url': None}
+            {'title': '削除申請', 'url': None}
         ]
     }
     return render(request, 'products_master/product_delete.html', context)

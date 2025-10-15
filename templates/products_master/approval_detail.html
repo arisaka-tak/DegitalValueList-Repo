@@ -39,11 +39,11 @@
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">畜種</label>
-                                    <div class="form-control-plaintext{% if diff_flags.livestock_type %} text-danger fw-bold{% endif %}">{{ approval.livestock_type }}</div>
+                                    <div class="form-control-plaintext{% if diff_flags.livestock_type %} text-danger fw-bold{% endif %}">{{ approval.livestock_type|default:"-" }}</div>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">分類</label>
-                                    <div class="form-control-plaintext{% if diff_flags.category %} text-danger fw-bold{% endif %}">{{ approval.category }}</div>
+                                    <div class="form-control-plaintext{% if diff_flags.category %} text-danger fw-bold{% endif %}">{{ approval.category|default:"-" }}</div>
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -53,7 +53,7 @@
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">メーカー</label>
-                                    <div class="form-control-plaintext{% if diff_flags.manufacturer %} text-danger fw-bold{% endif %}">{{ approval.manufacturer }}</div>
+                                    <div class="form-control-plaintext{% if diff_flags.manufacturer %} text-danger fw-bold{% endif %}">{{ approval.manufacturer|default:"-" }}</div>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">型式</label>
@@ -65,7 +65,7 @@
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">発送単位</label>
-                                    <div class="form-control-plaintext{% if diff_flags.shipping_unit %} text-danger fw-bold{% endif %}">{{ approval.shipping_unit }}</div>
+                                    <div class="form-control-plaintext{% if diff_flags.shipping_unit %} text-danger fw-bold{% endif %}">{{ approval.shipping_unit|default:"-" }}</div>
                                 </div>
                             </div>
                         </div>

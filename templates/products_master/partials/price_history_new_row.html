@@ -1,0 +1,10 @@
+<tr data-id="new" class="table-warning">
+    <td class="text-muted">自動算出</td>
+    <td><input type="text" class="form-control form-control-sm" name="new_effective_year_month_{{ index }}" value="{{ effective_year_month|default:'' }}" placeholder="YYYY/MM" required></td>
+    <td><input type="text" class="form-control form-control-sm" name="new_wholesale_price_{{ index }}" value="{{ wholesale_price|default:'' }}" placeholder="仕切価格"></td>
+    <td><input type="text" class="form-control form-control-sm" name="new_kenren_price_{{ index }}" value="{{ kenren_price|default:'' }}" placeholder="県連価格"></td>
+    <td class="text-muted">自動算出</td>
+    <td class="text-muted">自動算出</td>
+    <td><input type="text" class="form-control form-control-sm" name="new_revision_reason_{{ index }}" value="{{ revision_reason|default:'' }}" placeholder="改定理由"></td>
+    <td><button type="button" class="btn btn-sm btn-outline-secondary" onclick="removeNewRow(this)">取消</button></td>
+</tr>

@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block title %}削除申請 - {{ product.product_name }} - デジタル価格表システム{% endblock %}
+
+{% block breadcrumb %}
+    {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
+{% endblock %}
+
+{% block content %}
+    {% include 'components/page_header.html' with page_title="削除申請" page_subtitle=product.product_name %}
+    
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header bg-danger text-white">
+                        <h5 class="mb-0">商品削除申請</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-warning">
+                            <strong>注意:</strong> この操作は商品の削除申請を行います。承認されると商品が削除されます。
+                        </div>
+                        
+                        <h6>削除対象商品</h6>
+                        <table class="table table-bordered">
+                            <tr>
+                                <th width="150">商品番号</th>
+                                <td>{{ product.product_number }}</td>
+                            </tr>
+                            <tr>
+                                <th>商品名</th>
+                                <td>{{ product.product_name }}</td>
+                            </tr>
+                            <tr>
+                                <th>メーカー</th>
+                                <td>{{ product.manufacturer }}</td>
+                            </tr>
+                            <tr>
+                                <th>畜種</th>
+                                <td>{{ product.livestock_type }}</td>
+                            </tr>
+                            <tr>
+                                <th>分類</th>
+                                <td>{{ product.category }}</td>
+                            </tr>
+                        </table>
+                        
+                        <div class="d-flex justify-content-between mt-4">
+                            <a href="{% url 'products_master:product_detail' product.pk %}" class="btn btn-secondary">キャンセル</a>
+                            <button onclick="if(confirm('この商品の削除申請を行いますか？')) { document.getElementById('deleteForm').submit(); }" 
+                                    class="btn btn-danger">削除申請</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form id="deleteForm" method="POST" style="display: none;">
+        {% csrf_token %}
+    </form>
+{% endblock %}

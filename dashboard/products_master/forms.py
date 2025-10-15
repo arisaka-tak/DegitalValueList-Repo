@@ -5,7 +5,14 @@ from .models import Product, PriceHistory
 class ProductForm(forms.ModelForm):
     """商品マスタフォーム"""
     
-
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # None値を空文字列に変換
+        for field_name, field in self.fields.items():
+            if self.instance and hasattr(self.instance, field_name):
+                value = getattr(self.instance, field_name)
+                if value is None:
+                    self.initial[field_name] = ''
     
     class Meta:
         model = Product

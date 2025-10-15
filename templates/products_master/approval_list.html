@@ -55,6 +55,7 @@
                                             <th>メーカー</th>
                                             <th>畜種</th>
                                             <th>分類</th>
+                                            <th>申請種別</th>
                                             <th>申請日時</th>
                                             <th>操作</th>
                                         </tr>
@@ -74,9 +75,16 @@
                                                     {{ approval.product_name }}
                                                 </a>
                                             </td>
-                                            <td>{{ approval.manufacturer }}</td>
-                                            <td>{{ approval.livestock_type }}</td>
-                                            <td>{{ approval.category }}</td>
+                                            <td>{{ approval.manufacturer|default:"-" }}</td>
+                                            <td>{{ approval.livestock_type|default:"-" }}</td>
+                                            <td>{{ approval.category|default:"-" }}</td>
+                                            <td>
+                                                {% if approval.status == '削除申請' %}
+                                                    <span class="badge bg-danger">削除申請</span>
+                                                {% else %}
+                                                    <span class="badge bg-primary">変更申請</span>
+                                                {% endif %}
+                                            </td>
                                             <td>{{ approval.created_at|date:"Y/m/d H:i" }}</td>
                                             <td>
                                                 <a href="{% url 'products_master:approval_detail' approval.pk %}" class="btn btn-sm btn-outline-primary">詳細</a>

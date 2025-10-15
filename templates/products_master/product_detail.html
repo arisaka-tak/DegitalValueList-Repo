@@ -165,11 +165,7 @@
                                 新規追加
                             </button>
                             <span id="loading" class="htmx-indicator spinner-border spinner-border-sm me-2" role="status"></span>
-                            <button hx-post="{% if product %}{% url 'products_master:preview_save' product.pk %}{% else %}{% url 'products_master:preview_save_new' %}{% endif %}" 
-                                    hx-include="#productForm, #price-history-container" 
-                                    hx-target="#save-preview-modal" 
-                                    hx-swap="innerHTML" 
-                                    class="btn btn-sm btn-success">保存</button>
+
                             <button type="submit" 
                                     form="productForm"
                                     formaction="{% if product %}{% url 'products_master:submit_approval' product.pk %}{% else %}{% url 'products_master:submit_approval_new' %}{% endif %}"
@@ -235,6 +231,7 @@
         const tbody = document.querySelector('#priceHistoryTable tbody');
         const newRow = document.createElement('tr');
         newRow.className = 'table-warning';
+        newRow.setAttribute('data-id', 'new');
         newRow.innerHTML = `
             <td class="text-muted">自動算出</td>
             <td><input type="text" class="form-control form-control-sm" name="new_effective_year_month_${rowIndex}" form="productForm" placeholder="YYYY/MM" required></td>
@@ -243,10 +240,15 @@
             <td class="text-muted">自動算出</td>
             <td class="text-muted">自動算出</td>
             <td><input type="text" class="form-control form-control-sm" name="new_revision_reason_${rowIndex}" form="productForm" placeholder="改定理由"></td>
-            <td><span class="badge bg-success">新規</span></td>
+            <td><button type="button" class="btn btn-sm btn-outline-secondary" onclick="removeNewRow(this)">取消</button></td>
         `;
         tbody.insertBefore(newRow, tbody.firstChild);
         rowIndex++;
+    }
+    
+    // 新規行削除機能
+    window.removeNewRow = function(button) {
+        button.closest('tr').remove();
     }
     </script>
 {% endblock %}
