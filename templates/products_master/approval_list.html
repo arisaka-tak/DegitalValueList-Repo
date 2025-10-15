@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}承認待ち一覧 - デジタル価格表システム{% endblock %}
 
@@ -34,8 +35,14 @@
         <div class="row">
             <div class="col-12">
                 <div class="card">
-                    <div class="card-header">
+                    <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">申請一覧 ({{ approvals|length }}件)</h5>
+                        {% if approvals %}
+                        <button type="button" class="btn btn-success" 
+                                hx-post="{% url 'products_master:bulk_approve' %}"
+                                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                                hx-confirm="一括承認しますか？">一括承認</button>
+                        {% endif %}
                     </div>
                     <div class="card-body">
                         {% if approvals %}

@@ -30,6 +30,7 @@ urlpatterns = [
     path('approvals/<int:pk>/', detail_views.approval_detail, name='approval_detail'),
     path('approvals/<int:pk>/approve/', detail_views.approve_application, name='approve_application'),
     path('approvals/<int:pk>/reject/', detail_views.reject_application, name='reject_application'),
+    path('approvals/bulk-approve/', detail_views.bulk_approve, name='bulk_approve'),
 
     path('price-history/<int:pk>/update/', detail_views.price_history_update, name='price_history_update'),
     path('price-history/<int:pk>/delete/', detail_views.price_history_delete, name='price_history_delete'),

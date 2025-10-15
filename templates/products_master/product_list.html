@@ -7,7 +7,7 @@
 {% endblock %}
 
 {% block content %}
-    {% include 'components/page_header.html' with page_title="商品一覧" page_subtitle="登録されている商品の一覧" header_actions='<a href="/products/products/create/" class="btn btn-primary">新規登録</a>' %}
+    {% include 'components/page_header.html' with page_title="商品一覧" page_subtitle="登録されている商品の一覧" header_actions='<a href="/products/new/" class="btn btn-primary">新規登録</a>' %}
     
     <div class="container">
         {% if messages %}
@@ -34,6 +34,7 @@
                                     <th>メーカー</th>
                                     <th>発送単位</th>
                                     <th>操作</th>
+                                    <th>ステータス</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -53,10 +54,16 @@
                                         <td>
                                             <div class="btn-group btn-group-sm">
                                                 <a href="{% url 'products_master:product_detail' product.pk %}" class="btn btn-outline-primary">詳細</a>
-                                                <a href="{% url 'products_master:product_edit' product.pk %}" class="btn btn-outline-secondary">編集</a>
                                                 <a href="{% url 'products_master:product_copy' product.pk %}" class="btn btn-outline-success">コピー</a>
                                                 <a href="{% url 'products_master:product_delete' product.pk %}" class="btn btn-outline-danger">削除</a>
                                             </div>
+                                        </td>
+                                        <td>
+                                            {% if product.status and product.status != '' %}
+                                                <span class="badge bg-warning">申請中</span>
+                                            {% else %}
+                                                <span class="badge bg-success">申請なし</span>
+                                            {% endif %}
                                         </td>
                                     </tr>
                                 {% endfor %}
@@ -99,7 +106,7 @@
                         <div class="mb-3" style="font-size: 3rem; color: #6c757d;">📦</div>
                         <h5 class="text-muted">商品が登録されていません</h5>
                         <p class="text-muted">最初の商品を登録してください。</p>
-                        <a href="{% url 'products_master:product_create' %}" class="btn btn-primary">新規登録</a>
+                        <a href="{% url 'products_master:product_new' %}" class="btn btn-primary">新規登録</a>
                     </div>
                 {% endif %}
             </div>

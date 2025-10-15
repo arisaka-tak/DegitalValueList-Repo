@@ -7,6 +7,7 @@ from django.db.models import Q
 from decimal import Decimal
 from dashboard.products_master.forms import ProductForm
 from digital_pricelist_system.utils import get_current_user
+from django.views.decorators.csrf import csrf_exempt
 
 def product_detail(request, pk):
     """商品詳細画面"""
@@ -140,8 +141,8 @@ def product_detail_new(request):
     copy_from_id = request.GET.get('copy_from')
     
     if request.method == 'POST':
-        # 一括保存処理
-        return save_product_and_histories(request)
+        # 申請処理
+        return submit_approval(request, None)
     else:
         # コピー元がある場合はその情報で初期化
         if copy_from_id:
@@ -466,6 +467,9 @@ def preview_save(request, pk=None):
 def submit_approval(request, pk=None):
     """申請テーブルにデータをコピー"""
     try:
+        print(f"=== submit_approval called: pk={pk} ===")
+        print(f"POST data: {dict(request.POST)}")
+        
         if pk:
             product = get_object_or_404(Product, pk=pk)
         else:
@@ -478,12 +482,48 @@ def submit_approval(request, pk=None):
             form = ProductForm(request.POST)
         
         if not form.is_valid():
-            return HttpResponse('<script>alert("商品情報にエラーがあります");</script>')
+            # エラー時にフォームを再表示（入力値とエラー情報付き）
+            # POSTデータから価格履歴を復元
+            preview_histories = []
+            for key, value in request.POST.items():
+                if key.startswith('new_effective_year_month_') and value.strip():
+                    index = key.split('_')[-1]
+                    effective_year_month = value.strip()
+                    wholesale_price = request.POST.get(f'new_wholesale_price_{index}', '').strip()
+                    kenren_price = request.POST.get(f'new_kenren_price_{index}', '').strip()
+                    revision_reason = request.POST.get(f'new_revision_reason_{index}', '').strip()
+                    
+                    preview_histories.append({
+                        'effective_year_month': effective_year_month,
+                        'wholesale_price': wholesale_price,
+                        'kenren_price': kenren_price,
+                        'revision_reason': revision_reason,
+                        'index': index
+                    })
+            
+            context = {
+                'current_user': get_current_user(),
+                'product': None,
+                'form': form,  # エラー情報と入力値を含む
+                'price_histories': [],
+                'preview_histories': preview_histories,
+                'is_new': True,
+                'breadcrumbs': [
+                    {'title': '商品マスタ管理', 'url': '/products/'},
+                    {'title': '商品一覧', 'url': '/products/products/'},
+                    {'title': '新規作成', 'url': None}
+                ]
+            }
+            return render(request, 'products_master/product_detail.html', context)
         
         # 申請テーブルに商品情報をコピー
         if product:
             # 既存商品の場合
             temp_product_number = product.product_number
+            # 商品マスタ側のステータスを「申請中」に更新し、承認者情報をクリア
+            product.status = '申請中'
+            product.approver = ''
+            product.save()
         else:
             # 新規商品の場合は仮番号を自動採番
             last_temp = ProductApproval.objects.filter(product_number__lt=0).order_by('product_number').first()
@@ -500,7 +540,8 @@ def submit_approval(request, pk=None):
             specification=form.cleaned_data.get('specification'),
             shipping_unit=form.cleaned_data.get('shipping_unit'),
             shipping_fee=form.cleaned_data.get('shipping_fee'),
-            remarks=form.cleaned_data.get('remarks')
+            remarks=form.cleaned_data.get('remarks'),
+            applicant=get_current_user()
         )
         
         # 価格履歴を申請テーブルにコピー
@@ -525,17 +566,21 @@ def submit_approval(request, pk=None):
                     kenren_price=kenren_price if kenren_price else history.kenren_price,
                     retail_price=history.retail_price,
                     revision_amount=0,
-                    revision_reason=revision_reason if revision_reason else history.revision_reason
+                    revision_reason=revision_reason if revision_reason else history.revision_reason,
+                    applicant=get_current_user()
                 )
         
         # 新規履歴を申請テーブルに追加
+        print("=== 新規履歴の処理開始 ===")
         for key, value in request.POST.items():
             if key.startswith('new_effective_year_month_') and value.strip():
+                print(f"Found new history: {key} = {value}")
                 index = key.split('_')[-1]
                 effective_year_month = value.strip()
                 wholesale_price = request.POST.get(f'new_wholesale_price_{index}', '').strip()
                 kenren_price = request.POST.get(f'new_kenren_price_{index}', '').strip()
                 revision_reason = request.POST.get(f'new_revision_reason_{index}', '').strip()
+                print(f"Index: {index}, wholesale: {wholesale_price}, kenren: {kenren_price}")
                 
                 if '/' in effective_year_month:
                     year, month = map(int, effective_year_month.split('/'))
@@ -544,12 +589,47 @@ def submit_approval(request, pk=None):
                     # 粗利率を算定
                     try:
                         print(f"Calculating gross margin rate: product={product}, period_year={period_year}, wholesale_price={wholesale_price}")
-                        gross_margin_rate = calculate_gross_margin_rate(product, period_year, wholesale_price or '都度見積')
+                        gross_margin_rate = calculate_gross_margin_rate(product, period_year, wholesale_price or '都度見積', request)
                         print(f"Calculated gross margin rate: {gross_margin_rate}")
                     except ValueError as e:
                         print(f"Gross margin rate calculation error: {e}")
-                        return HttpResponse(f'<script>alert("{str(e)}");location.reload();</script>')
+                        # 粗利率算定エラー時もフォームを再表示
+                        form = ProductForm(request.POST)
+                        # POSTデータから価格履歴を復元
+                        preview_histories = []
+                        for key, value in request.POST.items():
+                            if key.startswith('new_effective_year_month_') and value.strip():
+                                index = key.split('_')[-1]
+                                effective_year_month = value.strip()
+                                wholesale_price = request.POST.get(f'new_wholesale_price_{index}', '').strip()
+                                kenren_price = request.POST.get(f'new_kenren_price_{index}', '').strip()
+                                revision_reason = request.POST.get(f'new_revision_reason_{index}', '').strip()
+                                
+                                preview_histories.append({
+                                    'effective_year_month': effective_year_month,
+                                    'wholesale_price': wholesale_price,
+                                    'kenren_price': kenren_price,
+                                    'revision_reason': revision_reason,
+                                    'index': index
+                                })
+                        
+                        context = {
+                            'current_user': get_current_user(),
+                            'product': None,
+                            'form': form,
+                            'price_histories': [],
+                            'preview_histories': preview_histories,
+                            'is_new': True,
+                            'error_message': str(e),
+                            'breadcrumbs': [
+                                {'title': '商品マスタ管理', 'url': '/products/'},
+                                {'title': '商品一覧', 'url': '/products/products/'},
+                                {'title': '新規作成', 'url': None}
+                            ]
+                        }
+                        return render(request, 'products_master/product_detail.html', context)
                     
+                    print(f"Creating PriceHistoryApproval: {effective_year_month}")
                     PriceHistoryApproval.objects.create(
                         product=approval_product,
                         period_year=period_year,
@@ -558,17 +638,19 @@ def submit_approval(request, pk=None):
                         wholesale_price=wholesale_price or '都度見積',
                         kenren_price=kenren_price if kenren_price else None,
                         revision_amount=0,
-                        revision_reason=revision_reason
+                        revision_reason=revision_reason,
+                        applicant=get_current_user()
                     )
+                    print(f"Successfully created PriceHistoryApproval for {effective_year_month}")
         
-        return HttpResponse('<script>alert("申請完了");location.reload();</script>')
+        return HttpResponse('<script>alert("申請完了");location.href="/products/approvals/";</script>')
         
     except Exception as e:
         import traceback
         print(f"ERROR: {traceback.format_exc()}")
         return HttpResponse('<script>alert("エラー発生");</script>', status=500)
 
-def calculate_gross_margin_rate(product, period_year, wholesale_price):
+def calculate_gross_margin_rate(product, period_year, wholesale_price, request=None):
     """粗利率を算定"""
     # 都度見積等の文字列の場合はデフォルト値
     try:
@@ -604,6 +686,23 @@ def calculate_gross_margin_rate(product, period_year, wholesale_price):
         
         if first_history:
             prev_kenren_price = first_history._get_numeric_kenren_price()
+    
+    # 新商品の場合、現在入力されている県連価格を使用
+    if prev_kenren_price is None and request:
+        # 同じindexの県連価格を探す
+        current_index = None
+        for key, value in request.POST.items():
+            if key.startswith('new_wholesale_price_') and value.strip() == wholesale_price:
+                current_index = key.split('_')[-1]
+                break
+        
+        if current_index:
+            kenren_value = request.POST.get(f'new_kenren_price_{current_index}', '').strip()
+            if kenren_value:
+                try:
+                    prev_kenren_price = float(kenren_value.replace(',', ''))
+                except (ValueError, AttributeError):
+                    pass
     
     # 年度初め仕切価格を取得
     year_start_wholesale = None
@@ -769,6 +868,9 @@ def approve_application(request, pk):
             product.shipping_unit = approval.shipping_unit
             product.shipping_fee = approval.shipping_fee
             product.remarks = approval.remarks
+            product.status = ''  # ステータスをクリア
+            product.applicant = approval.applicant  # 申請者をセット
+            product.approver = get_current_user()  # 承認者をセット
             product.save()
         else:
             # 新規商品の作成（正規番号を自動採番）
@@ -782,7 +884,9 @@ def approve_application(request, pk):
                 specification=approval.specification,
                 shipping_unit=approval.shipping_unit,
                 shipping_fee=approval.shipping_fee,
-                remarks=approval.remarks
+                remarks=approval.remarks,
+                applicant=approval.applicant,
+                approver=get_current_user()
             )
         
         # 価格履歴を本テーブルにコピー
@@ -825,8 +929,169 @@ def reject_application(request, pk):
     
     try:
         approval = get_object_or_404(ProductApproval, pk=pk)
+        
+        # 既存商品の場合はステータスをクリア
+        if approval.product_number > 0:
+            try:
+                product = Product.objects.get(product_number=approval.product_number)
+                product.status = ''
+                product.save()
+            except Product.DoesNotExist:
+                pass
+        
         approval.delete()
         return HttpResponse('<script>alert("却下完了");location.href="/products/approvals/";</script>')
     except Exception as e:
+        return HttpResponse('<script>alert("エラー発生");</script>', status=500)
+
+def bulk_approve(request):
+    """一括承認"""
+    if request.method != 'POST':
+        return HttpResponse('Invalid method', status=405)
+    
+    try:
+        approvals = ProductApproval.objects.filter(is_active=True)
+        approved_count = 0
+        
+        for approval in approvals:
+            try:
+                if approval.product_number > 0:
+                    product = Product.objects.get(product_number=approval.product_number)
+                    product.product_code = approval.product_code
+                    product.livestock_type = approval.livestock_type
+                    product.category = approval.category
+                    product.manufacturer = approval.manufacturer
+                    product.product_name = approval.product_name
+                    product.model_number = approval.model_number
+                    product.specification = approval.specification
+                    product.shipping_unit = approval.shipping_unit
+                    product.shipping_fee = approval.shipping_fee
+                    product.remarks = approval.remarks
+                    product.save()
+                else:
+                    product = Product.objects.create(
+                        product_code=approval.product_code,
+                        livestock_type=approval.livestock_type,
+                        category=approval.category,
+                        manufacturer=approval.manufacturer,
+                        product_name=approval.product_name,
+                        model_number=approval.model_number,
+                        specification=approval.specification,
+                        shipping_unit=approval.shipping_unit,
+                        shipping_fee=approval.shipping_fee,
+                        remarks=approval.remarks
+                    )
+                
+                for approval_history in approval.price_histories.filter(is_active=True):
+                    existing_history = PriceHistory.objects.filter(
+                        product=product,
+                        effective_year_month=approval_history.effective_year_month,
+                        is_active=True
+                    ).first()
+                    
+                    if existing_history:
+                        existing_history.wholesale_price = approval_history.wholesale_price
+                        existing_history.kenren_price = approval_history.kenren_price
+                        existing_history.revision_reason = approval_history.revision_reason
+                        existing_history.save()
+                    else:
+                        PriceHistory.objects.create(
+                            product=product,
+                            period_year=approval_history.period_year,
+                            effective_year_month=approval_history.effective_year_month,
+                            gross_margin_rate=approval_history.gross_margin_rate,
+                            wholesale_price=approval_history.wholesale_price,
+                            kenren_price=approval_history.kenren_price,
+                            retail_price=approval_history.retail_price,
+                            revision_reason=approval_history.revision_reason
+                        )
+                
+                approval.delete()
+                approved_count += 1
+                
+            except Exception:
+                continue
+        
+        return HttpResponse(f'<script>alert("{approved_count}件を一括承認しました");location.reload();</script>')
+        
+    except Exception:
+        return HttpResponse('<script>alert("エラー発生");</script>', status=500)
+
+def bulk_approve(request):
+    """一括承認"""
+    if request.method != 'POST':
+        return HttpResponse('Invalid method', status=405)
+    
+    try:
+        approvals = ProductApproval.objects.filter(is_active=True)
+        approved_count = 0
+        
+        for approval in approvals:
+            try:
+                # 既存商品を更新または新規作成
+                if approval.product_number > 0:
+                    product = Product.objects.get(product_number=approval.product_number)
+                    product.product_code = approval.product_code
+                    product.livestock_type = approval.livestock_type
+                    product.category = approval.category
+                    product.manufacturer = approval.manufacturer
+                    product.product_name = approval.product_name
+                    product.model_number = approval.model_number
+                    product.specification = approval.specification
+                    product.shipping_unit = approval.shipping_unit
+                    product.shipping_fee = approval.shipping_fee
+                    product.remarks = approval.remarks
+                    product.status = ''  # ステータスをクリア
+                    product.applicant = approval.applicant  # 申請者をセット
+                    product.approver = get_current_user()  # 承認者をセット
+                    product.save()
+                else:
+                    product = Product.objects.create(
+                        product_code=approval.product_code,
+                        livestock_type=approval.livestock_type,
+                        category=approval.category,
+                        manufacturer=approval.manufacturer,
+                        product_name=approval.product_name,
+                        model_number=approval.model_number,
+                        specification=approval.specification,
+                        shipping_unit=approval.shipping_unit,
+                        shipping_fee=approval.shipping_fee,
+                        remarks=approval.remarks
+                    )
+                
+                # 価格履歴を本テーブルにコピー
+                for approval_history in approval.price_histories.filter(is_active=True):
+                    existing_history = PriceHistory.objects.filter(
+                        product=product,
+                        effective_year_month=approval_history.effective_year_month,
+                        is_active=True
+                    ).first()
+                    
+                    if existing_history:
+                        existing_history.wholesale_price = approval_history.wholesale_price
+                        existing_history.kenren_price = approval_history.kenren_price
+                        existing_history.revision_reason = approval_history.revision_reason
+                        existing_history.save()
+                    else:
+                        PriceHistory.objects.create(
+                            product=product,
+                            period_year=approval_history.period_year,
+                            effective_year_month=approval_history.effective_year_month,
+                            gross_margin_rate=approval_history.gross_margin_rate,
+                            wholesale_price=approval_history.wholesale_price,
+                            kenren_price=approval_history.kenren_price,
+                            retail_price=approval_history.retail_price,
+                            revision_reason=approval_history.revision_reason
+                        )
+                
+                approval.delete()
+                approved_count += 1
+                
+            except Exception:
+                continue
+        
+        return HttpResponse(f'<script>alert("{approved_count}件を一括承認しました");location.reload();</script>')
+        
+    except Exception:
         return HttpResponse('<script>alert("エラー発生");</script>', status=500)
 

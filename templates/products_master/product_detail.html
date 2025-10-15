@@ -19,6 +19,13 @@
                 </div>
             {% endfor %}
         {% endif %}
+        
+        {% if error_message %}
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                {{ error_message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endif %}
 
         <div class="row">
             <!-- 商品基本情報 -->
@@ -94,7 +101,7 @@
                                 <label class="form-label" for="{{ form.remarks.id_for_label }}">備考</label>
                                 {{ form.remarks }}
                             </div>
-                        </form>
+                        <!-- フォーム終了タグを価格履歴の後に移動 -->
                     </div>
                 </div>
             </div>
@@ -115,6 +122,22 @@
                     </div>
                 </div>
 
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h6 class="mb-0">ユーザ情報</h6>
+                    </div>
+                    <div class="card-body">
+                        <small class="text-muted">
+                            {% if product.applicant %}
+                                <div><strong>申請者:</strong> {{ product.applicant }}</div>
+                            {% endif %}
+                            {% if product.approver %}
+                                <div><strong>承認者:</strong> {{ product.approver }}</div>
+                            {% endif %}
+                        </small>
+                    </div>
+                </div>
+                
                 <div class="card mt-3">
                     <div class="card-header">
                         <h6 class="mb-0">システム情報</h6>
@@ -138,46 +161,29 @@
                         <h5 class="mb-0">価格改定履歴</h5>
                         <div>
                             {% csrf_token %}
-                            {% if product %}
-                                <button hx-get="{% url 'products_master:add_price_row' product.pk %}" 
-                                        hx-target="#price-history-container" 
-                                        hx-indicator="#loading" 
-                                        class="btn btn-sm btn-outline-primary me-2">
-                                    新規追加
-                                </button>
-                            {% else %}
-                                <button hx-get="{% url 'products_master:add_price_row_new' %}" 
-                                        hx-target="#price-history-container" 
-                                        hx-indicator="#loading" 
-                                        class="btn btn-sm btn-outline-primary me-2">
-                                    新規追加
-                                </button>
-                            {% endif %}
+                            <button type="button" onclick="addPriceRow()" class="btn btn-sm btn-outline-primary me-2">
+                                新規追加
+                            </button>
                             <span id="loading" class="htmx-indicator spinner-border spinner-border-sm me-2" role="status"></span>
                             <button hx-post="{% if product %}{% url 'products_master:preview_save' product.pk %}{% else %}{% url 'products_master:preview_save_new' %}{% endif %}" 
                                     hx-include="#productForm, #price-history-container" 
                                     hx-target="#save-preview-modal" 
                                     hx-swap="innerHTML" 
                                     class="btn btn-sm btn-success">保存</button>
-                            <button hx-post="{% if product %}{% url 'products_master:submit_approval' product.pk %}{% else %}{% url 'products_master:submit_approval_new' %}{% endif %}" 
-                                    hx-include="#productForm, #price-history-container" 
-                                    hx-target="body" 
-                                    hx-swap="innerHTML" 
+                            <button type="submit" 
+                                    form="productForm"
+                                    formaction="{% if product %}{% url 'products_master:submit_approval' product.pk %}{% else %}{% url 'products_master:submit_approval_new' %}{% endif %}"
+                                    formmethod="post"
                                     class="btn btn-sm btn-warning ms-2">申請</button>
                         </div>
                     </div>
                     <div class="card-body" id="price-history-container">
-                        {% if price_histories %}
-                            {% include 'products_master/partials/price_history_table.html' %}
-                        {% else %}
-                            <div class="text-center py-4">
-                                <div class="text-muted">価格履歴がありません</div>
-                            </div>
-                        {% endif %}
+                        {% include 'products_master/partials/price_history_table.html' %}
                     </div>
                 </div>
             </div>
         </div>
+                        </form>
     </div>
 
     <!-- トースト表示エリア -->
@@ -221,6 +227,26 @@
             button.className = 'btn btn-sm btn-secondary delete-btn';
             deleteFlag.value = 'true';
         }
+    }
+    
+    // 新規行追加機能
+    let rowIndex = 0;
+    window.addPriceRow = function() {
+        const tbody = document.querySelector('#priceHistoryTable tbody');
+        const newRow = document.createElement('tr');
+        newRow.className = 'table-warning';
+        newRow.innerHTML = `
+            <td class="text-muted">自動算出</td>
+            <td><input type="text" class="form-control form-control-sm" name="new_effective_year_month_${rowIndex}" form="productForm" placeholder="YYYY/MM" required></td>
+            <td><input type="text" class="form-control form-control-sm" name="new_wholesale_price_${rowIndex}" form="productForm" placeholder="仕切価格"></td>
+            <td><input type="text" class="form-control form-control-sm" name="new_kenren_price_${rowIndex}" form="productForm" placeholder="県連価格"></td>
+            <td class="text-muted">自動算出</td>
+            <td class="text-muted">自動算出</td>
+            <td><input type="text" class="form-control form-control-sm" name="new_revision_reason_${rowIndex}" form="productForm" placeholder="改定理由"></td>
+            <td><span class="badge bg-success">新規</span></td>
+        `;
+        tbody.insertBefore(newRow, tbody.firstChild);
+        rowIndex++;
     }
     </script>
 {% endblock %}

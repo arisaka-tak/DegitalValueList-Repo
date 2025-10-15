@@ -106,6 +106,19 @@
 
                 <div class="card mt-3">
                     <div class="card-header">
+                        <h6 class="mb-0">ユーザ情報</h6>
+                    </div>
+                    <div class="card-body">
+                        <small class="text-muted">
+                            {% if approval.applicant %}
+                                <div><strong>申請者:</strong> {{ approval.applicant }}</div>
+                            {% endif %}
+                        </small>
+                    </div>
+                </div>
+                
+                <div class="card mt-3">
+                    <div class="card-header">
                         <h6 class="mb-0">申請情報</h6>
                     </div>
                     <div class="card-body">
