@@ -28,67 +28,79 @@
                         <h5 class="mb-0">基本情報</h5>
                     </div>
                     <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label text-muted">商品番号</label>
-                                    <div class="fw-bold">{{ product.product_number }}</div>
+                        <form id="productForm">
+                            {% csrf_token %}
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label text-muted">商品番号</label>
+                                        {% if is_new %}
+                                            <div class="form-control-plaintext text-muted">保存時に自動採番</div>
+                                        {% else %}
+                                            <div class="form-control-plaintext fw-bold">{{ product.product_number }}</div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label" for="{{ form.product_code.id_for_label }}">商品コード</label>
+                                        {{ form.product_code }}
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label" for="{{ form.product_name.id_for_label }}">商品名</label>
+                                        {{ form.product_name }}
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label" for="{{ form.livestock_type.id_for_label }}">畜種</label>
+                                        {{ form.livestock_type }}
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label" for="{{ form.category.id_for_label }}">分類</label>
+                                        {{ form.category }}
+                                    </div>
                                 </div>
-                                <div class="mb-3">
-                                    <label class="form-label text-muted">商品コード</label>
-                                    <div>{{ product.product_code|default:"未設定" }}</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label text-muted">商品名</label>
-                                    <div class="fw-bold">{{ product.product_name }}</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label text-muted">畜種</label>
-                                    <div>{{ product.livestock_type }}</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label text-muted">分類</label>
-                                    <div>{{ product.category }}</div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label text-muted">　</label>
+                                        <div class="form-control-plaintext">　</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label" for="{{ form.manufacturer.id_for_label }}">メーカー</label>
+                                        {{ form.manufacturer }}
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label" for="{{ form.model_number.id_for_label }}">型式</label>
+                                        {{ form.model_number }}
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label" for="{{ form.specification.id_for_label }}">規格</label>
+                                        {{ form.specification }}
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label" for="{{ form.shipping_unit.id_for_label }}">発送単位</label>
+                                        {{ form.shipping_unit }}
+                                    </div>
                                 </div>
                             </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label text-muted">メーカー</label>
-                                    <div>{{ product.manufacturer }}</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label text-muted">型式</label>
-                                    <div>{{ product.model_number|default:"未設定" }}</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label text-muted">規格</label>
-                                    <div>{{ product.specification|default:"未設定" }}</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label text-muted">発送単位</label>
-                                    <div>{{ product.shipping_unit }}</div>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label" for="{{ form.shipping_fee.id_for_label }}">送料</label>
+                                        {{ form.shipping_fee }}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        
-                        {% if product.shipping_fee %}
+                            
                             <div class="mb-3">
-                                <label class="form-label text-muted">送料</label>
-                                <div>{{ product.shipping_fee }}</div>
+                                <label class="form-label" for="{{ form.remarks.id_for_label }}">備考</label>
+                                {{ form.remarks }}
                             </div>
-                        {% endif %}
-                        
-                        {% if product.remarks %}
-                            <div class="mb-3">
-                                <label class="form-label text-muted">備考</label>
-                                <div>{{ product.remarks|linebreaks }}</div>
-                            </div>
-                        {% endif %}
+                        </form>
                     </div>
                 </div>
             </div>
 
             <!-- サイドバー -->
+            {% if not is_new %}
             <div class="col-md-4">
                 <div class="card">
                     <div class="card-header">
@@ -96,7 +108,6 @@
                     </div>
                     <div class="card-body">
                         <div class="d-grid gap-2">
-                            <a href="{% url 'products_master:product_edit' product.pk %}" class="btn btn-primary">編集</a>
                             <a href="{% url 'products_master:product_copy' product.pk %}" class="btn btn-outline-primary">コピー作成</a>
                             <a href="{% url 'products_master:product_delete' product.pk %}" class="btn btn-danger">削除</a>
                             <a href="{% url 'products_master:product_list' %}" class="btn btn-outline-secondary">一覧に戻る</a>
@@ -116,6 +127,7 @@
                     </div>
                 </div>
             </div>
+            {% endif %}
         </div>
 
         <!-- 価格履歴 -->
@@ -126,11 +138,35 @@
                         <h5 class="mb-0">価格改定履歴</h5>
                         <div>
                             {% csrf_token %}
-                            <button id="addNewRow" class="btn btn-sm btn-outline-primary me-2">新規追加</button>
-                            <button id="saveAll" class="btn btn-sm btn-success">保存</button>
+                            {% if product %}
+                                <button hx-get="{% url 'products_master:add_price_row' product.pk %}" 
+                                        hx-target="#price-history-container" 
+                                        hx-indicator="#loading" 
+                                        class="btn btn-sm btn-outline-primary me-2">
+                                    新規追加
+                                </button>
+                            {% else %}
+                                <button hx-get="{% url 'products_master:add_price_row_new' %}" 
+                                        hx-target="#price-history-container" 
+                                        hx-indicator="#loading" 
+                                        class="btn btn-sm btn-outline-primary me-2">
+                                    新規追加
+                                </button>
+                            {% endif %}
+                            <span id="loading" class="htmx-indicator spinner-border spinner-border-sm me-2" role="status"></span>
+                            <button hx-post="{% if product %}{% url 'products_master:preview_save' product.pk %}{% else %}{% url 'products_master:preview_save_new' %}{% endif %}" 
+                                    hx-include="#productForm, #price-history-container" 
+                                    hx-target="#save-preview-modal" 
+                                    hx-swap="innerHTML" 
+                                    class="btn btn-sm btn-success">保存</button>
+                            <button hx-post="{% if product %}{% url 'products_master:submit_approval' product.pk %}{% else %}{% url 'products_master:submit_approval_new' %}{% endif %}" 
+                                    hx-include="#productForm, #price-history-container" 
+                                    hx-target="body" 
+                                    hx-swap="innerHTML" 
+                                    class="btn btn-sm btn-warning ms-2">申請</button>
                         </div>
                     </div>
-                    <div class="card-body">
+                    <div class="card-body" id="price-history-container">
                         {% if price_histories %}
                             {% include 'products_master/partials/price_history_table.html' %}
                         {% else %}
@@ -144,181 +180,47 @@
         </div>
     </div>
 
+    <!-- トースト表示エリア -->
+    <div id="toast-area"></div>
+    
+    <!-- 保存確認モーダル -->
+    <div id="save-preview-modal"></div>
+
+    <style>
+    .htmx-indicator {
+        display: none;
+    }
+    .htmx-request .htmx-indicator {
+        display: inline-block;
+    }
+    .table-warning {
+        background-color: #fff3cd !important;
+    }
+    </style>
+    
     <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const addNewRow = document.getElementById('addNewRow');
-        const table = document.getElementById('priceHistoryTable');
+    // 削除マーク機能
+    window.markForDeletion = function(button) {
+        const row = button.closest('tr');
+        const deleteFlag = row.querySelector('.delete-flag');
         
-        const csrfToken = document.querySelector('input[name=csrfmiddlewaretoken]').value;
-        window.csrfToken = csrfToken;
-        
-        addNewRow.addEventListener('click', function() {
-            addNewRowToTable();
-        });
-        
-        const saveAll = document.getElementById('saveAll');
-        saveAll.addEventListener('click', function() {
-            saveAllChanges();
-        });
-        
-        function addNewRowToTable() {
-            const tbody = table.querySelector('tbody');
-            const newRow = document.createElement('tr');
-            newRow.dataset.id = 'new';
-            newRow.innerHTML = `
-                <td class="text-muted">自動算出</td>
-                <td><input type="text" class="form-control form-control-sm" placeholder="YYYY/MM" data-field="effective_year_month" pattern="[0-9]{4}/[0-9]{2}" title="YYYY/MM形式で入力してください"></td>
-                <td><input type="text" class="form-control form-control-sm" placeholder="仕切価格" data-field="wholesale_price"></td>
-                <td><input type="text" class="form-control form-control-sm" placeholder="県連価格" data-field="kenren_price"></td>
-                <td class="text-muted">自動算出</td>
-                <td class="text-muted">自動算出</td>
-                <td><input type="text" class="form-control form-control-sm" placeholder="改定理由" data-field="revision_reason"></td>
-                <td></td>
-            `;
-            tbody.insertBefore(newRow, tbody.firstChild);
+        if (row.classList.contains('marked-for-deletion')) {
+            // 削除マークを解除
+            row.classList.remove('marked-for-deletion');
+            row.style.backgroundColor = '';
+            row.style.textDecoration = '';
+            button.textContent = '削除';
+            button.className = 'btn btn-sm btn-outline-danger delete-btn';
+            deleteFlag.value = 'false';
+        } else {
+            // 削除マークを付与
+            row.classList.add('marked-for-deletion');
+            row.style.backgroundColor = '#ffebee';
+            row.style.textDecoration = 'line-through';
+            button.textContent = '取消';
+            button.className = 'btn btn-sm btn-secondary delete-btn';
+            deleteFlag.value = 'true';
         }
-        
-        function saveAllChanges() {
-            const promises = [];
-            
-            // 新規行の保存
-            const newRows = table.querySelectorAll('tr[data-id="new"]');
-            newRows.forEach(row => {
-                const inputs = row.querySelectorAll('input');
-                const data = {};
-                let hasData = false;
-                
-                inputs.forEach(input => {
-                    data[input.dataset.field] = input.value.trim();
-                    if (input.value.trim()) {
-                        hasData = true;
-                    }
-                });
-                
-                if (hasData) {
-                    const formData = new FormData();
-                    formData.append('effective_year_month', data.effective_year_month || '');
-                    formData.append('wholesale_price', data.wholesale_price || '');
-                    formData.append('kenren_price', data.kenren_price || '');
-                    formData.append('revision_reason', data.revision_reason || '');
-                    
-                    const promise = fetch(`/products/products/{{ product.pk }}/price-history/create/`, {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRFToken': window.csrfToken
-                        },
-                        body: formData
-                    });
-                    promises.push(promise);
-                }
-            });
-            
-            // 既存行の更新
-            const editInputs = table.querySelectorAll('input[data-history-id]');
-            editInputs.forEach(input => {
-                const currentValue = input.value.trim();
-                const originalValue = input.dataset.originalValue || '';
-                
-                if (currentValue !== originalValue) {
-                    const formData = new FormData();
-                    formData.append('field', input.dataset.field);
-                    formData.append('value', currentValue);
-                    
-                    const promise = fetch(`/products/price-history/${input.dataset.historyId}/update/`, {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRFToken': window.csrfToken
-                        },
-                        body: formData
-                    });
-                    promises.push(promise);
-                }
-            });
-            
-            // 削除マークされた行の削除
-            const deletedRows = table.querySelectorAll('tr.marked-for-deletion');
-            deletedRows.forEach(row => {
-                const historyId = row.dataset.id;
-                if (historyId && historyId !== 'new') {
-                    const promise = fetch(`/products/price-history/${historyId}/delete/`, {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRFToken': window.csrfToken
-                        }
-                    });
-                    promises.push(promise);
-                }
-            });
-            
-            if (promises.length > 0) {
-                Promise.all(promises)
-                .then(responses => {
-                    const errors = [];
-                    responses.forEach((response, index) => {
-                        if (!response.ok) {
-                            errors.push(`エラー ${index + 1}: ${response.status}`);
-                        }
-                    });
-                    
-                    if (errors.length > 0) {
-                        alert('保存エラー:\n' + errors.join('\n'));
-                    } else {
-                        // 削除がある場合はリロードして非表示にする
-                        if (deletedRows.length > 0 || newRows.length > 0) {
-                            location.reload();
-                        } else {
-                            alert('保存が完了しました');
-                        }
-                    }
-                })
-                .catch(error => {
-                    alert('保存中にエラーが発生しました: ' + error.message);
-                });
-            } else {
-                alert('変更されたデータがありません');
-            }
-        }
-        
-        window.markForDeletion = function(button) {
-            const row = button.closest('tr');
-            if (row.classList.contains('marked-for-deletion')) {
-                // 削除マークを解除
-                row.classList.remove('marked-for-deletion');
-                row.style.backgroundColor = '';
-                row.style.textDecoration = '';
-                button.textContent = '削除';
-                button.className = 'btn btn-sm btn-outline-danger delete-btn';
-                // 編集可能セルを復活
-                const editableCells = row.querySelectorAll('.price-display.editable');
-                editableCells.forEach(cell => {
-                    cell.style.pointerEvents = '';
-                    cell.style.cursor = 'pointer';
-                });
-            } else {
-                // 現在適用中の価格の場合は確認
-                const effectiveMonth = button.dataset.effectiveMonth;
-                const today = new Date().toISOString().slice(0, 7).replace('-', '/');
-                
-                if (effectiveMonth <= today) {
-                    if (!confirm('現在適用中の価格です。削除してもよろしいですか？')) {
-                        return;
-                    }
-                }
-                
-                // 削除マークを付与（取り消し線スタイル）
-                row.classList.add('marked-for-deletion');
-                row.style.backgroundColor = '#ffebee';
-                row.style.textDecoration = 'line-through';
-                button.textContent = '取消';
-                button.className = 'btn btn-sm btn-secondary delete-btn';
-                // 編集可能セルを無効化
-                const editableCells = row.querySelectorAll('.price-display.editable');
-                editableCells.forEach(cell => {
-                    cell.style.pointerEvents = 'none';
-                    cell.style.cursor = 'default';
-                });
-            }
-        }
-    });
+    }
     </script>
 {% endblock %}

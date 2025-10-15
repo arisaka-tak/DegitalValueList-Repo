@@ -65,63 +65,14 @@ def product_edit(request, pk):
     return render(request, 'products_master/product_form.html', context)
 
 def product_copy(request, pk):
-    """商品コピー（新規採番で作成）"""
+    """商品コピー（基本情報をコピーして新規作成モードで詳細画面へ）"""
     original_product = get_object_or_404(Product, pk=pk)
     
-    if request.method == 'POST':
-        form = ProductForm(request.POST)
-        if form.is_valid():
-            try:
-                with transaction.atomic():
-                    new_product = form.save()
-                    # 元の価格履歴をコピー
-                    for history in original_product.price_histories.all():
-                        PriceHistory.objects.create(
-                            product=new_product,
-                            period_year=history.period_year,
-                            effective_year_month=history.effective_year_month,
-                            end_year_month=history.end_year_month,
-                            gross_margin_rate=history.gross_margin_rate,
-                            wholesale_price=history.wholesale_price,
-                            kenren_price=history.kenren_price,
-                            retail_price=history.retail_price,
-                            revision_amount=history.revision_amount,
-                            revision_reason=history.revision_reason
-                        )
-                    messages.success(request, f'商品「{new_product.product_name}」を作成しました。')
-                    return redirect('products_master:product_detail', pk=new_product.pk)
-            except Exception as e:
-                messages.error(request, f'コピーに失敗しました: {str(e)}')
-    else:
-        # 元の商品情報をコピーしてフォームに設定
-        initial_data = {
-            'product_code': original_product.product_code,
-            'livestock_type': original_product.livestock_type,
-            'category': original_product.category,
-            'manufacturer': original_product.manufacturer,
-            'product_name': original_product.product_name,
-            'model_number': original_product.model_number,
-            'specification': original_product.specification,
-            'shipping_unit': original_product.shipping_unit,
-            'shipping_fee': original_product.shipping_fee,
-            'remarks': original_product.remarks,
-        }
-        form = ProductForm(initial=initial_data)
-    
-    context = {
-        'current_user': get_current_user(),
-        'form': form,
-        'original_product': original_product,
-        'page_title': f'{original_product.product_name} - コピー作成',
-        'page_subtitle': '新しい商品番号でコピーします',
-        'breadcrumbs': [
-            {'title': '商品マスタ管理', 'url': '/products/'},
-            {'title': '商品一覧', 'url': '/products/products/'},
-            {'title': f'{original_product.product_name}', 'url': f'/products/products/{pk}/'},
-            {'title': 'コピー', 'url': None}
-        ]
-    }
-    return render(request, 'products_master/product_form.html', context)
+    # コピーモードで詳細画面にリダイレクト（copy_fromパラメータ付き）
+    from django.urls import reverse
+    from django.http import HttpResponseRedirect
+    url = reverse('products_master:product_new') + f'?copy_from={pk}'
+    return HttpResponseRedirect(url)
 
 def product_delete(request, pk):
     """商品論理削除"""
@@ -146,3 +97,53 @@ def product_delete(request, pk):
         ]
     }
     return render(request, 'products_master/product_delete.html', context)
+
+def product_new(request):
+    """新規商品作成フォーム"""
+    copy_from_id = request.GET.get('copy_from')
+    
+    if request.method == 'POST':
+        form = ProductForm(request.POST)
+        if form.is_valid():
+            try:
+                product = form.save()
+                messages.success(request, f'商品「{product.product_name}」を作成しました。')
+                return redirect('products_master:product_detail', pk=product.pk)
+            except Exception as e:
+                messages.error(request, f'作成に失敗しました: {str(e)}')
+    else:
+        # コピー元がある場合はその情報で初期化
+        if copy_from_id:
+            try:
+                original_product = Product.objects.get(pk=copy_from_id)
+                initial_data = {
+                    'product_code': original_product.product_code,
+                    'livestock_type': original_product.livestock_type,
+                    'category': original_product.category,
+                    'manufacturer': original_product.manufacturer,
+                    'product_name': original_product.product_name,
+                    'model_number': original_product.model_number,
+                    'specification': original_product.specification,
+                    'shipping_unit': original_product.shipping_unit,
+                    'shipping_fee': original_product.shipping_fee,
+                    'remarks': original_product.remarks,
+                }
+                form = ProductForm(initial=initial_data)
+            except Product.DoesNotExist:
+                form = ProductForm()
+        else:
+            form = ProductForm()
+    
+    context = {
+        'current_user': get_current_user(),
+        'product': None,  # 新規作成モード
+        'form': form,
+        'price_histories': [],  # 空の価格履歴
+        'is_new': True,  # 新規作成フラグ
+        'breadcrumbs': [
+            {'title': '商品マスタ管理', 'url': '/products/'},
+            {'title': '商品一覧', 'url': '/products/products/'},
+            {'title': '新規作成', 'url': None}
+        ]
+    }
+    return render(request, 'products_master/product_detail.html', context)

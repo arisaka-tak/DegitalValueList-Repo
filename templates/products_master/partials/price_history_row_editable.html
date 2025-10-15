@@ -1,0 +1,60 @@
+{% load price_filters %}
+<tr data-id="{{ history.pk }}" {% if not history.is_editable %}class="table-secondary text-muted"{% endif %}>
+    <!-- 削除フラグ用の隠しフィールド -->
+    <input type="hidden" name="delete_{{ history.pk }}" value="false" class="delete-flag">
+    
+    <td>{{ history.period_year }}年度</td>
+    <td>{{ history.effective_year_month }}{% if not history.is_editable %} <small>(編集不可)</small>{% endif %}</td>
+    <td>
+        {% if history.is_editable %}
+            <input type="text" class="form-control form-control-sm" 
+                   name="edit_wholesale_price_{{ history.pk }}"
+                   value="{{ history.wholesale_price|default:'' }}">
+        {% else %}
+            {{ history.wholesale_price|default:"-" }}
+        {% endif %}
+    </td>
+    <td>
+        {% if history.is_editable %}
+            {% with calc_price=history.wholesale_price|calc_kenren_price:history.gross_margin_rate %}
+                <input type="text" class="form-control form-control-sm" 
+                       name="edit_kenren_price_{{ history.pk }}"
+                       value="{{ history.kenren_price|default:'' }}"
+                       placeholder="{% if calc_price %}{{ calc_price|format_price }}（自動計算）{% else %}要見積{% endif %}">
+            {% endwith %}
+        {% else %}
+            {% if history.kenren_price %}
+                {{ history.kenren_price }}
+            {% else %}
+                {% with calc_price=history.wholesale_price|calc_kenren_price:history.gross_margin_rate %}
+                    {% if calc_price %}
+                        <span class="text-success">{{ calc_price|format_price }}</span>
+                    {% else %}
+                        <span class="text-muted">要見積</span>
+                    {% endif %}
+                {% endwith %}
+            {% endif %}
+        {% endif %}
+    </td>
+    <td>{{ history.gross_margin_rate|default:"-" }}</td>
+    <td>{{ history.get_revision_amount|default:"-" }}</td>
+    <td>
+        {% if history.is_editable %}
+            <input type="text" class="form-control form-control-sm" 
+                   name="edit_revision_reason_{{ history.pk }}"
+                   value="{{ history.revision_reason|default:'' }}">
+        {% else %}
+            {{ history.revision_reason|default:"-" }}
+        {% endif %}
+    </td>
+    <td>
+        {% if history.is_deletable %}
+            <button class="btn btn-sm btn-outline-danger delete-btn" 
+                    data-history-id="{{ history.pk }}"
+                    data-effective-month="{{ history.effective_year_month }}"
+                    onclick="markForDeletion(this)">
+                削除
+            </button>
+        {% endif %}
+    </td>
+</tr>

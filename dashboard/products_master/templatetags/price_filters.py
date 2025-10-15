@@ -8,10 +8,15 @@ def calc_kenren_price(wholesale_price, gross_margin_rate):
     """仕切価格と粗利率から県連価格を計算"""
     try:
         if wholesale_price and gross_margin_rate:
-            wholesale = Decimal(str(wholesale_price))
-            margin = Decimal(str(gross_margin_rate))
+            # 数値でない場合（都度見積等）はNoneを返す
+            try:
+                wholesale = float(str(wholesale_price).replace(',', ''))
+            except (ValueError, AttributeError):
+                return None
+            
+            margin = float(str(gross_margin_rate))
             return int(wholesale * margin)
-    except (ValueError, TypeError, Decimal.InvalidOperation):
+    except (ValueError, TypeError, Exception):
         pass
     return None
 

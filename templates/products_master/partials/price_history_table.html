@@ -14,8 +14,20 @@
             </tr>
         </thead>
         <tbody>
+            {% if show_new_row %}
+                <tr data-id="new" class="table-warning">
+                    <td class="text-muted">自動算出</td>
+                    <td><input type="text" class="form-control form-control-sm" name="new_effective_year_month_0" placeholder="YYYY/MM" required></td>
+                    <td><input type="text" class="form-control form-control-sm" name="new_wholesale_price_0" placeholder="仕切価格"></td>
+                    <td><input type="text" class="form-control form-control-sm" name="new_kenren_price_0" placeholder="県連価格"></td>
+                    <td class="text-muted">自動算出</td>
+                    <td class="text-muted">自動算出</td>
+                    <td><input type="text" class="form-control form-control-sm" name="new_revision_reason_0" placeholder="改定理由"></td>
+                    <td><span class="badge bg-success">新規</span></td>
+                </tr>
+            {% endif %}
             {% for history in price_histories %}
-                {% include 'products_master/partials/price_history_row.html' %}
+                {% include 'products_master/partials/price_history_row_editable.html' %}
             {% endfor %}
         </tbody>
     </table>

@@ -90,10 +90,10 @@ def main():
     
     # サーバー起動（バックグラウンドで実行）
     try:
-        # サーバープロセスを開始
+        # サーバープロセスを開始（ログを表示するため標準出力をキャプチャしない）
         process = subprocess.Popen([
             venv_python, "manage.py", "runserver", "127.0.0.1:8000"
-        ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        ])
         
         # サーバーが起動するまで待機
         for i in range(10):

@@ -11,7 +11,7 @@ class ActiveProductManager(models.Manager):
 
 class Product(models.Model):
     """商品マスタ"""
-    product_number = models.IntegerField('商品番号', unique=True, help_text='システム自動採番の商品番号')
+    product_number = models.IntegerField('商品番号', unique=True, null=True, blank=True, help_text='システム自動採番の商品番号')
     product_code = models.CharField('商品コード', max_length=50, blank=True, null=True, help_text='ユーザー管理用の商品コード')
     livestock_type = models.CharField('畜種', max_length=50)
     category = models.CharField('分類', max_length=100)
@@ -54,6 +54,13 @@ class Product(models.Model):
         self.is_active = True
         self.deleted_at = None
         self.save()
+    
+    def save(self, *args, **kwargs):
+        # 新規作成時に商品番号を自動採番
+        if not self.pk and not self.product_number:
+            last_product = Product.objects.order_by('-product_number').first()
+            self.product_number = (last_product.product_number + 1) if last_product else 1
+        super().save(*args, **kwargs)
 
 class PriceHistory(models.Model):
     """価格改定履歴"""
@@ -73,8 +80,8 @@ class PriceHistory(models.Model):
     # 参考小売価格（一般市場価格）
     retail_price = models.CharField('参考小売価格', max_length=50, blank=True, null=True, help_text='一般商流での参考価格（"オープン"等の文字列含む）')
     
-    # 改定額
-    revision_amount = models.DecimalField('改定額', max_digits=12, decimal_places=0, default=0, help_text='県連価格の前月からの変動額')
+    # 改定額（非使用：動的計算に変更）
+    revision_amount = models.DecimalField('改定額', max_digits=12, decimal_places=0, default=0, help_text='非使用：get_revision_amount()で動的計算')
     
     # 改定理由
     revision_reason = models.TextField('改定理由', blank=True, null=True)
@@ -97,47 +104,53 @@ class PriceHistory(models.Model):
     def __str__(self):
         return f"{self.product.product_name} - {self.effective_year_month}"
     
-    def save(self, *args, **kwargs):
-        # 改定額を自動計算
-        self._calculate_revision_amount()
-        
-
-        
-        super().save(*args, **kwargs)
-    
-    def _calculate_revision_amount(self):
-        """改定額を計算"""
+    def get_revision_amount(self):
+        """改定額を動的計算（表示用端数処理済み金額で計算）"""
         try:
-            # 現在の県連価格を取得
-            current_kenren_price = self._get_numeric_kenren_price()
+            # 現在の県連価格を取得（表示用端数処理済み）
+            current_kenren_price = self._get_display_kenren_price()
             if current_kenren_price is None:
-                self.revision_amount = 0
-                return
+                return 0
             
             # 前月の価格履歴を取得
             previous_history = PriceHistory.objects.filter(
                 product=self.product,
-                effective_year_month__lt=self.effective_year_month
+                effective_year_month__lt=self.effective_year_month,
+                is_active=True
             ).order_by('-effective_year_month').first()
             
             if previous_history:
-                previous_kenren_price = previous_history._get_numeric_kenren_price()
+                previous_kenren_price = previous_history._get_display_kenren_price()
                 if previous_kenren_price is not None:
-                    self.revision_amount = int(round(current_kenren_price - previous_kenren_price))
-                else:
-                    self.revision_amount = 0
-            else:
-                self.revision_amount = 0
+                    return int(current_kenren_price - previous_kenren_price)
+            
+            return 0
                 
         except Exception:
-            self.revision_amount = 0
+            return 0
+    
+    def _get_display_kenren_price(self):
+        """表示用の県連価格数値を取得（端数処理済み）"""
+        try:
+            # 県連価格が設定されている場合
+            if self.kenren_price:
+                return float(self.kenren_price.replace(',', ''))
+            
+            # 県連価格が未設定の場合は自動計算（端数処理済み）
+            if self.wholesale_price and self.gross_margin_rate:
+                wholesale_numeric = float(self.wholesale_price.replace(',', ''))
+                calculated_price = wholesale_numeric * float(self.gross_margin_rate)
+                return int(calculated_price)  # 小数点以下切り捨て
+            
+            return None
+        except (ValueError, TypeError, AttributeError):
+            return None
     
     def _get_numeric_kenren_price(self):
         """県連価格の数値を取得（自動計算含む）"""
         try:
             # 県連価格が設定されている場合
             if self.kenren_price:
-                # 数値に変換可能かチェック
                 return float(self.kenren_price.replace(',', ''))
             
             # 県連価格が未設定の場合は自動計算
@@ -184,7 +197,7 @@ class PriceHistory(models.Model):
         except (ValueError, TypeError, AttributeError):
             pass
         
-        return "要見積"
+        return "都度見積"
     
     def soft_delete(self):
         """論理削除を実行"""

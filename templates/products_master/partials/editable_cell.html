@@ -6,15 +6,20 @@
     </span>
     {% if history.is_editable %}
         <input type="text" class="price-input" 
-               name="value"
+               name="edit_wholesale_price_{{ history.pk }}"
                value="{{ history.wholesale_price|default:'' }}"
                data-original-value="{{ history.wholesale_price|default:'' }}"
                data-history-id="{{ history.pk }}"
                data-field="wholesale_price"
+               style="display: none;"
+               hx-get="{% url 'products_master:calc_kenren_price' history.pk %}"
+               hx-target="#kenren-cell-{{ history.pk }}"
+               hx-trigger="blur"
+               hx-include="this"
                onblur="cancelEdit(this)">
     {% endif %}
 {% elif field == 'kenren_price' %}
-    <span class="price-display {% if history.is_editable %}editable{% endif %}" onclick="editCell(this, '{{ history.pk }}', 'kenren_price')">
+    <span class="price-display {% if history.is_editable %}editable{% endif %}" onclick="editCell(this, '{{ history.pk }}', 'kenren_price')" id="kenren-cell-{{ history.pk }}">
         {% if history.kenren_price %}
             {{ history.kenren_price }}
         {% else %}
@@ -29,11 +34,12 @@
     </span>
     {% if history.is_editable %}
         <input type="text" class="price-input" 
-               name="value"
+               name="edit_kenren_price_{{ history.pk }}"
                value="{{ history.kenren_price|default:'' }}"
                data-original-value="{{ history.kenren_price|default:'' }}"
                data-history-id="{{ history.pk }}"
                data-field="kenren_price"
+               style="display: none;"
                onblur="cancelEdit(this)">
     {% endif %}
 {% elif field == 'revision_reason' %}
@@ -42,11 +48,12 @@
     </span>
     {% if history.is_editable %}
         <input type="text" class="price-input" 
-               name="value"
+               name="edit_revision_reason_{{ history.pk }}"
                value="{{ history.revision_reason|default:'' }}"
                data-original-value="{{ history.revision_reason|default:'' }}"
                data-history-id="{{ history.pk }}"
                data-field="revision_reason"
+               style="display: none;"
                onblur="cancelEdit(this)">
     {% endif %}
 {% endif %}
@@ -65,6 +72,10 @@ function editCell(span, historyId, field) {
 
 function cancelEdit(input) {
     const span = input.previousElementSibling;
+    // 値が変更されている場合は表示を更新
+    if (input.value !== input.dataset.originalValue) {
+        span.textContent = input.value || '-';
+    }
     input.style.display = 'none';
     span.style.display = 'block';
 }

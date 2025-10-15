@@ -1,0 +1,40 @@
+{% load price_filters %}
+<tr data-id="{{ history.pk }}" class="table-warning">
+    <td>{{ history.period_year }}年度</td>
+    <td>{{ history.effective_year_month }}</td>
+    <td>
+        <input type="text" class="form-control form-control-sm" 
+               name="edit_wholesale_price_{{ history.pk }}"
+               value="{{ history.wholesale_price|default:'' }}">
+    </td>
+    <td>
+        {% with calc_price=history.wholesale_price|calc_kenren_price:history.gross_margin_rate %}
+            <input type="text" class="form-control form-control-sm" 
+                   name="edit_kenren_price_{{ history.pk }}"
+                   value="{{ history.kenren_price|default:'' }}"
+                   placeholder="{% if calc_price %}{{ calc_price|format_price }}（自動計算）{% else %}要見積{% endif %}">
+        {% endwith %}
+    </td>
+    <td>{{ history.gross_margin_rate|default:"-" }}</td>
+    <td>{{ history.revision_amount|default:"-" }}</td>
+    <td>
+        <input type="text" class="form-control form-control-sm" 
+               name="edit_revision_reason_{{ history.pk }}"
+               value="{{ history.revision_reason|default:'' }}">
+    </td>
+    <td>
+        <button class="btn btn-sm btn-success me-1" 
+                hx-post="{% url 'products_master:save_price_row' history.pk %}" 
+                hx-include="closest tr" 
+                hx-target="this" 
+                hx-swap="outerHTML">
+            保存
+        </button>
+        <button class="btn btn-sm btn-secondary" 
+                hx-get="{% url 'products_master:cancel_edit_row' history.pk %}" 
+                hx-target="this" 
+                hx-swap="outerHTML">
+            キャンセル
+        </button>
+    </td>
+</tr>

@@ -5,16 +5,7 @@ from .models import Product, PriceHistory
 class ProductForm(forms.ModelForm):
     """商品マスタフォーム"""
     
-    def save(self, commit=True):
-        instance = super().save(commit=False)
-        # 新規作成時のみ商品番号を自動採番（編集時は変更しない）
-        if not instance.pk and not instance.product_number:
-            last_product = Product.objects.order_by('-product_number').first()
-            instance.product_number = (last_product.product_number + 1) if last_product else 1
-        
-        if commit:
-            instance.save()
-        return instance
+
     
     class Meta:
         model = Product

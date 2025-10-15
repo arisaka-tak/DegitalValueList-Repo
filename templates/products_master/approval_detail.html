@@ -1,0 +1,188 @@
+{% extends 'base.html' %}
+{% load price_filters %}
+
+{% block title %}{{ approval.product_name }} - 承認詳細 - デジタル価格表システム{% endblock %}
+
+{% block breadcrumb %}
+    {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
+{% endblock %}
+
+{% block content %}
+    {% include 'components/page_header.html' with page_title=approval.product_name page_subtitle="申請内容の確認" %}
+    
+    <div class="container">
+        <div class="row">
+            <!-- 商品基本情報 -->
+            <div class="col-md-8">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">申請内容</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label text-muted">商品番号</label>
+                                    {% if approval.product_number > 0 %}
+                                        <div class="form-control-plaintext fw-bold">{{ approval.product_number }}</div>
+                                    {% else %}
+                                        <div class="form-control-plaintext text-success fw-bold">新規作成 (仮{{ approval.product_number }})</div>
+                                    {% endif %}
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">商品コード</label>
+                                    <div class="form-control-plaintext{% if diff_flags.product_code %} text-danger fw-bold{% endif %}">{{ approval.product_code|default:"-" }}</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">商品名</label>
+                                    <div class="form-control-plaintext fw-bold{% if diff_flags.product_name %} text-danger{% endif %}">{{ approval.product_name }}</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">畜種</label>
+                                    <div class="form-control-plaintext{% if diff_flags.livestock_type %} text-danger fw-bold{% endif %}">{{ approval.livestock_type }}</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">分類</label>
+                                    <div class="form-control-plaintext{% if diff_flags.category %} text-danger fw-bold{% endif %}">{{ approval.category }}</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label text-muted">　</label>
+                                    <div class="form-control-plaintext">　</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">メーカー</label>
+                                    <div class="form-control-plaintext{% if diff_flags.manufacturer %} text-danger fw-bold{% endif %}">{{ approval.manufacturer }}</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">型式</label>
+                                    <div class="form-control-plaintext{% if diff_flags.model_number %} text-danger fw-bold{% endif %}">{{ approval.model_number|default:"-" }}</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">規格</label>
+                                    <div class="form-control-plaintext{% if diff_flags.specification %} text-danger fw-bold{% endif %}">{{ approval.specification|default:"-" }}</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">発送単位</label>
+                                    <div class="form-control-plaintext{% if diff_flags.shipping_unit %} text-danger fw-bold{% endif %}">{{ approval.shipping_unit }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">送料</label>
+                                    <div class="form-control-plaintext{% if diff_flags.shipping_fee %} text-danger fw-bold{% endif %}">{{ approval.shipping_fee|default:"-" }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">備考</label>
+                            <div class="form-control-plaintext{% if diff_flags.remarks %} text-danger fw-bold{% endif %}">{{ approval.remarks|default:"-" }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 承認・却下ボタン -->
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">承認操作</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2">
+                            <button onclick="if(confirm('この申請を承認しますか？')) { document.getElementById('approveForm').submit(); }" 
+                                    class="btn btn-success">承認</button>
+                            <button onclick="if(confirm('この申請を却下しますか？')) { document.getElementById('rejectForm').submit(); }" 
+                                    class="btn btn-danger">却下</button>
+                            <a href="{% url 'products_master:approval_list' %}" class="btn btn-outline-secondary">一覧に戻る</a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h6 class="mb-0">申請情報</h6>
+                    </div>
+                    <div class="card-body">
+                        <small class="text-muted">
+                            <div>申請日時: {{ approval.created_at|date:"Y/m/d H:i" }}</div>
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 価格履歴 -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">申請価格履歴</h5>
+                        {% if not is_new_product %}
+                            <small class="text-muted">赤太字は元データからの変更箇所</small>
+                        {% endif %}
+                    </div>
+                    <div class="card-body">
+                        {% if price_histories %}
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>年度</th>
+                                            <th>適用年月</th>
+                                            <th>仕切価格</th>
+                                            <th>県連価格</th>
+                                            <th>粗利率</th>
+                                            <th>改定理由</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for history in price_histories %}
+                                        <tr>
+                                            <td>{{ history.period_year }}年度</td>
+                                            <td>{{ history.effective_year_month }}</td>
+                                            <td class="{% if history.diff_flags.wholesale_price %}text-danger fw-bold{% endif %}">{{ history.wholesale_price }}</td>
+                                            <td class="{% if history.diff_flags.kenren_price %}text-danger fw-bold{% endif %}">
+                                                {% if history.kenren_price %}
+                                                    {{ history.kenren_price }}
+                                                {% else %}
+                                                    {% with calc_price=history.wholesale_price|calc_kenren_price:history.gross_margin_rate %}
+                                                        {% if calc_price %}
+                                                            <span class="text-success">{{ calc_price|format_price }}</span>
+                                                        {% else %}
+                                                            <span class="text-muted">都度見積</span>
+                                                        {% endif %}
+                                                    {% endwith %}
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ history.gross_margin_rate }}</td>
+                                            <td class="{% if history.diff_flags.revision_reason %}text-danger fw-bold{% endif %}">{{ history.revision_reason|default:"-" }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-4">
+                                <div class="text-muted">価格履歴がありません</div>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 承認・却下フォーム -->
+    <form id="approveForm" method="POST" action="{% url 'products_master:approve_application' approval.pk %}" style="display: none;">
+        {% csrf_token %}
+    </form>
+    <form id="rejectForm" method="POST" action="{% url 'products_master:reject_application' approval.pk %}" style="display: none;">
+        {% csrf_token %}
+    </form>
+{% endblock %}
