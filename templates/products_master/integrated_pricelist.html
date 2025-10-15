@@ -1,59 +1,42 @@
 {% extends 'base.html' %}
 {% load price_filters %}
 
-{% block title %}統合価格表 - デジタル価格表システム{% endblock %}
+{% block title %}デジタル価格表 - デジタル価格表システム{% endblock %}
 
 {% block breadcrumb %}
     {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
 {% endblock %}
 
 {% block content %}
-    {% include 'components/page_header.html' with page_title="統合価格表" page_subtitle="商品マスタと価格履歴の統合表示" %}
+    {% include 'components/page_header.html' with page_title="デジタル価格表" page_subtitle="商品マスタと価格履歴の統合表示" %}
     
     <div class="container">
         <!-- フィルター -->
         <div class="card mb-4">
             <div class="card-body">
                 <form method="get" class="row g-3 align-items-end">
-                    <div class="col-md-3">
-                        <label for="year" class="form-label">年度</label>
-                        <select class="form-select" id="year" name="year">
-                            <option value="">全年度</option>
-                            {% for year in available_years %}
-                                <option value="{{ year }}" {% if year == selected_year %}selected{% endif %}>
-                                    {{ year }}年度
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-3">
+                    <div class="col-md-4">
                         <label for="month" class="form-label">適用年月</label>
-                        <select class="form-select" id="month" name="month">
-                            <option value="">全期間</option>
-                            {% for month in available_months %}
-                                <option value="{{ month }}" {% if month == selected_month %}selected{% endif %}>
-                                    {{ month }}
-                                </option>
-                            {% endfor %}
-                        </select>
+                        <input type="month" class="form-control" id="month" name="month" 
+                               value="{{ selected_month|date:'Y-m'|default:'' }}">
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-4">
                         <button type="submit" class="btn btn-primary">絞り込み</button>
                         <a href="{% url 'products_master:integrated_pricelist' %}" class="btn btn-outline-secondary">クリア</a>
                     </div>
-                    <div class="col-md-3 text-end">
+                    <div class="col-md-4 text-end">
                         <button type="button" class="btn btn-success" disabled>Excel出力</button>
                     </div>
                 </form>
             </div>
         </div>
 
-        <!-- 統合価格表 -->
+        <!-- デジタル価格表 -->
         <div class="card">
             <div class="card-body">
                 {% if page_obj %}
                     <div class="table-responsive">
-                        <table class="table table-sm table-hover">
+                        <table class="table table-sm table-hover resizable-table" id="priceTable">
                             <thead class="table-primary">
                                 <tr>
                                     <th rowspan="2" class="align-middle">№</th>
@@ -64,16 +47,13 @@
                                     <th rowspan="2" class="align-middle">型式</th>
                                     <th rowspan="2" class="align-middle">規格</th>
                                     <th rowspan="2" class="align-middle">発送単位</th>
-                                    <th rowspan="2" class="align-middle">年度</th>
-                                    <th rowspan="2" class="align-middle">適用年月</th>
-                                    <th rowspan="2" class="align-middle">粗利率</th>
-                                    <th colspan="3" class="text-center">価格情報</th>
+                                    <th colspan="2" class="text-center">価格情報</th>
                                     <th rowspan="2" class="align-middle">改定額</th>
                                     <th rowspan="2" class="align-middle">送料</th>
                                     <th rowspan="2" class="align-middle">備考</th>
+                                    <th rowspan="2" class="align-middle">改定理由</th>
                                 </tr>
                                 <tr>
-                                    <th>仕切価格</th>
                                     <th>県連価格</th>
                                     <th>参考小売価格</th>
                                 </tr>
@@ -94,10 +74,7 @@
                                         <td>{{ history.product.model_number|default:"-" }}</td>
                                         <td>{{ history.product.specification|default:"-" }}</td>
                                         <td>{{ history.product.shipping_unit }}</td>
-                                        <td>{{ history.period_year }}年度</td>
-                                        <td>{{ history.effective_year_month }}</td>
-                                        <td>{{ history.gross_margin_rate|floatformat:6 }}</td>
-                                        <td class="text-end">{{ history.wholesale_price|format_price }}</td>
+
                                         <td class="text-end">
                                             {% if history.kenren_price %}
                                                 {{ history.kenren_price|format_price }}
@@ -106,7 +83,7 @@
                                                     {% if calc_price %}
                                                         <span class="text-success">{{ calc_price|format_price }}</span>
                                                     {% else %}
-                                                        <span class="text-muted">要見積</span>
+                                                        <span class="text-muted">都度見積</span>
                                                     {% endif %}
                                                 {% endwith %}
                                             {% endif %}
@@ -124,6 +101,16 @@
                                                 -
                                             {% endif %}
                                         </td>
+                                        <td>
+                                            {% if history.revision_reason %}
+                                                <span class="text-truncate d-inline-block" style="max-width: 100px;" 
+                                                      title="{{ history.revision_reason }}">
+                                                    {{ history.revision_reason }}
+                                                </span>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
                                     </tr>
                                 {% endfor %}
                             </tbody>
@@ -132,14 +119,14 @@
 
                     <!-- ページネーション -->
                     {% if page_obj.has_other_pages %}
-                        <nav aria-label="統合価格表ページネーション" class="mt-4">
+                        <nav aria-label="デジタル価格表ページネーション" class="mt-4">
                             <ul class="pagination justify-content-center">
                                 {% if page_obj.has_previous %}
                                     <li class="page-item">
-                                        <a class="page-link" href="?page=1{% if selected_year %}&year={{ selected_year }}{% endif %}{% if selected_month %}&month={{ selected_month }}{% endif %}">最初</a>
+                                        <a class="page-link" href="?page=1{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">最初</a>
                                     </li>
                                     <li class="page-item">
-                                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if selected_year %}&year={{ selected_year }}{% endif %}{% if selected_month %}&month={{ selected_month }}{% endif %}">前へ</a>
+                                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">前へ</a>
                                     </li>
                                 {% endif %}
 
@@ -151,10 +138,10 @@
 
                                 {% if page_obj.has_next %}
                                     <li class="page-item">
-                                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if selected_year %}&year={{ selected_year }}{% endif %}{% if selected_month %}&month={{ selected_month }}{% endif %}">次へ</a>
+                                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">次へ</a>
                                     </li>
                                     <li class="page-item">
-                                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if selected_year %}&year={{ selected_year }}{% endif %}{% if selected_month %}&month={{ selected_month }}{% endif %}">最後</a>
+                                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">最後</a>
                                     </li>
                                 {% endif %}
                             </ul>
@@ -174,4 +161,101 @@
             </div>
         </div>
     </div>
+
+    <style>
+    .resizable-table th {
+        position: relative;
+        border-right: 1px solid #dee2e6;
+        white-space: nowrap;
+    }
+    
+    /* 各列の最小幅を設定 */
+    .resizable-table th:nth-child(1) { min-width: 50px; }  /* № */
+    .resizable-table th:nth-child(2) { min-width: 60px; }  /* 畜種 */
+    .resizable-table th:nth-child(3) { min-width: 60px; }  /* 分類 */
+    .resizable-table th:nth-child(4) { min-width: 80px; }  /* メーカー */
+    .resizable-table th:nth-child(5) { min-width: 150px; } /* 商品名 */
+    .resizable-table th:nth-child(6) { min-width: 60px; }  /* 型式 */
+    .resizable-table th:nth-child(7) { min-width: 60px; }  /* 規格 */
+    .resizable-table th:nth-child(8) { min-width: 80px; }  /* 発送単位 */
+    .resizable-table th:nth-child(9) { min-width: 80px; }  /* 県連価格 */
+    .resizable-table th:nth-child(10) { min-width: 100px; } /* 参考小売価格 */
+    .resizable-table th:nth-child(11) { min-width: 70px; } /* 改定額 */
+    .resizable-table th:nth-child(12) { min-width: 60px; } /* 送料 */
+    .resizable-table th:nth-child(13) { min-width: 60px; } /* 備考 */
+    .resizable-table th:nth-child(14) { min-width: 100px; } /* 改定理由 */
+    
+    .resizable-table th:hover {
+        border-right: 2px solid #007bff;
+    }
+    
+    .column-resizer {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 5px;
+        height: 100%;
+        cursor: col-resize;
+        background: transparent;
+    }
+    
+    .column-resizer:hover {
+        background: #007bff;
+    }
+    
+    .resizing {
+        cursor: col-resize;
+        user-select: none;
+    }
+    </style>
+    
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const table = document.getElementById('priceTable');
+        if (!table) return;
+        
+        const headers = table.querySelectorAll('thead th');
+        
+        headers.forEach((header, index) => {
+            // 最後の列以外にリサイザーを追加
+            if (index < headers.length - 1) {
+                const resizer = document.createElement('div');
+                resizer.className = 'column-resizer';
+                header.appendChild(resizer);
+                
+                let isResizing = false;
+                let startX = 0;
+                let startWidth = 0;
+                
+                resizer.addEventListener('mousedown', function(e) {
+                    isResizing = true;
+                    startX = e.clientX;
+                    startWidth = header.offsetWidth;
+                    document.body.classList.add('resizing');
+                    e.preventDefault();
+                });
+                
+                document.addEventListener('mousemove', function(e) {
+                    if (!isResizing) return;
+                    
+                    const width = startWidth + (e.clientX - startX);
+                    const computedStyle = window.getComputedStyle(header);
+                    const minWidth = parseInt(computedStyle.minWidth) || 50;
+                    
+                    if (width > minWidth) {
+                        header.style.width = width + 'px';
+                        header.style.minWidth = width + 'px';
+                    }
+                });
+                
+                document.addEventListener('mouseup', function() {
+                    if (isResizing) {
+                        isResizing = false;
+                        document.body.classList.remove('resizing');
+                    }
+                });
+            }
+        });
+    });
+    </script>
 {% endblock %}

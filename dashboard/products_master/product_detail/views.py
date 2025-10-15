@@ -248,7 +248,11 @@ def price_history_create(request, product_pk):
                 if '/' not in effective_year_month:
                     return HttpResponse('適用年月はYYYY/MM形式で入力してください', status=400)
                 
-                year_str, month_str = effective_year_month.split('/')
+                parts = effective_year_month.split('/')
+                if len(parts) != 2:
+                    return HttpResponse('適用年月はYYYY/MM形式で入力してください', status=400)
+                
+                year_str, month_str = parts
                 year = int(year_str)
                 month = int(month_str)
                 
@@ -258,10 +262,10 @@ def price_history_create(request, product_pk):
                 if month < 1 or month > 12:
                     return HttpResponse('月は1～12の範囲で入力してください', status=400)
                 
-                # 正しい形式に整形
+                # 正しい形式に整形（2025/1 → 2025/01）
                 effective_year_month = f"{year:04d}/{month:02d}"
                 
-            except ValueError:
+            except (ValueError, IndexError):
                 return HttpResponse('適用年月はYYYY/MM形式で入力してください', status=400)
             
             if not wholesale_price:
@@ -471,6 +475,9 @@ def submit_approval(request, pk=None):
         
         if pk:
             product = get_object_or_404(Product, pk=pk)
+            # 申請中ステータスの商品は多重申請を禁止
+            if product.status == '申請中':
+                return HttpResponse('<script>alert("この商品は既に申請中です");history.back();</script>')
         else:
             product = None
         
@@ -514,6 +521,65 @@ def submit_approval(request, pk=None):
                 ]
             }
             return render(request, 'products_master/product_detail.html', context)
+        
+        # 価格履歴のバリデーションを事前に実行
+        for key, value in request.POST.items():
+            if key.startswith('new_effective_year_month_') and value.strip():
+                effective_year_month = value.strip()
+                # 適用年月のバリデーション
+                try:
+                    if '/' not in effective_year_month:
+                        raise ValueError('適用年月はYYYY/MM形式で入力してください')
+                    
+                    parts = effective_year_month.split('/')
+                    if len(parts) != 2:
+                        raise ValueError('適用年月はYYYY/MM形式で入力してください')
+                    
+                    year_str, month_str = parts
+                    year = int(year_str)
+                    month = int(month_str)
+                    
+                    if year < 2000 or year > 2099:
+                        raise ValueError('年は2000～2099の範囲で入力してください')
+                    
+                    if month < 1 or month > 12:
+                        raise ValueError('月は1～12の範囲で入力してください')
+                    
+                except (ValueError, IndexError) as e:
+                    # バリデーションエラー時もフォームを再表示
+                    form = ProductForm(request.POST)
+                    preview_histories = []
+                    for key, value in request.POST.items():
+                        if key.startswith('new_effective_year_month_') and value.strip():
+                            index = key.split('_')[-1]
+                            effective_year_month = value.strip()
+                            wholesale_price = request.POST.get(f'new_wholesale_price_{index}', '').strip()
+                            kenren_price = request.POST.get(f'new_kenren_price_{index}', '').strip()
+                            revision_reason = request.POST.get(f'new_revision_reason_{index}', '').strip()
+                            
+                            preview_histories.append({
+                                'effective_year_month': effective_year_month,
+                                'wholesale_price': wholesale_price,
+                                'kenren_price': kenren_price,
+                                'revision_reason': revision_reason,
+                                'index': index
+                            })
+                    
+                    context = {
+                        'current_user': get_current_user(),
+                        'product': product,
+                        'form': form,
+                        'price_histories': product.price_histories.filter(is_active=True).order_by('-effective_year_month') if product else [],
+                        'preview_histories': preview_histories,
+                        'is_new': not bool(product),
+                        'error_message': str(e),
+                        'breadcrumbs': [
+                            {'title': '商品マスタ管理', 'url': '/products/'},
+                            {'title': '商品一覧', 'url': '/products/products/'},
+                            {'title': '新規作成' if not product else f'{product.product_name}', 'url': None}
+                        ]
+                    }
+                    return render(request, 'products_master/product_detail.html', context)
         
         # 申請テーブルに商品情報をコピー
         if product:
@@ -582,7 +648,61 @@ def submit_approval(request, pk=None):
                 print(f"Index: {index}, wholesale: {wholesale_price}, kenren: {kenren_price}")
                 
                 if '/' in effective_year_month:
-                    year, month = map(int, effective_year_month.split('/'))
+                    # 日付形式をバリデーション
+                    try:
+                        parts = effective_year_month.split('/')
+                        if len(parts) != 2:
+                            raise ValueError('適用年月はYYYY/MM形式で入力してください')
+                        
+                        year_str, month_str = parts
+                        year = int(year_str)
+                        month = int(month_str)
+                        
+                        if year < 2000 or year > 2099:
+                            raise ValueError('年は2000～2099の範囲で入力してください')
+                        
+                        if month < 1 or month > 12:
+                            raise ValueError('月は1～12の範囲で入力してください')
+                        
+                        # 正しい形式に整形
+                        effective_year_month = f"{year:04d}/{month:02d}"
+                        
+                    except (ValueError, IndexError) as e:
+                        # バリデーションエラー時もフォームを再表示
+                        form = ProductForm(request.POST)
+                        preview_histories = []
+                        for key, value in request.POST.items():
+                            if key.startswith('new_effective_year_month_') and value.strip():
+                                index = key.split('_')[-1]
+                                effective_year_month = value.strip()
+                                wholesale_price = request.POST.get(f'new_wholesale_price_{index}', '').strip()
+                                kenren_price = request.POST.get(f'new_kenren_price_{index}', '').strip()
+                                revision_reason = request.POST.get(f'new_revision_reason_{index}', '').strip()
+                                
+                                preview_histories.append({
+                                    'effective_year_month': effective_year_month,
+                                    'wholesale_price': wholesale_price,
+                                    'kenren_price': kenren_price,
+                                    'revision_reason': revision_reason,
+                                    'index': index
+                                })
+                        
+                        context = {
+                            'current_user': get_current_user(),
+                            'product': None,
+                            'form': form,
+                            'price_histories': [],
+                            'preview_histories': preview_histories,
+                            'is_new': True,
+                            'error_message': str(e),
+                            'breadcrumbs': [
+                                {'title': '商品マスタ管理', 'url': '/products/'},
+                                {'title': '商品一覧', 'url': '/products/products/'},
+                                {'title': '新規作成', 'url': None}
+                            ]
+                        }
+                        return render(request, 'products_master/product_detail.html', context)
+                    
                     period_year = year if month >= 4 else year - 1
                     
                     # 粗利率を算定
@@ -642,7 +762,7 @@ def submit_approval(request, pk=None):
                     )
                     print(f"Successfully created PriceHistoryApproval for {effective_year_month}")
         
-        return HttpResponse('<script>alert("申請完了");location.href="/products/approvals/";</script>')
+        return HttpResponse('<script>alert("申請完了");location.href="/products/products/";</script>')
         
     except Exception as e:
         import traceback
@@ -805,7 +925,6 @@ def approval_list(request):
         'approvals': approvals,
         'search_query': search_query,
         'breadcrumbs': [
-            {'title': '商品マスタ管理', 'url': '/products/'},
             {'title': '承認待ち一覧', 'url': None}
         ]
     }
@@ -877,7 +996,6 @@ def approval_detail(request, pk):
         'diff_flags': diff_flags,
         'is_new_product': not bool(original_product),
         'breadcrumbs': [
-            {'title': '商品マスタ管理', 'url': '/products/'},
             {'title': '承認待ち一覧', 'url': '/products/approvals/'},
             {'title': f'{approval.product_name}', 'url': None}
         ]

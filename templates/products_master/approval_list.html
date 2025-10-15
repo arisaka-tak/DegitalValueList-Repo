@@ -87,7 +87,15 @@
                                             </td>
                                             <td>{{ approval.created_at|date:"Y/m/d H:i" }}</td>
                                             <td>
-                                                <a href="{% url 'products_master:approval_detail' approval.pk %}" class="btn btn-sm btn-outline-primary">詳細</a>
+                                                <a href="{% url 'products_master:approval_detail' approval.pk %}" class="btn btn-sm btn-outline-primary me-1">詳細</a>
+                                                <button type="button" class="btn btn-sm btn-success me-1"
+                                                        hx-post="{% url 'products_master:approve_application' approval.pk %}"
+                                                        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                                                        hx-confirm="承認しますか？">承認</button>
+                                                <button type="button" class="btn btn-sm btn-danger"
+                                                        hx-post="{% url 'products_master:reject_application' approval.pk %}"
+                                                        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                                                        hx-confirm="却下しますか？">却下</button>
                                             </td>
                                         </tr>
                                         {% endfor %}

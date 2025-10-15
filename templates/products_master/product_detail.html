@@ -170,7 +170,7 @@
                                     form="productForm"
                                     formaction="{% if product %}{% url 'products_master:submit_approval' product.pk %}{% else %}{% url 'products_master:submit_approval_new' %}{% endif %}"
                                     formmethod="post"
-                                    class="btn btn-sm btn-warning ms-2">申請</button>
+                                    class="btn btn-sm btn-success ms-2">申請</button>
                         </div>
                     </div>
                     <div class="card-body" id="price-history-container">
