@@ -13,7 +13,7 @@
 <div class="row g-4">
     <!-- 商品マスタ管理 -->
     <div class="col-md-4">
-        <a href="{% url 'products_master:index' %}" class="text-decoration-none">
+        <a href="{% url 'products_master:product_list' %}" class="text-decoration-none">
             <div class="card h-100 card-hover">
                 <div class="card-body text-center">
                     <h5 class="card-title">📦 商品マスタ管理</h5>
@@ -35,10 +35,10 @@
 
     <!-- デジタル価格表・出力 -->
     <div class="col-md-4">
-        <a href="{% url 'reports:index' %}" class="text-decoration-none">
+        <a href="{% url 'products_master:integrated_pricelist' %}" class="text-decoration-none">
             <div class="card h-100 card-hover">
                 <div class="card-body text-center">
-                    <h5 class="card-title">📊 デジタル価格表・出力</h5>
+                    <h5 class="card-title">📊 デジタル価格表</h5>
                 </div>
             </div>
         </a>

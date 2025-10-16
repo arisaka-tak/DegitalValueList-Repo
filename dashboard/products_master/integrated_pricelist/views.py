@@ -2,6 +2,7 @@ from django.shortcuts import render
 from django.core.paginator import Paginator
 from dashboard.products_master.models import Product, PriceHistory
 from digital_pricelist_system.utils import get_current_user
+from digital_pricelist_system.breadcrumbs import get_breadcrumbs
 from datetime import datetime, timedelta
 
 def integrated_pricelist(request):
@@ -75,9 +76,6 @@ def integrated_pricelist(request):
         'page_obj': page_obj,
         'available_months': available_months,
         'selected_month': selected_month,
-        'breadcrumbs': [
-            {'title': '商品マスタ管理', 'url': '/products/'},
-            {'title': 'デジタル価格表', 'url': None}
-        ]
+        'breadcrumbs': get_breadcrumbs('integrated_pricelist')
     }
     return render(request, 'products_master/integrated_pricelist.html', context)

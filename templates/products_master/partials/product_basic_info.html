@@ -1,0 +1,106 @@
+<div class="row">
+    <div class="col-md-6">
+        <div class="mb-3">
+            <label class="form-label text-muted">商品番号</label>
+            {% if is_new %}
+                <div class="form-control-plaintext text-muted">保存時に自動採番</div>
+            {% elif product.product_number > 0 %}
+                <div class="form-control-plaintext fw-bold">{{ product.product_number }}</div>
+            {% else %}
+                <div class="form-control-plaintext text-success fw-bold">新規作成 (仮{{ product.product_number }})</div>
+            {% endif %}
+        </div>
+        <div class="mb-3">
+            <label class="form-label" for="{{ form.product_code.id_for_label }}">商品コード</label>
+            {% if editable %}
+                {{ form.product_code }}
+            {% else %}
+                <div class="form-control-plaintext{% if diff_flags.product_code %} text-danger fw-bold{% endif %}">{{ product.product_code|default:"-" }}</div>
+            {% endif %}
+        </div>
+        <div class="mb-3">
+            <label class="form-label" for="{{ form.product_name.id_for_label }}">商品名</label>
+            {% if editable %}
+                {{ form.product_name }}
+            {% else %}
+                <div class="form-control-plaintext fw-bold{% if diff_flags.product_name %} text-danger{% endif %}">{{ product.product_name }}</div>
+            {% endif %}
+        </div>
+        <div class="mb-3">
+            <label class="form-label" for="{{ form.livestock_type.id_for_label }}">畜種</label>
+            {% if editable %}
+                {{ form.livestock_type }}
+            {% else %}
+                <div class="form-control-plaintext{% if diff_flags.livestock_type %} text-danger fw-bold{% endif %}">{{ product.livestock_type|default:"-" }}</div>
+            {% endif %}
+        </div>
+        <div class="mb-3">
+            <label class="form-label" for="{{ form.category.id_for_label }}">分類</label>
+            {% if editable %}
+                {{ form.category }}
+            {% else %}
+                <div class="form-control-plaintext{% if diff_flags.category %} text-danger fw-bold{% endif %}">{{ product.category|default:"-" }}</div>
+            {% endif %}
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="mb-3">
+            <label class="form-label text-muted">　</label>
+            <div class="form-control-plaintext">　</div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label" for="{{ form.manufacturer.id_for_label }}">メーカー</label>
+            {% if editable %}
+                {{ form.manufacturer }}
+            {% else %}
+                <div class="form-control-plaintext{% if diff_flags.manufacturer %} text-danger fw-bold{% endif %}">{{ product.manufacturer|default:"-" }}</div>
+            {% endif %}
+        </div>
+        <div class="mb-3">
+            <label class="form-label" for="{{ form.model_number.id_for_label }}">型式</label>
+            {% if editable %}
+                {{ form.model_number }}
+            {% else %}
+                <div class="form-control-plaintext{% if diff_flags.model_number %} text-danger fw-bold{% endif %}">{{ product.model_number|default:"-" }}</div>
+            {% endif %}
+        </div>
+        <div class="mb-3">
+            <label class="form-label" for="{{ form.specification.id_for_label }}">規格</label>
+            {% if editable %}
+                {{ form.specification }}
+            {% else %}
+                <div class="form-control-plaintext{% if diff_flags.specification %} text-danger fw-bold{% endif %}">{{ product.specification|default:"-" }}</div>
+            {% endif %}
+        </div>
+        <div class="mb-3">
+            <label class="form-label" for="{{ form.shipping_unit.id_for_label }}">発送単位</label>
+            {% if editable %}
+                {{ form.shipping_unit }}
+            {% else %}
+                <div class="form-control-plaintext{% if diff_flags.shipping_unit %} text-danger fw-bold{% endif %}">{{ product.shipping_unit|default:"-" }}</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="mb-3">
+            <label class="form-label" for="{{ form.shipping_fee.id_for_label }}">送料</label>
+            {% if editable %}
+                {{ form.shipping_fee }}
+            {% else %}
+                <div class="form-control-plaintext{% if diff_flags.shipping_fee %} text-danger fw-bold{% endif %}">{{ product.shipping_fee|default:"-" }}</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="mb-3">
+    <label class="form-label" for="{{ form.remarks.id_for_label }}">備考</label>
+    {% if editable %}
+        {{ form.remarks }}
+    {% else %}
+        <div class="form-control-plaintext{% if diff_flags.remarks %} text-danger fw-bold{% endif %}">{{ product.remarks|default:"-" }}</div>
+    {% endif %}
+</div>

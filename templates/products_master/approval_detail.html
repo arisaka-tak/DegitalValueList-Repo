@@ -19,70 +19,7 @@
                         <h5 class="mb-0">申請内容</h5>
                     </div>
                     <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label text-muted">商品番号</label>
-                                    {% if approval.product_number > 0 %}
-                                        <div class="form-control-plaintext fw-bold">{{ approval.product_number }}</div>
-                                    {% else %}
-                                        <div class="form-control-plaintext text-success fw-bold">新規作成 (仮{{ approval.product_number }})</div>
-                                    {% endif %}
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">商品コード</label>
-                                    <div class="form-control-plaintext{% if diff_flags.product_code %} text-danger fw-bold{% endif %}">{{ approval.product_code|default:"-" }}</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">商品名</label>
-                                    <div class="form-control-plaintext fw-bold{% if diff_flags.product_name %} text-danger{% endif %}">{{ approval.product_name }}</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">畜種</label>
-                                    <div class="form-control-plaintext{% if diff_flags.livestock_type %} text-danger fw-bold{% endif %}">{{ approval.livestock_type|default:"-" }}</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">分類</label>
-                                    <div class="form-control-plaintext{% if diff_flags.category %} text-danger fw-bold{% endif %}">{{ approval.category|default:"-" }}</div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label text-muted">　</label>
-                                    <div class="form-control-plaintext">　</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">メーカー</label>
-                                    <div class="form-control-plaintext{% if diff_flags.manufacturer %} text-danger fw-bold{% endif %}">{{ approval.manufacturer|default:"-" }}</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">型式</label>
-                                    <div class="form-control-plaintext{% if diff_flags.model_number %} text-danger fw-bold{% endif %}">{{ approval.model_number|default:"-" }}</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">規格</label>
-                                    <div class="form-control-plaintext{% if diff_flags.specification %} text-danger fw-bold{% endif %}">{{ approval.specification|default:"-" }}</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">発送単位</label>
-                                    <div class="form-control-plaintext{% if diff_flags.shipping_unit %} text-danger fw-bold{% endif %}">{{ approval.shipping_unit|default:"-" }}</div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label">送料</label>
-                                    <div class="form-control-plaintext{% if diff_flags.shipping_fee %} text-danger fw-bold{% endif %}">{{ approval.shipping_fee|default:"-" }}</div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label class="form-label">備考</label>
-                            <div class="form-control-plaintext{% if diff_flags.remarks %} text-danger fw-bold{% endif %}">{{ approval.remarks|default:"-" }}</div>
-                        </div>
+                        {% include 'products_master/partials/product_basic_info.html' with product=approval editable=False %}
                     </div>
                 </div>
             </div>
@@ -156,7 +93,7 @@
                                     </thead>
                                     <tbody>
                                         {% for history in price_histories %}
-                                        <tr>
+                                        <tr {% if history.is_delete_request %}class="text-danger fw-bold" style="text-decoration: line-through;"{% endif %}>
                                             <td>{{ history.period_year }}年度</td>
                                             <td>{{ history.effective_year_month }}</td>
                                             <td class="{% if history.diff_flags.wholesale_price %}text-danger fw-bold{% endif %}">{{ history.wholesale_price }}</td>

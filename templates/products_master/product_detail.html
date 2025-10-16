@@ -37,70 +37,7 @@
                     <div class="card-body">
                         <form id="productForm" method="post">
                             {% csrf_token %}
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="mb-3">
-                                        <label class="form-label text-muted">商品番号</label>
-                                        {% if is_new %}
-                                            <div class="form-control-plaintext text-muted">保存時に自動採番</div>
-                                        {% else %}
-                                            <div class="form-control-plaintext fw-bold">{{ product.product_number }}</div>
-                                        {% endif %}
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label" for="{{ form.product_code.id_for_label }}">商品コード</label>
-                                        {{ form.product_code }}
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label" for="{{ form.product_name.id_for_label }}">商品名</label>
-                                        {{ form.product_name }}
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label" for="{{ form.livestock_type.id_for_label }}">畜種</label>
-                                        {{ form.livestock_type }}
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label" for="{{ form.category.id_for_label }}">分類</label>
-                                        {{ form.category }}
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="mb-3">
-                                        <label class="form-label text-muted">　</label>
-                                        <div class="form-control-plaintext">　</div>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label" for="{{ form.manufacturer.id_for_label }}">メーカー</label>
-                                        {{ form.manufacturer }}
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label" for="{{ form.model_number.id_for_label }}">型式</label>
-                                        {{ form.model_number }}
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label" for="{{ form.specification.id_for_label }}">規格</label>
-                                        {{ form.specification }}
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label" for="{{ form.shipping_unit.id_for_label }}">発送単位</label>
-                                        {{ form.shipping_unit }}
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="mb-3">
-                                        <label class="form-label" for="{{ form.shipping_fee.id_for_label }}">送料</label>
-                                        {{ form.shipping_fee }}
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label" for="{{ form.remarks.id_for_label }}">備考</label>
-                                {{ form.remarks }}
-                            </div>
+                            {% include 'products_master/partials/product_basic_info.html' with editable=True %}
                         <!-- フォーム終了タグを価格履歴の後に移動 -->
                     </div>
                 </div>

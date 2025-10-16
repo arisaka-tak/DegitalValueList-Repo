@@ -2,6 +2,7 @@ from django.shortcuts import render
 from django.core.paginator import Paginator
 from dashboard.products_master.models import Product
 from digital_pricelist_system.utils import get_current_user
+from digital_pricelist_system.breadcrumbs import get_breadcrumbs
 
 def product_list(request):
     """商品一覧画面（有効な商品のみ）"""
@@ -15,9 +16,6 @@ def product_list(request):
     context = {
         'current_user': get_current_user(),
         'page_obj': page_obj,
-        'breadcrumbs': [
-            {'title': '商品マスタ管理', 'url': '/products/'},
-            {'title': '商品一覧', 'url': None}
-        ]
+        'breadcrumbs': get_breadcrumbs('product_list')
     }
     return render(request, 'products_master/product_list.html', context)

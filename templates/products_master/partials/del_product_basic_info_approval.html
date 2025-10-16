@@ -1,0 +1,64 @@
+<div class="row">
+    <div class="col-md-6">
+        <div class="mb-3">
+            <label class="form-label text-muted">商品番号</label>
+            {% if product.product_number > 0 %}
+                <div class="form-control-plaintext fw-bold">{{ product.product_number }}</div>
+            {% else %}
+                <div class="form-control-plaintext text-success fw-bold">新規作成 (仮{{ product.product_number }})</div>
+            {% endif %}
+        </div>
+        <div class="mb-3">
+            <label class="form-label">商品コード</label>
+            <div class="form-control-plaintext{% if diff_flags.product_code %} text-danger fw-bold{% endif %}">{{ product.product_code|default:"-" }}</div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">商品名</label>
+            <div class="form-control-plaintext fw-bold{% if diff_flags.product_name %} text-danger{% endif %}">{{ product.product_name }}</div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">畜種</label>
+            <div class="form-control-plaintext{% if diff_flags.livestock_type %} text-danger fw-bold{% endif %}">{{ product.livestock_type|default:"-" }}</div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">分類</label>
+            <div class="form-control-plaintext{% if diff_flags.category %} text-danger fw-bold{% endif %}">{{ product.category|default:"-" }}</div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="mb-3">
+            <label class="form-label text-muted">　</label>
+            <div class="form-control-plaintext">　</div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">メーカー</label>
+            <div class="form-control-plaintext{% if diff_flags.manufacturer %} text-danger fw-bold{% endif %}">{{ product.manufacturer|default:"-" }}</div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">型式</label>
+            <div class="form-control-plaintext{% if diff_flags.model_number %} text-danger fw-bold{% endif %}">{{ product.model_number|default:"-" }}</div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">規格</label>
+            <div class="form-control-plaintext{% if diff_flags.specification %} text-danger fw-bold{% endif %}">{{ product.specification|default:"-" }}</div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">発送単位</label>
+            <div class="form-control-plaintext{% if diff_flags.shipping_unit %} text-danger fw-bold{% endif %}">{{ product.shipping_unit|default:"-" }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="mb-3">
+            <label class="form-label">送料</label>
+            <div class="form-control-plaintext{% if diff_flags.shipping_fee %} text-danger fw-bold{% endif %}">{{ product.shipping_fee|default:"-" }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="mb-3">
+    <label class="form-label">備考</label>
+    <div class="form-control-plaintext{% if diff_flags.remarks %} text-danger fw-bold{% endif %}">{{ product.remarks|default:"-" }}</div>
+</div>

@@ -7,7 +7,7 @@
 {% endblock %}
 
 {% block content %}
-    {% include 'components/page_header.html' with page_title="商品一覧" page_subtitle="登録されている商品の一覧" header_actions='<a href="/products/new/" class="btn btn-primary">新規登録</a>' %}
+    {% include 'components/page_header.html' with page_title="商品一覧" page_subtitle="登録されている商品の一覧" header_actions='<button class="btn btn-warning me-2" disabled>🤖 AI価格抽出（準備中）</button><a href="/products/new/" class="btn btn-primary">新規登録</a>' %}
     
     <div class="container">
         {% if messages %}

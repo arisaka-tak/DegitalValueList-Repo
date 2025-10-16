@@ -260,6 +260,9 @@ class PriceHistoryApproval(models.Model):
     revision_amount = models.DecimalField('改定額', max_digits=12, decimal_places=0, default=0)
     revision_reason = models.TextField('改定理由', blank=True, null=True)
     
+    # 削除フラグ
+    is_delete_request = models.BooleanField('削除申請', default=False, help_text='この履歴を削除する申請かどうか')
+    
     # ワークフロー用フィールド
     applicant = models.CharField('申請者', max_length=100, blank=True, null=True)
     status = models.CharField('ステータス', max_length=20, default='申請中')
