@@ -23,6 +23,7 @@ def product_create(request):
     context = {
         'current_user': get_current_user(),
         'form': form,
+        'action_type': 'create',  # 統合テンプレート用パラメータ
         'page_title': '新規商品登録',
         'page_subtitle': '新しい商品を登録します',
         'breadcrumbs': [
@@ -31,7 +32,8 @@ def product_create(request):
             {'title': '新規作成', 'url': None}
         ]
     }
-    return render(request, 'products_master/product_form.html', context)
+    # 旧: return render(request, 'products_master/product_form.html', context)
+    return render(request, 'products_master/product_action.html', context)
 
 def product_edit(request, pk):
     """商品編集"""
@@ -53,6 +55,7 @@ def product_edit(request, pk):
         'current_user': get_current_user(),
         'form': form,
         'product': product,
+        'action_type': 'edit',  # 統合テンプレート用パラメータ
         'page_title': f'{product.product_name} - 編集',
         'page_subtitle': '商品情報を編集します',
         'breadcrumbs': [
@@ -62,7 +65,8 @@ def product_edit(request, pk):
             {'title': '編集', 'url': None}
         ]
     }
-    return render(request, 'products_master/product_form.html', context)
+    # 旧: return render(request, 'products_master/product_form.html', context)
+    return render(request, 'products_master/product_action.html', context)
 
 def product_copy(request, pk):
     """商品コピー（基本情報をコピーして新規作成モードで詳細画面へ）"""
@@ -161,12 +165,14 @@ def product_new(request):
         'current_user': get_current_user(),
         'product': None,  # 新規作成モード
         'form': form,
-        'price_histories': [],  # 空の価格履歴
-        'is_new': True,  # 新規作成フラグ
+        'action_type': 'create',  # 統合テンプレート用パラメータ
+        'page_title': '新規商品登録',
+        'page_subtitle': '新しい商品を登録します',
         'breadcrumbs': [
             {'title': '商品マスタ管理', 'url': '/products/'},
             {'title': '商品一覧', 'url': '/products/products/'},
             {'title': '新規作成', 'url': None}
         ]
     }
-    return render(request, 'products_master/product_detail.html', context)
+    # 旧: return render(request, 'products_master/product_detail.html', context)
+    return render(request, 'products_master/product_action.html', context)

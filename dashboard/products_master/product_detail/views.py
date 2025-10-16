@@ -470,8 +470,15 @@ def preview_save(request, pk=None):
 def submit_approval(request, pk=None):
     """申請テーブルにデータをコピー"""
     try:
-        print(f"=== submit_approval called: pk={pk} ===")
-        print(f"POST data: {dict(request.POST)}")
+        print(f"=== submit_approval called: pk={pk}, method={request.method} ===")
+        print(f"Request path: {request.path}")
+        print(f"POST data keys: {list(request.POST.keys())}")
+        
+        # 重複申請チェック用のログ
+        existing_approvals = ProductApproval.objects.filter(is_active=True)
+        print(f"Existing approvals count: {existing_approvals.count()}")
+        for approval in existing_approvals:
+            print(f"  - Approval {approval.pk}: {approval.product_name} (product_number: {approval.product_number})")
         
         if pk:
             product = get_object_or_404(Product, pk=pk)
@@ -593,6 +600,7 @@ def submit_approval(request, pk=None):
             # 新規商品の場合は仮番号を自動採番
             last_temp = ProductApproval.objects.filter(product_number__lt=0).order_by('product_number').first()
             temp_product_number = (last_temp.product_number - 1) if last_temp else -1
+            print(f"New product temp number: {temp_product_number} (last_temp: {last_temp.product_number if last_temp else 'None'})")
         
         approval_product = ProductApproval.objects.create(
             product_number=temp_product_number,
@@ -608,6 +616,7 @@ def submit_approval(request, pk=None):
             remarks=form.cleaned_data.get('remarks'),
             applicant=get_current_user()
         )
+        print(f"Created ProductApproval: pk={approval_product.pk}, product_number={approval_product.product_number}, name={approval_product.product_name}")
         
         # 価格履歴を申請テーブルにコピー
         if product:
@@ -762,6 +771,7 @@ def submit_approval(request, pk=None):
                     )
                     print(f"Successfully created PriceHistoryApproval for {effective_year_month}")
         
+        print(f"=== submit_approval completed successfully ===")
         return HttpResponse('<script>alert("申請完了");location.href="/products/products/";</script>')
         
     except Exception as e:
@@ -1002,6 +1012,86 @@ def approval_detail(request, pk):
     }
     return render(request, 'products_master/approval_detail.html', context)
 
+def _process_approval(approval):
+    """承認処理の共通ロジック"""
+    if approval.product_number > 0:
+        # 既存商品の更新
+        product = Product.objects.get(product_number=approval.product_number)
+        
+        # 商品情報を更新
+        product.product_code = approval.product_code
+        product.livestock_type = approval.livestock_type
+        product.category = approval.category
+        product.manufacturer = approval.manufacturer
+        product.product_name = approval.product_name
+        product.model_number = approval.model_number
+        product.specification = approval.specification
+        product.shipping_unit = approval.shipping_unit
+        product.shipping_fee = approval.shipping_fee
+        product.remarks = approval.remarks
+        product.status = ''
+        product.approver = get_current_user()
+        product.save()
+        
+        # 価格履歴を更新
+        for approval_history in approval.price_histories.filter(is_active=True):
+            history, created = PriceHistory.objects.get_or_create(
+                product=product,
+                effective_year_month=approval_history.effective_year_month,
+                defaults={
+                    'period_year': approval_history.period_year,
+                    'gross_margin_rate': approval_history.gross_margin_rate,
+                    'wholesale_price': approval_history.wholesale_price,
+                    'kenren_price': approval_history.kenren_price,
+                    'retail_price': approval_history.retail_price,
+                    'revision_amount': approval_history.revision_amount,
+                    'revision_reason': approval_history.revision_reason,
+                }
+            )
+            if not created:
+                # 既存の場合は更新
+                history.period_year = approval_history.period_year
+                history.gross_margin_rate = approval_history.gross_margin_rate
+                history.wholesale_price = approval_history.wholesale_price
+                history.kenren_price = approval_history.kenren_price
+                history.retail_price = approval_history.retail_price
+                history.revision_amount = approval_history.revision_amount
+                history.revision_reason = approval_history.revision_reason
+                history.save()
+    else:
+        # 新規商品の作成
+        product = Product.objects.create(
+            product_code=approval.product_code,
+            livestock_type=approval.livestock_type,
+            category=approval.category,
+            manufacturer=approval.manufacturer,
+            product_name=approval.product_name,
+            model_number=approval.model_number,
+            specification=approval.specification,
+            shipping_unit=approval.shipping_unit,
+            shipping_fee=approval.shipping_fee,
+            remarks=approval.remarks,
+            status='',
+            approver=get_current_user()
+        )
+        
+        # 価格履歴を作成
+        for approval_history in approval.price_histories.filter(is_active=True):
+            PriceHistory.objects.create(
+                product=product,
+                period_year=approval_history.period_year,
+                effective_year_month=approval_history.effective_year_month,
+                gross_margin_rate=approval_history.gross_margin_rate,
+                wholesale_price=approval_history.wholesale_price,
+                kenren_price=approval_history.kenren_price,
+                retail_price=approval_history.retail_price,
+                revision_amount=approval_history.revision_amount,
+                revision_reason=approval_history.revision_reason,
+            )
+    
+    # 承認テーブルから削除
+    approval.delete()
+
 def approve_application(request, pk):
     """申請を承認"""
     if request.method != 'POST':
@@ -1009,74 +1099,7 @@ def approve_application(request, pk):
     
     try:
         approval = get_object_or_404(ProductApproval, pk=pk)
-        
-        # 既存商品を更新または新規作成
-        if approval.product_number > 0:
-            # 既存商品の更新
-            product = Product.objects.get(product_number=approval.product_number)
-            
-            # 削除申請の場合は論理削除を実行
-            if approval.status == '削除申請':
-                product.soft_delete()
-            else:
-                # 通常の更新申請の場合
-                product.product_code = approval.product_code
-                product.livestock_type = approval.livestock_type
-                product.category = approval.category
-                product.manufacturer = approval.manufacturer
-                product.product_name = approval.product_name
-                product.model_number = approval.model_number
-                product.specification = approval.specification
-                product.shipping_unit = approval.shipping_unit
-                product.shipping_fee = approval.shipping_fee
-                product.remarks = approval.remarks
-                product.status = ''  # ステータスをクリア
-                product.applicant = approval.applicant  # 申請者をセット
-                product.approver = get_current_user()  # 承認者をセット
-                product.save()
-        else:
-            # 新規商品の作成（正規番号を自動採番）
-            product = Product.objects.create(
-                product_code=approval.product_code,
-                livestock_type=approval.livestock_type,
-                category=approval.category,
-                manufacturer=approval.manufacturer,
-                product_name=approval.product_name,
-                model_number=approval.model_number,
-                specification=approval.specification,
-                shipping_unit=approval.shipping_unit,
-                shipping_fee=approval.shipping_fee,
-                remarks=approval.remarks,
-                applicant=approval.applicant,
-                approver=get_current_user()
-            )
-        
-        # 価格履歴を本テーブルにコピー
-        for approval_history in approval.price_histories.filter(is_active=True):
-            existing_history = PriceHistory.objects.filter(
-                product=product,
-                effective_year_month=approval_history.effective_year_month,
-                is_active=True
-            ).first()
-            
-            if existing_history:
-                existing_history.wholesale_price = approval_history.wholesale_price
-                existing_history.kenren_price = approval_history.kenren_price
-                existing_history.revision_reason = approval_history.revision_reason
-                existing_history.save()
-            else:
-                PriceHistory.objects.create(
-                    product=product,
-                    period_year=approval_history.period_year,
-                    effective_year_month=approval_history.effective_year_month,
-                    gross_margin_rate=approval_history.gross_margin_rate,
-                    wholesale_price=approval_history.wholesale_price,
-                    kenren_price=approval_history.kenren_price,
-                    retail_price=approval_history.retail_price,
-                    revision_reason=approval_history.revision_reason
-                )
-        
-        approval.delete()
+        _process_approval(approval)
         return HttpResponse('<script>alert("承認完了");location.href="/products/approvals/";</script>')
         
     except Exception as e:
@@ -1106,78 +1129,7 @@ def reject_application(request, pk):
     except Exception as e:
         return HttpResponse('<script>alert("エラー発生");</script>', status=500)
 
-def bulk_approve(request):
-    """一括承認"""
-    if request.method != 'POST':
-        return HttpResponse('Invalid method', status=405)
-    
-    try:
-        approvals = ProductApproval.objects.filter(is_active=True)
-        approved_count = 0
-        
-        for approval in approvals:
-            try:
-                if approval.product_number > 0:
-                    product = Product.objects.get(product_number=approval.product_number)
-                    product.product_code = approval.product_code
-                    product.livestock_type = approval.livestock_type
-                    product.category = approval.category
-                    product.manufacturer = approval.manufacturer
-                    product.product_name = approval.product_name
-                    product.model_number = approval.model_number
-                    product.specification = approval.specification
-                    product.shipping_unit = approval.shipping_unit
-                    product.shipping_fee = approval.shipping_fee
-                    product.remarks = approval.remarks
-                    product.save()
-                else:
-                    product = Product.objects.create(
-                        product_code=approval.product_code,
-                        livestock_type=approval.livestock_type,
-                        category=approval.category,
-                        manufacturer=approval.manufacturer,
-                        product_name=approval.product_name,
-                        model_number=approval.model_number,
-                        specification=approval.specification,
-                        shipping_unit=approval.shipping_unit,
-                        shipping_fee=approval.shipping_fee,
-                        remarks=approval.remarks
-                    )
-                
-                for approval_history in approval.price_histories.filter(is_active=True):
-                    existing_history = PriceHistory.objects.filter(
-                        product=product,
-                        effective_year_month=approval_history.effective_year_month,
-                        is_active=True
-                    ).first()
-                    
-                    if existing_history:
-                        existing_history.wholesale_price = approval_history.wholesale_price
-                        existing_history.kenren_price = approval_history.kenren_price
-                        existing_history.revision_reason = approval_history.revision_reason
-                        existing_history.save()
-                    else:
-                        PriceHistory.objects.create(
-                            product=product,
-                            period_year=approval_history.period_year,
-                            effective_year_month=approval_history.effective_year_month,
-                            gross_margin_rate=approval_history.gross_margin_rate,
-                            wholesale_price=approval_history.wholesale_price,
-                            kenren_price=approval_history.kenren_price,
-                            retail_price=approval_history.retail_price,
-                            revision_reason=approval_history.revision_reason
-                        )
-                
-                approval.delete()
-                approved_count += 1
-                
-            except Exception:
-                continue
-        
-        return HttpResponse(f'<script>alert("{approved_count}件を一括承認しました");location.reload();</script>')
-        
-    except Exception:
-        return HttpResponse('<script>alert("エラー発生");</script>', status=500)
+
 
 def bulk_approve(request):
     """一括承認"""
@@ -1190,71 +1142,8 @@ def bulk_approve(request):
         
         for approval in approvals:
             try:
-                # 既存商品を更新または新規作成
-                if approval.product_number > 0:
-                    product = Product.objects.get(product_number=approval.product_number)
-                    
-                    # 削除申請の場合は論理削除を実行
-                    if approval.status == '削除申請':
-                        product.soft_delete()
-                    else:
-                        # 通常の更新申請の場合
-                        product.product_code = approval.product_code
-                        product.livestock_type = approval.livestock_type
-                        product.category = approval.category
-                        product.manufacturer = approval.manufacturer
-                        product.product_name = approval.product_name
-                        product.model_number = approval.model_number
-                        product.specification = approval.specification
-                        product.shipping_unit = approval.shipping_unit
-                        product.shipping_fee = approval.shipping_fee
-                        product.remarks = approval.remarks
-                        product.status = ''  # ステータスをクリア
-                        product.applicant = approval.applicant  # 申請者をセット
-                        product.approver = get_current_user()  # 承認者をセット
-                        product.save()
-                else:
-                    product = Product.objects.create(
-                        product_code=approval.product_code,
-                        livestock_type=approval.livestock_type,
-                        category=approval.category,
-                        manufacturer=approval.manufacturer,
-                        product_name=approval.product_name,
-                        model_number=approval.model_number,
-                        specification=approval.specification,
-                        shipping_unit=approval.shipping_unit,
-                        shipping_fee=approval.shipping_fee,
-                        remarks=approval.remarks
-                    )
-                
-                # 価格履歴を本テーブルにコピー
-                for approval_history in approval.price_histories.filter(is_active=True):
-                    existing_history = PriceHistory.objects.filter(
-                        product=product,
-                        effective_year_month=approval_history.effective_year_month,
-                        is_active=True
-                    ).first()
-                    
-                    if existing_history:
-                        existing_history.wholesale_price = approval_history.wholesale_price
-                        existing_history.kenren_price = approval_history.kenren_price
-                        existing_history.revision_reason = approval_history.revision_reason
-                        existing_history.save()
-                    else:
-                        PriceHistory.objects.create(
-                            product=product,
-                            period_year=approval_history.period_year,
-                            effective_year_month=approval_history.effective_year_month,
-                            gross_margin_rate=approval_history.gross_margin_rate,
-                            wholesale_price=approval_history.wholesale_price,
-                            kenren_price=approval_history.kenren_price,
-                            retail_price=approval_history.retail_price,
-                            revision_reason=approval_history.revision_reason
-                        )
-                
-                approval.delete()
+                _process_approval(approval)  # 共通処理を使用
                 approved_count += 1
-                
             except Exception:
                 continue
         

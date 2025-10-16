@@ -35,7 +35,7 @@
                         <h5 class="mb-0">基本情報</h5>
                     </div>
                     <div class="card-body">
-                        <form id="productForm">
+                        <form id="productForm" method="post">
                             {% csrf_token %}
                             <div class="row">
                                 <div class="col-md-6">
@@ -170,7 +170,8 @@
                                     form="productForm"
                                     formaction="{% if product %}{% url 'products_master:submit_approval' product.pk %}{% else %}{% url 'products_master:submit_approval_new' %}{% endif %}"
                                     formmethod="post"
-                                    class="btn btn-sm btn-success ms-2">申請</button>
+                                    class="btn btn-sm btn-success ms-2"
+                                    onclick="submitApproval(this)">申請</button>
                         </div>
                     </div>
                     <div class="card-body" id="price-history-container">
@@ -249,6 +250,23 @@
     // 新規行削除機能
     window.removeNewRow = function(button) {
         button.closest('tr').remove();
+    }
+    
+    // 申請ボタン処理
+    window.submitApproval = function(button) {
+        // ダブルクリック防止
+        if (button.disabled) return false;
+        
+        button.disabled = true;
+        button.textContent = '処理中...';
+        
+        // フォームをPOSTで送信
+        const form = document.getElementById('productForm');
+        form.method = 'post';
+        form.action = button.getAttribute('formaction');
+        form.submit();
+        
+        return false;
     }
     </script>
 {% endblock %}
