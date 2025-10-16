@@ -1,0 +1,4 @@
+# 配布用ビルドに必要なパッケージ
+django==4.2.7
+django-bootstrap5
+pyinstaller==6.2.0

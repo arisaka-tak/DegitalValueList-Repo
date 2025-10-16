@@ -21,13 +21,22 @@ Django + HTMX で構築された商品価格管理システム
 
 ```
 ZCS_DegitalValueList/
-├── dashboard/                  # メインアプリケーション
-│   └── products_master/       # 商品マスタ管理
+├── dashboard/
+│   └── products_master/       # 商品マスタ管理アプリ
+│       ├── product_list/      # 商品一覧機能
+│       ├── product_detail/    # 商品詳細・承認機能
+│       ├── product_create/    # 商品作成・編集機能
+│       └── integrated_pricelist/ # デジタル価格表機能
 ├── templates/                 # HTMLテンプレート
-├── static/                    # 静的ファイル
-├── DEVELOPMENT_GUIDELINES.md  # 開発ガイドライン
-├── TECHNICAL_CONVENTIONS.md   # 技術的約束事
-└── Django_run.py             # 開発サーバー起動スクリプト
+│   ├── components/           # 共通コンポーネント
+│   └── products_master/      # 商品マスタ用テンプレート
+├── static/                   # 静的ファイル（CSS/JS）
+├── digital_pricelist_system/ # プロジェクト設定
+│   ├── breadcrumbs.py       # パンくずリスト管理
+│   └── utils.py             # 共通ユーティリティ
+├── DEVELOPMENT_GUIDELINES.md # 開発ガイドライン
+├── TECHNICAL_CONVENTIONS.md  # 技術的約束事
+└── Django_run.py            # 開発サーバー起動スクリプト
 ```
 
 ## 開発環境セットアップ
@@ -69,15 +78,28 @@ python manage.py runserver
 ## 主要機能
 
 ### 商品マスタ管理
-- 商品一覧・検索
-- 商品詳細・編集
-- 価格履歴管理
-- 承認フロー（実装予定）
+- 商品一覧・検索・ページネーション
+- 商品詳細・リアルタイム編集（HTMX）
+- 価格履歴管理・動的追加・削除
+- 粗利率自動算出・県連価格計算
+- 商品コピー機能
+
+### 承認ワークフロー
+- 新規作成・更新・削除申請
+- 価格履歴の追加・更新・削除申請
+- 申請内容の差分表示
+- 一括承認・個別承認・却下機能
+
+### デジタル価格表
+- 指定月時点での価格表表示
+- 最新価格履歴の自動選択
+- ページネーション対応
 
 ### 技術スタック
-- **Backend**: Django 4.x
-- **Frontend**: HTMX + Bootstrap 5
+- **Backend**: Django 4.2.7
+- **Frontend**: HTMX 1.9.10 + Bootstrap 5.1.3
 - **Database**: SQLite (開発) / PostgreSQL (本番予定)
+- **UI/UX**: サイドナビゲーション + レスポンシブデザイン
 
 ## 開発ルール
 

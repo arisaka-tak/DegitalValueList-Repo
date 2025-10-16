@@ -1,5 +1,4 @@
 from django.urls import path
-from .index import views as index_views
 from .product_list import views as list_views
 from .product_detail import views as detail_views
 from .product_create import views as create_views
@@ -8,7 +7,7 @@ from .integrated_pricelist import views as pricelist_views
 app_name = 'products_master'
 
 urlpatterns = [
-    path('', index_views.index, name='index'),
+    path('', list_views.product_list, name='product_list'),
     path('products/', list_views.product_list, name='product_list'),
     path('products/<int:pk>/', detail_views.product_detail, name='product_detail'),
     path('new/', detail_views.product_detail_new, name='product_new'),

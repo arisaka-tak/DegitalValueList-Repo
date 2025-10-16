@@ -1,5 +1,27 @@
 # 技術的約束事
 
+## アーキテクチャ概要
+
+### アプリケーション構成
+- **モノリシック構成**: 単一Djangoアプリケーション
+- **機能別モジュール分割**: products_masterアプリ内で機能別にサブモジュール分割
+- **HTMX中心設計**: サーバーサイドレンダリング + 部分更新
+
+### パンくずリスト管理
+```python
+# digital_pricelist_system/breadcrumbs.py
+def get_breadcrumbs(page_type, **kwargs):
+    """ページタイプに応じたパンくずリストを返す"""
+    breadcrumbs_map = {
+        'product_list': [{'title': '商品一覧', 'url': None}],
+        'product_detail': [
+            {'title': '商品一覧', 'url': '/products/products/'},
+            {'title': kwargs.get('product_name'), 'url': None}
+        ]
+    }
+    return breadcrumbs_map.get(page_type, [])
+```
+
 ## データベース設計規約
 
 ### モデル設計
@@ -23,36 +45,65 @@ class BaseModel(models.Model):
 ### 承認フロー設計
 
 ```python
-# 元テーブル
-class Product(BaseModel):
-    product_number = models.CharField(max_length=20, unique=True, null=True, blank=True)
-    # 保存時に自動採番
+# 商品マスタテーブル
+class Product(models.Model):
+    product_number = models.IntegerField(unique=True, null=True, blank=True)  # 自動採番
+    status = models.CharField(max_length=20, default='', choices=[('', '申請なし'), ('申請中', '申請中')])
+    # その他商品情報フィールド
 
-# 承認テーブル
-class ProductApproval(BaseModel):
-    product_number = models.CharField(max_length=20)  # 元テーブルとの関連付け
-    # 同じフィールド構成
-    
-    def approve(self):
-        """承認処理: 元テーブルを削除して承認テーブルから挿入"""
-        pass
+# 商品承認テーブル
+class ProductApproval(models.Model):
+    product_number = models.IntegerField()  # 既存商品の場合は正の値、新規の場合は負の値
+    # Productと同じフィールド構成
+    applicant = models.CharField(max_length=100)  # 申請者
+
+# 価格履歴承認テーブル
+class PriceHistoryApproval(models.Model):
+    product = models.ForeignKey(ProductApproval, related_name='price_histories')
+    is_delete_request = models.BooleanField(default=False)  # 削除申請フラグ
+    # PriceHistoryと同じフィールド構成
+
+# 承認処理の共通ロジック
+def _process_approval(approval):
+    """承認処理: 申請内容をマスタテーブルに反映"""
+    if approval.product_number > 0:
+        # 既存商品の更新
+        product = Product.objects.get(product_number=approval.product_number)
+        # 申請内容で更新
+    else:
+        # 新規商品の作成
+        product = Product.objects.create(...)
 ```
 
 ## URL設計規約
 
-### RESTful URL構成
+### 実際のURL構成
 
 ```python
-# 基本CRUD
+# products_master/urls.py
 urlpatterns = [
-    path('', views.list_view, name='list'),           # GET: 一覧
-    path('new/', views.new_view, name='new'),         # GET/POST: 新規作成
-    path('<int:pk>/', views.detail_view, name='detail'), # GET/POST: 詳細/更新
-    path('<int:pk>/delete/', views.delete_view, name='delete'), # POST: 削除
+    # 基本機能
+    path('', list_views.product_list, name='product_list'),  # 商品一覧
+    path('products/', list_views.product_list, name='product_list'),
+    path('products/<int:pk>/', detail_views.product_detail, name='product_detail'),
+    path('new/', detail_views.product_detail_new, name='product_new'),
+    path('products/<int:pk>/delete/', create_views.product_delete, name='product_delete'),
     
-    # HTMX用API
-    path('<int:pk>/add-row/', views.add_row, name='add_row'),
-    path('row/<int:pk>/update/', views.update_row, name='update_row'),
+    # 申請機能
+    path('products/<int:pk>/submit-approval/', detail_views.submit_approval, name='submit_approval'),
+    path('new/submit-approval/', detail_views.submit_approval, name='submit_approval_new'),
+    
+    # 承認機能
+    path('approvals/', detail_views.approval_list, name='approval_list'),
+    path('approvals/<int:pk>/', detail_views.approval_detail, name='approval_detail'),
+    path('approvals/<int:pk>/approve/', detail_views.approve_application, name='approve_application'),
+    
+    # HTMX API
+    path('products/<int:pk>/add-row/', detail_views.add_price_row, name='add_price_row'),
+    path('calc-kenren-price/<int:pk>/', detail_views.calc_kenren_price, name='calc_kenren_price'),
+    
+    # デジタル価格表
+    path('integrated-pricelist/', pricelist_views.integrated_pricelist, name='integrated_pricelist'),
 ]
 ```
 
