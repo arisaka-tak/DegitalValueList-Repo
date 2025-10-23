@@ -1,0 +1,167 @@
+{% extends 'base.html' %}
+
+{% block title %}AI価格抽出 - デジタル価格表システム{% endblock %}
+
+{% block breadcrumb %}
+    {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
+{% endblock %}
+
+{% block content %}
+    {% include 'components/page_header.html' with page_title="AI価格抽出" page_subtitle="テストJSON入力" %}
+    
+    <div class="container main-content">
+        <div class="row justify-content-center">
+            <div class="col-md-10">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">📄 テスト用JSON入力</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="extractForm">
+                            {% csrf_token %}
+                            <div class="mb-3">
+                                <label for="jsonData" class="form-label">AI抽出結果JSON</label>
+                                <textarea class="form-control" id="jsonData" name="json_data" rows="15" required placeholder='例:
+{
+    "products": [
+        {
+            "product_name": "ビタミンA錠",
+            "model_number": "VA-100",
+            "manufacturer": "ABC製薬",
+            "specification": "100mg",
+            "current_price": 1000,
+            "new_price": 1200,
+            "revision_reason": "原材料高騰"
+        }
+    ]
+}'></textarea>
+                                <div class="form-text">
+                                    AI抽出結果のJSONを入力してください。複数商品の場合は products 配列に追加してください。
+                                </div>
+                            </div>
+                            
+                            <div class="d-flex justify-content-between">
+                                <a href="{% url 'products_master:product_list' %}" class="btn btn-secondary">
+                                    戻る
+                                </a>
+                                <button type="submit" class="btn btn-primary">
+                                    商品照合を実行
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+                <!-- サンプルJSON -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h6 class="mb-0">💡 サンプルJSON</h6>
+                    </div>
+                    <div class="card-body">
+                        <button type="button" class="btn btn-outline-info btn-sm mb-2" onclick="loadSample()">
+                            サンプルを読み込み
+                        </button>
+                        <pre class="bg-light p-3 rounded"><code>{
+    "products": [
+        {
+            "product_name": "ビタミンA錠",
+            "model_number": "VA-100", 
+            "manufacturer": "ABC製薬",
+            "specification": "100mg",
+            "current_price": 1000,
+            "new_price": 1200,
+            "revision_reason": "原材料高騰"
+        },
+        {
+            "product_name": "ビタミンB錠",
+            "model_number": "VB-200",
+            "manufacturer": "XYZ製薬", 
+            "specification": "200mg",
+            "current_price": 1500,
+            "new_price": 1800,
+            "revision_reason": "製造コスト上昇"
+        }
+    ]
+}</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // サンプルJSON読み込み
+    function loadSample() {
+        const sample = `{
+    "products": [
+        {
+            "product_name": "ビタミンA錠",
+            "model_number": null, 
+            "manufacturer": "ABC製薬",
+            "specification": "100mg",
+            "current_price": 1000,
+            "new_price": 1200,
+            "revision_reason": "原材料高騰"
+        },
+        {
+            "product_name": "ビタミンB錠",
+            "model_number": null,
+            "manufacturer": "XYZ製薬", 
+            "specification": "200mg",
+            "current_price": 1500,
+            "new_price": 1800,
+            "revision_reason": "製造コスト上昇"
+        }
+    ]
+}`;
+        document.getElementById('jsonData').value = sample;
+    }
+
+    // フォーム送信処理
+    document.getElementById('extractForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const submitBtn = this.querySelector('button[type="submit"]');
+        
+        // ボタン無効化
+        submitBtn.disabled = true;
+        submitBtn.textContent = '処理中...';
+        
+        fetch('{% url "products_master:ai_extract_process" %}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => {
+            console.log('Response status:', response.status);
+            console.log('Response headers:', response.headers);
+            return response.text().then(text => {
+                console.log('Response text:', text);
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    throw new Error('サーバーエラー: ' + text.substring(0, 200));
+                }
+            });
+        })
+        .then(data => {
+            if (data.success) {
+                window.location.href = data.redirect_url;
+            } else {
+                alert('エラー: ' + data.error);
+                submitBtn.disabled = false;
+                submitBtn.textContent = '商品照合を実行';
+            }
+        })
+        .catch(error => {
+            console.error('Error details:', error);
+            alert('通信エラー: ' + error.message);
+            submitBtn.disabled = false;
+            submitBtn.textContent = '商品照合を実行';
+        });
+    });
+    </script>
+{% endblock %}

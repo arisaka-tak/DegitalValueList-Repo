@@ -1,0 +1,211 @@
+{% extends 'base.html' %}
+
+{% block title %}AI価格抽出結果 - デジタル価格表システム{% endblock %}
+
+{% block breadcrumb %}
+    {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
+{% endblock %}
+
+{% block content %}
+    {% include 'components/page_header.html' with page_title="AI価格抽出結果" page_subtitle="商品照合結果の確認" %}
+    
+    <div class="container main-content">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <form method="post" action="#">
+            {% csrf_token %}
+            
+            <!-- 適用年月指定（共通） -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">📅 適用年月指定</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label class="form-label">適用年月 <span class="text-danger">*</span></label>
+                            <input type="month" class="form-control" name="effective_year_month" required>
+                            <small class="text-muted">この価格変更の適用開始年月を指定してください</small>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">改定理由（一括設定）</label>
+                            <input type="text" class="form-control" name="revision_reason" 
+                                   value="AI価格抽出による更新" 
+                                   placeholder="全商品に適用する改定理由を入力">
+                            <small class="text-muted">この理由が全ての商品に適用されます</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 抽出結果一覧 -->
+            <div class="mb-4">
+                <h5>📋 抽出結果 ({{ results.total_products }}商品)</h5>
+            </div>
+
+            {% for result in results.results %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">商品{{ result.index|add:1 }}</h6>
+                        {% if result.status == 'success' %}
+                            <span class="badge bg-success">{{ result.candidates|length }}件の候補</span>
+                        {% elif result.status == 'no_match' %}
+                            <span class="badge bg-warning">該当なし</span>
+                        {% else %}
+                            <span class="badge bg-danger">エラー</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <!-- 抽出情報 -->
+                        <div class="col-md-6">
+                            <h6>🤖 AI抽出情報</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <th width="30%">商品名</th>
+                                    <td>{{ result.extracted_data.product_name|default:"-" }}</td>
+                                </tr>
+                                <tr>
+                                    <th>型式</th>
+                                    <td>{{ result.extracted_data.model_number|default:"-" }}</td>
+                                </tr>
+                                <tr>
+                                    <th>メーカー</th>
+                                    <td>{{ result.extracted_data.manufacturer|default:"-" }}</td>
+                                </tr>
+                                <tr>
+                                    <th>規格</th>
+                                    <td>{{ result.extracted_data.specification|default:"-" }}</td>
+                                </tr>
+                                <tr>
+                                    <th>現価格</th>
+                                    <td>{{ result.extracted_data.current_price|default:"-" }}</td>
+                                </tr>
+                                <tr>
+                                    <th>新価格 <span class="text-danger">*</span></th>
+                                    <td>
+                                        <input type="number" class="form-control" 
+                                               name="new_price_{{ result.index }}" 
+                                               value="{{ result.extracted_data.new_price|default:'' }}" 
+                                               step="0.01" min="0" 
+                                               placeholder="新価格を入力">
+                                        <small class="text-muted">AI抽出結果を確認・修正してください</small>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th>改定理由</th>
+                                    <td>{{ result.extracted_data.revision_reason|default:"-" }}</td>
+                                </tr>
+                            </table>
+                        </div>
+
+                        <!-- 商品マスタ照合結果 -->
+                        <div class="col-md-6">
+                            <h6>🎯 商品マスタ照合結果</h6>
+                            
+                            {% if result.status == 'success' %}
+                                <div class="mb-3">
+                                    <label class="form-label">マッチング候補を選択</label>
+                                    <select class="form-select" name="product_match_{{ result.index }}">
+                                        <option value="">-- 選択してください --</option>
+                                        {% for candidate in result.candidates %}
+                                        <option value="{{ candidate.product.pk }}"{% if forloop.first %} selected{% endif %}>
+                                            {{ candidate.score }}%一致 ({{ candidate.matched_field }}) - {{ candidate.product.product_name }} [{{ candidate.product_number }}]
+                                        </option>
+                                        {% endfor %}
+                                        <option value="">該当なし（スキップ）</option>
+                                    </select>
+                                </div>
+                                
+                                <!-- 選択された商品の詳細表示エリア -->
+                                <div id="selected_detail_{{ result.index }}" class="mt-3" style="display: none;">
+                                    <div class="card bg-light">
+                                        <div class="card-body p-3">
+                                            <h6 class="card-title mb-2">選択商品詳細</h6>
+                                            <div id="detail_content_{{ result.index }}"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <script>
+                                (function() {
+                                    const select = document.querySelector('select[name="product_match_{{ result.index }}"]');
+                                    const detailDiv = document.getElementById('selected_detail_{{ result.index }}');
+                                    const contentDiv = document.getElementById('detail_content_{{ result.index }}');
+                                    
+                                    const candidates = {
+                                        {% for candidate in result.candidates %}
+                                        '{{ candidate.product.pk }}': {
+                                            product_name: '{{ candidate.product.product_name|escapejs }}',
+                                            model_number: '{{ candidate.product.model_number|default:"-"|escapejs }}',
+                                            specification: '{{ candidate.product.specification|default:"-"|escapejs }}',
+                                            manufacturer: '{{ candidate.manufacturer|escapejs }}',
+                                            product_number: '{{ candidate.product_number|escapejs }}'
+                                        }{% if not forloop.last %},{% endif %}
+                                        {% endfor %}
+                                    };
+                                    
+                                    function updateDetail() {
+                                        if (select.value) {
+                                            const selected = candidates[select.value];
+                                            if (selected) {
+                                                contentDiv.innerHTML = `
+                                                    <small class="text-muted">
+                                                        <strong>商品名:</strong> ${selected.product_name}<br>
+                                                        <strong>型式:</strong> ${selected.model_number}<br>
+                                                        <strong>規格:</strong> ${selected.specification}<br>
+                                                        <strong>メーカー:</strong> ${selected.manufacturer}<br>
+                                                        <strong>商品番号:</strong> ${selected.product_number}
+                                                    </small>
+                                                `;
+                                                detailDiv.style.display = 'block';
+                                            } else {
+                                                detailDiv.style.display = 'none';
+                                            }
+                                        } else {
+                                            detailDiv.style.display = 'none';
+                                        }
+                                    }
+                                    
+                                    select.addEventListener('change', updateDetail);
+                                    updateDetail(); // 初期表示
+                                })();
+                                </script>
+                            {% elif result.status == 'no_match' %}
+                                <div class="alert alert-warning mb-0">
+                                    <p class="mb-0">該当する商品はありません。</p>
+                                </div>
+                                <input type="hidden" name="product_match_{{ result.index }}" value="">
+                            {% else %}
+                                <div class="alert alert-danger mb-0">
+                                    <p class="mb-0">{{ result.message }}</p>
+                                </div>
+                                <input type="hidden" name="product_match_{{ result.index }}" value="">
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+
+            <!-- アクションボタン -->
+            <div class="d-flex justify-content-between">
+                <a href="{% url 'products_master:ai_extract' %}" class="btn btn-secondary">
+                    戻る
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    価格履歴申請データを作成
+                </button>
+            </div>
+        </form>
+    </div>
+{% endblock %}

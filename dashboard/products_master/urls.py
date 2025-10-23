@@ -34,4 +34,9 @@ urlpatterns = [
     path('price-history/<int:pk>/update/', detail_views.price_history_update, name='price_history_update'),
     path('price-history/<int:pk>/delete/', detail_views.price_history_delete, name='price_history_delete'),
     path('integrated-pricelist/', pricelist_views.integrated_pricelist, name='integrated_pricelist'),
+    
+    # AI価格抽出
+    path('ai-extract/', list_views.ai_extract, name='ai_extract'),
+    path('ai-extract/process/', list_views.ai_extract_process, name='ai_extract_process'),
+    path('ai-extract/results/', list_views.ai_extract_results, name='ai_extract_results'),
 ]

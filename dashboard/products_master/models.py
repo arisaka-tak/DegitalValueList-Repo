@@ -249,12 +249,13 @@ class ProductApproval(models.Model):
 
 class PriceHistoryApproval(models.Model):
     """価格改定履歴承認テーブル"""
-    product = models.ForeignKey(ProductApproval, on_delete=models.CASCADE, verbose_name='商品', related_name='price_histories')
-    period_year = models.IntegerField('年度', help_text='2025年度 = 2025/04～2026/03')
-    effective_year_month = models.CharField('適用年月', max_length=7, help_text='YYYY/MM形式')
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name='商品', related_name='price_history_approvals')
+    effective_date = models.DateField('適用日', help_text='価格適用開始日')
+    unit_price = models.DecimalField('単価', max_digits=12, decimal_places=2)
+    action_type = models.CharField('アクションタイプ', max_length=10, choices=[('create', '新規作成'), ('update', '更新'), ('delete', '削除')], default='create')
     
-    gross_margin_rate = models.DecimalField('粗利率', max_digits=10, decimal_places=6, validators=[MinValueValidator(Decimal('0'))])
-    wholesale_price = models.CharField('仕切価格', max_length=50)
+    gross_margin_rate = models.DecimalField('粗利率', max_digits=10, decimal_places=6, validators=[MinValueValidator(Decimal('0'))], null=True, blank=True)
+    wholesale_price = models.CharField('仕切価格', max_length=50, blank=True, null=True)
     kenren_price = models.CharField('県連価格', max_length=50, blank=True, null=True)
     retail_price = models.CharField('参考小売価格', max_length=50, blank=True, null=True)
     revision_amount = models.DecimalField('改定額', max_digits=12, decimal_places=0, default=0)
@@ -276,7 +277,7 @@ class PriceHistoryApproval(models.Model):
     class Meta:
         verbose_name = '価格改定履歴承認'
         verbose_name_plural = '価格改定履歴承認'
-        ordering = ['-effective_year_month', 'product__product_number']
+        ordering = ['-effective_date', 'product__product_number']
     
     def __str__(self):
-        return f"{self.product.product_name} - {self.effective_year_month}"
+        return f"{self.product.product_name} - {self.effective_date}"

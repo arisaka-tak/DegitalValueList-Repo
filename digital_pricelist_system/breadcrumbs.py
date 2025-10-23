@@ -57,6 +57,17 @@ def get_breadcrumbs(page_type, **kwargs):
         'integrated_pricelist': [
             {'title': 'デジタル価格表', 'url': None}
         ],
+        
+        # AI価格抽出
+        'ai_extract': [
+            {'title': '商品一覧', 'url': URLS['product_list']},
+            {'title': 'AI価格抽出', 'url': None}
+        ],
+        'ai_extract_results': [
+            {'title': '商品一覧', 'url': URLS['product_list']},
+            {'title': 'AI価格抽出', 'url': '/products/ai-extract/'},
+            {'title': '照合結果', 'url': None}
+        ],
     }
     
     return breadcrumbs_map.get(page_type, [])

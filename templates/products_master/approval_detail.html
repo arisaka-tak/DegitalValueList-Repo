@@ -10,7 +10,7 @@
 {% block content %}
     {% include 'components/page_header.html' with page_title=approval.product_name page_subtitle="申請内容の確認" %}
     
-    <div class="container">
+    <div class="container main-content">
         <div class="row">
             <!-- 商品基本情報 -->
             <div class="col-md-8">
@@ -24,24 +24,10 @@
                 </div>
             </div>
 
-            <!-- 承認・却下ボタン -->
+            <!-- サイドバー -->
             <div class="col-md-4">
-                <div class="card">
-                    <div class="card-header">
-                        <h6 class="mb-0">承認操作</h6>
-                    </div>
-                    <div class="card-body">
-                        <div class="d-grid gap-2">
-                            <button onclick="if(confirm('この申請を承認しますか？')) { document.getElementById('approveForm').submit(); }" 
-                                    class="btn btn-success">承認</button>
-                            <button onclick="if(confirm('この申請を却下しますか？')) { document.getElementById('rejectForm').submit(); }" 
-                                    class="btn btn-danger">却下</button>
-                            <a href="{% url 'products_master:approval_list' %}" class="btn btn-outline-secondary">一覧に戻る</a>
-                        </div>
-                    </div>
-                </div>
 
-                <div class="card mt-3">
+                <div class="card">
                     <div class="card-header">
                         <h6 class="mb-0">ユーザ情報</h6>
                     </div>
@@ -128,6 +114,9 @@
         </div>
     </div>
 
+    <!-- ボトムアクションバー -->
+    {% include 'components/bottom_action_bar.html' with action_type='approval_detail' %}
+
     <!-- 承認・却下フォーム -->
     <form id="approveForm" method="POST" action="{% url 'products_master:approve_application' approval.pk %}" style="display: none;">
         {% csrf_token %}
@@ -135,4 +124,21 @@
     <form id="rejectForm" method="POST" action="{% url 'products_master:reject_application' approval.pk %}" style="display: none;">
         {% csrf_token %}
     </form>
+
+    <script>
+    // 承認処理
+    window.acceptApplication = function() {
+        if (confirm('この申請を承認しますか？')) {
+            document.getElementById('approveForm').submit();
+        }
+    }
+    
+    // 却下処理
+    window.rejectApplication = function() {
+        if (confirm('この申請を却下しますか？')) {
+            document.getElementById('rejectForm').submit();
+        }
+    }
+    </script>
+
 {% endblock %}
