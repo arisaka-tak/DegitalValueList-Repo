@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load price_filters %}
+{% load static %}
 
 {% block title %}{{ approval.product_name }} - 承認詳細 - デジタル価格表システム{% endblock %}
 
@@ -19,7 +20,10 @@
                         <h5 class="mb-0">申請内容</h5>
                     </div>
                     <div class="card-body">
-                        {% include 'products_master/partials/product_basic_info.html' with product=approval editable=False %}
+                        <product-basic-info-component 
+                            product-data='{{ approval|approval_to_json }}'
+                            editable="false">
+                        </product-basic-info-component>
                     </div>
                 </div>
             </div>
@@ -64,50 +68,12 @@
                         {% endif %}
                     </div>
                     <div class="card-body">
-                        {% if price_histories %}
-                            <div class="table-responsive">
-                                <table class="table table-sm">
-                                    <thead>
-                                        <tr>
-                                            <th>年度</th>
-                                            <th>適用年月</th>
-                                            <th>仕切価格</th>
-                                            <th>県連価格</th>
-                                            <th>粗利率</th>
-                                            <th>改定理由</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for history in price_histories %}
-                                        <tr {% if history.is_delete_request %}class="text-danger fw-bold" style="text-decoration: line-through;"{% endif %}>
-                                            <td>{{ history.period_year }}年度</td>
-                                            <td>{{ history.effective_year_month }}</td>
-                                            <td class="{% if history.diff_flags.wholesale_price %}text-danger fw-bold{% endif %}">{{ history.wholesale_price }}</td>
-                                            <td class="{% if history.diff_flags.kenren_price %}text-danger fw-bold{% endif %}">
-                                                {% if history.kenren_price %}
-                                                    {{ history.kenren_price }}
-                                                {% else %}
-                                                    {% with calc_price=history.wholesale_price|calc_kenren_price:history.gross_margin_rate %}
-                                                        {% if calc_price %}
-                                                            <span class="text-success">{{ calc_price|format_price }}</span>
-                                                        {% else %}
-                                                            <span class="text-muted">都度見積</span>
-                                                        {% endif %}
-                                                    {% endwith %}
-                                                {% endif %}
-                                            </td>
-                                            <td>{{ history.gross_margin_rate }}</td>
-                                            <td class="{% if history.diff_flags.revision_reason %}text-danger fw-bold{% endif %}">{{ history.revision_reason|default:"-" }}</td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                        {% else %}
-                            <div class="text-center py-4">
-                                <div class="text-muted">価格履歴がありません</div>
-                            </div>
-                        {% endif %}
+                        <price-history-component 
+                            histories='{{ price_histories|approval_histories_to_json }}'
+                            mode="approval"
+                            show-diff="true"
+                            editable="false">
+                        </price-history-component>
                     </div>
                 </div>
             </div>
@@ -141,4 +107,9 @@
     }
     </script>
 
+{% endblock %}
+
+{% block extra_js %}
+    <script src="{% static 'js/components/product-basic-info-component.js' %}"></script>
+    <script src="{% static 'js/components/price-history-component.js' %}"></script>
 {% endblock %}

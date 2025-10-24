@@ -28,7 +28,7 @@ def product_detail(request, pk):
             'wholesale_price': history.wholesale_price,
             'kenren_price': history.kenren_price,  # 元のkenren_priceフィールド
             'kenren_price_display': history.get_kenren_price_display(),
-            'gross_margin_rate': str(history.gross_margin_rate) if history.gross_margin_rate else None,
+            'gross_margin_rate': str(history.gross_margin_rate) if history.gross_margin_rate is not None else None,
             'revision_amount': history.get_revision_amount(),
             'revision_reason': history.revision_reason or '',
             'is_editable': history.is_editable()
@@ -36,13 +36,46 @@ def product_detail(request, pk):
         for history in price_histories
     ])
     
+    # 商品情報用JSONデータを準備
+    product_json = json.dumps({
+        'product_number': product.product_number if product else None,
+        'product_code': product.product_code if product else '',
+        'livestock_type': product.livestock_type if product else '',
+        'category': product.category if product else '',
+        'manufacturer': product.manufacturer if product else '',
+        'product_name': product.product_name if product else '',
+        'model_number': product.model_number if product else '',
+        'specification': product.specification if product else '',
+        'shipping_unit': product.shipping_unit if product else '',
+        'shipping_fee': product.shipping_fee if product else '',
+        'remarks': product.remarks if product else '',
+    })
+    
+    # フォームデータ用JSON（初期値用）
+    form_data_json = json.dumps({
+        'product_code': form.initial.get('product_code', ''),
+        'livestock_type': form.initial.get('livestock_type', ''),
+        'category': form.initial.get('category', ''),
+        'manufacturer': form.initial.get('manufacturer', ''),
+        'product_name': form.initial.get('product_name', ''),
+        'model_number': form.initial.get('model_number', ''),
+        'specification': form.initial.get('specification', ''),
+        'shipping_unit': form.initial.get('shipping_unit', ''),
+        'shipping_fee': form.initial.get('shipping_fee', ''),
+        'remarks': form.initial.get('remarks', ''),
+    })
+    
     context = {
         'current_user': get_current_user(),
         'product': product,
         'form': form,
         'price_histories': price_histories,
         'price_histories_json': price_histories_json,
-        'breadcrumbs': get_breadcrumbs('product_detail', product_name=product.product_name)
+        'product_json': product_json,
+        'form_data_json': form_data_json,
+        'diff_flags_json': '{}',  # 新規作成時は差分なし
+        'is_new': not bool(product),
+        'breadcrumbs': get_breadcrumbs('product_detail', product_name=product.product_name if product else '新規作成')
     }
     return render(request, 'products_master/product_detail.html', context)
 
@@ -181,12 +214,43 @@ def product_detail_new(request):
         else:
             form = ProductForm()
     
+    # 新規作成用JSONデータを準備
+    product_json = json.dumps({
+        'product_number': None,
+        'product_code': '',
+        'livestock_type': '',
+        'category': '',
+        'manufacturer': '',
+        'product_name': '',
+        'model_number': '',
+        'specification': '',
+        'shipping_unit': '',
+        'shipping_fee': '',
+        'remarks': '',
+    })
+    
+    form_data_json = json.dumps({
+        'product_code': form.initial.get('product_code', ''),
+        'livestock_type': form.initial.get('livestock_type', ''),
+        'category': form.initial.get('category', ''),
+        'manufacturer': form.initial.get('manufacturer', ''),
+        'product_name': form.initial.get('product_name', ''),
+        'model_number': form.initial.get('model_number', ''),
+        'specification': form.initial.get('specification', ''),
+        'shipping_unit': form.initial.get('shipping_unit', ''),
+        'shipping_fee': form.initial.get('shipping_fee', ''),
+        'remarks': form.initial.get('remarks', ''),
+    })
+    
     context = {
         'current_user': get_current_user(),
         'product': None,  # 新規作成モード
         'form': form,
         'price_histories': [],  # 空の価格履歴
         'price_histories_json': '[]',  # 空のJSON配列
+        'product_json': product_json,
+        'form_data_json': form_data_json,
+        'diff_flags_json': '{}',
         'is_new': True,  # 新規作成フラグ
         'breadcrumbs': get_breadcrumbs('product_new')
     }
@@ -488,39 +552,15 @@ def submit_approval(request, pk=None):
             form = ProductForm(request.POST)
         
         if not form.is_valid():
-            # エラー時にフォームを再表示（入力値とエラー情報付き）
-            # POSTデータから価格履歴を復元
-            preview_histories = []
-            for key, value in request.POST.items():
-                if key.startswith('new_effective_year_month_') and value.strip():
-                    index = key.split('_')[-1]
-                    effective_year_month = value.strip()
-                    wholesale_price = request.POST.get(f'new_wholesale_price_{index}', '').strip()
-                    kenren_price = request.POST.get(f'new_kenren_price_{index}', '').strip()
-                    revision_reason = request.POST.get(f'new_revision_reason_{index}', '').strip()
-                    
-                    preview_histories.append({
-                        'effective_year_month': effective_year_month,
-                        'wholesale_price': wholesale_price,
-                        'kenren_price': kenren_price,
-                        'revision_reason': revision_reason,
-                        'index': index
-                    })
+            # 具体的なエラーメッセージを取得
+            error_messages = []
+            for field, errors in form.errors.items():
+                field_name = form.fields[field].label if field in form.fields else field
+                for error in errors:
+                    error_messages.append(f'{field_name}: {error}')
             
-            context = {
-                'current_user': get_current_user(),
-                'product': None,
-                'form': form,  # エラー情報と入力値を含む
-                'price_histories': [],
-                'preview_histories': preview_histories,
-                'is_new': True,
-                'breadcrumbs': [
-                    {'title': '商品マスタ管理', 'url': '/products/'},
-                    {'title': '商品一覧', 'url': '/products/products/'},
-                    {'title': '新規作成', 'url': None}
-                ]
-            }
-            return render(request, 'products_master/product_detail.html', context)
+            error_message = ', '.join(error_messages) if error_messages else '商品情報にエラーがあります'
+            return _return_form_with_error(request, product, form, error_message)
         
         # 日付バリデーション
         print("=== 日付バリデーション開始 ===")
@@ -547,7 +587,7 @@ def submit_approval(request, pk=None):
                     period_year = year if month >= 4 else year - 1
                     
                     try:
-                        calculate_gross_margin_rate(product, period_year, wholesale_price or '都度見積', request)
+                        determine_gross_margin_rate(product, period_year, wholesale_price or '都度見積', request)
                     except ValueError as e:
                         return _return_form_with_error(request, product, form, str(e))
         
@@ -641,8 +681,8 @@ def submit_approval(request, pk=None):
                     period_year = year if month >= 4 else year - 1
                     effective_year_month = f"{year:04d}/{month:02d}"
                     
-                    # 粗利率を再算定（既に事前チェック済みなのでエラーは発生しないはず）
-                    gross_margin_rate = calculate_gross_margin_rate(product, period_year, wholesale_price or '都度見積', request)
+                    # 粗利率を再算定
+                    gross_margin_rate = determine_gross_margin_rate(product, period_year, wholesale_price or '都度見積', request)
                     
                     print(f"Creating PriceHistoryApproval: {effective_year_month}")
                     PriceHistoryApproval.objects.create(
@@ -740,16 +780,46 @@ def _return_form_with_error(request, product, form, error_message):
                 'wholesale_price': history.wholesale_price,
                 'kenren_price': history.kenren_price,
                 'kenren_price_display': history.get_kenren_price_display(),
-                'gross_margin_rate': str(history.gross_margin_rate) if history.gross_margin_rate else None,
+                'gross_margin_rate': str(history.gross_margin_rate) if history.gross_margin_rate is not None else None,
                 'revision_amount': history.get_revision_amount(),
                 'revision_reason': history.revision_reason or '',
                 'is_editable': history.is_editable()
             }
             for history in price_histories
         ])
+        
+        # 商品情報JSON
+        product_json = json.dumps({
+            'product_number': product.product_number,
+            'product_code': product.product_code or '',
+            'livestock_type': product.livestock_type or '',
+            'category': product.category or '',
+            'manufacturer': product.manufacturer or '',
+            'product_name': product.product_name or '',
+            'model_number': product.model_number or '',
+            'specification': product.specification or '',
+            'shipping_unit': product.shipping_unit or '',
+            'shipping_fee': product.shipping_fee or '',
+            'remarks': product.remarks or '',
+        })
     else:
         price_histories = []
         price_histories_json = '[]'
+        product_json = json.dumps({})
+    
+    # フォームエラー時の入力値を取得
+    form_data_json = json.dumps({
+        'product_code': request.POST.get('product_code', ''),
+        'livestock_type': request.POST.get('livestock_type', ''),
+        'category': request.POST.get('category', ''),
+        'manufacturer': request.POST.get('manufacturer', ''),
+        'product_name': request.POST.get('product_name', ''),
+        'model_number': request.POST.get('model_number', ''),
+        'specification': request.POST.get('specification', ''),
+        'shipping_unit': request.POST.get('shipping_unit', ''),
+        'shipping_fee': request.POST.get('shipping_fee', ''),
+        'remarks': request.POST.get('remarks', ''),
+    })
     
     preview_histories = []
     for key, value in request.POST.items():
@@ -774,90 +844,133 @@ def _return_form_with_error(request, product, form, error_message):
         'form': form,
         'price_histories': price_histories,
         'price_histories_json': price_histories_json,
+        'product_json': product_json,
+        'form_data_json': form_data_json,
+        'diff_flags_json': '{}',
         'preview_histories': preview_histories,
         'is_new': not bool(product),
         'error_message': error_message,
         'breadcrumbs': [
             {'title': '商品マスタ管理', 'url': '/products/'},
             {'title': '商品一覧', 'url': '/products/products/'},
-            {'title': '新規作成' if not product else f'{product.product_name}', 'url': None}
+            {'title': '新規作成' if not product else f'{product.product_name or "商品詳細"}', 'url': None}
         ]
     }
     return render(request, 'products_master/product_detail.html', context)
 
-def calculate_gross_margin_rate(product, period_year, wholesale_price, request=None):
-    """粗利率を算定（シンプル版）"""
-    from dashboard.products_master.models import ProductGrossMarginRate, PriceHistory
+def get_kenren_price_input(request, wholesale_price):
+    """リクエストから県連価格入力を取得"""
+    if not request:
+        return None, None
     
-    # 現在入力されている県連価格を取得
-    current_kenren_price = None
-    if request:
-        for key, value in request.POST.items():
-            if key.startswith('new_wholesale_price_') and value.strip() == wholesale_price:
-                current_index = key.split('_')[-1]
-                kenren_value = request.POST.get(f'new_kenren_price_{current_index}', '').strip()
-                if kenren_value:
-                    try:
-                        current_kenren_price = float(kenren_value.replace(',', ''))
-                    except (ValueError, AttributeError):
-                        pass
-                break
+    for key, value in request.POST.items():
+        if key.startswith('new_wholesale_price_') and value.strip() == wholesale_price:
+            current_index = key.split('_')[-1]
+            kenren_value = request.POST.get(f'new_kenren_price_{current_index}', '').strip()
+            if kenren_value:
+                try:
+                    kenren_numeric = float(kenren_value.replace(',', ''))
+                    return kenren_value, kenren_numeric
+                except (ValueError, AttributeError):
+                    return kenren_value, None
+            break
+    return None, None
+
+def calculate_margin_from_prices(kenren_price, wholesale_price):
+    """県連価格と仕切価格から粗利率を計算"""
+    try:
+        wholesale_numeric = float(wholesale_price.replace(',', ''))
+        if wholesale_numeric > 0:
+            return Decimal(str(round(kenren_price / wholesale_numeric, 6)))
+    except (ValueError, AttributeError, ZeroDivisionError):
+        pass
+    return None
+
+def get_margin_from_table(product, period_year):
+    """粗利率テーブルから取得（0.0の場合は未登録扱い）"""
+    from dashboard.products_master.models import ProductGrossMarginRate
+    if not product:
+        return None
     
-    # ①県連価格が入力されている場合はチェック終了
-    if current_kenren_price is not None:
-        return Decimal('1.0')  # 仮の値（実際は使用されない）
+    try:
+        margin_rate_record = ProductGrossMarginRate.objects.get(
+            product=product, period_year=period_year
+        )
+        # 0.0の場合は未登録扱い
+        if margin_rate_record.gross_margin_rate == Decimal('0.0'):
+            return None
+        return margin_rate_record.gross_margin_rate
+    except ProductGrossMarginRate.DoesNotExist:
+        return None
+
+def get_margin_from_history(product, period_year, wholesale_price):
+    """過去履歴から粗利率を推定"""
+    from dashboard.products_master.models import PriceHistory
+    if not product:
+        return None
     
-    # ②県連価格が未入力の場合は粗利テーブルの登録確認
-    if product:
-        try:
-            margin_rate_record = ProductGrossMarginRate.objects.get(
-                product=product,
-                period_year=period_year
-            )
-            return margin_rate_record.gross_margin_rate
-        except ProductGrossMarginRate.DoesNotExist:
-            pass
-    
-    # 仕切価格のチェック
     try:
         wholesale_numeric = float(wholesale_price.replace(',', ''))
     except (ValueError, AttributeError):
+        return None
+    
+    if wholesale_numeric <= 0:
+        return None
+    
+    past_history = PriceHistory.objects.filter(
+        product=product,
+        period_year__lt=period_year,
+        is_active=True
+    ).order_by('-period_year', '-effective_year_month').first()
+    
+    if not past_history:
+        return None
+    
+    try:
+        if past_history.kenren_price:
+            past_kenren_price = float(str(past_history.kenren_price).replace(',', ''))
+        else:
+            past_wholesale = float(str(past_history.wholesale_price).replace(',', '')) if past_history.wholesale_price != '都度見積' else None
+            if past_wholesale and past_history.gross_margin_rate:
+                past_kenren_price = past_wholesale * float(past_history.gross_margin_rate)
+            else:
+                return None
+        
+        calculated_rate = past_kenren_price / wholesale_numeric
+        return Decimal(str(round(calculated_rate, 6)))
+    except (ValueError, TypeError, ZeroDivisionError):
+        return None
+
+def determine_gross_margin_rate(product, period_year, wholesale_price, request=None):
+    """粗利率を決定（シンプル版）"""
+    # 1. 県連価格が手入力されているかチェック
+    kenren_text, kenren_numeric = get_kenren_price_input(request, wholesale_price)
+    
+    if kenren_text is not None:
+        if kenren_numeric is not None:
+            # 数字の場合は粗利率を計算
+            margin_rate = calculate_margin_from_prices(kenren_numeric, wholesale_price)
+            if margin_rate is not None:
+                return margin_rate
+        # 数字でない場合はデフォルト
+        return Decimal('0.0')
+    
+    # 2. 粗利率テーブルから取得
+    margin_rate = get_margin_from_table(product, period_year)
+    if margin_rate is not None:
+        return margin_rate
+    
+    # 3. 過去履歴から推定
+    margin_rate = get_margin_from_history(product, period_year, wholesale_price)
+    if margin_rate is not None:
+        return margin_rate
+    
+    # 4. どこからも取得できない場合はエラー
+    try:
+        float(wholesale_price.replace(',', ''))
+    except (ValueError, AttributeError):
         raise ValueError('仕切価格が数字でない場合、県連価格は手入力してください。')
     
-    # 粗利テーブルに未登録の場合は過去の県連価格から算出
-    if product and wholesale_numeric > 0:
-        # 過去の価格履歴を取得（手入力・自動計算どちらでも）
-        past_history = PriceHistory.objects.filter(
-            product=product,
-            period_year__lt=period_year,
-            is_active=True
-        ).order_by('-period_year', '-effective_year_month').first()
-        
-        if past_history:
-            try:
-                # 手入力の県連価格がある場合
-                if past_history.kenren_price:
-                    past_kenren_price = float(str(past_history.kenren_price).replace(',', ''))
-                else:
-                    # 自動計算された県連価格を使用
-                    past_wholesale = float(str(past_history.wholesale_price).replace(',', '')) if past_history.wholesale_price != '都度見積' else None
-                    if past_wholesale and past_history.gross_margin_rate:
-                        past_kenren_price = past_wholesale * float(past_history.gross_margin_rate)
-                    else:
-                        raise ValueError('過去の価格データが不完全')
-                
-                calculated_rate = past_kenren_price / wholesale_numeric
-                gross_margin_rate = Decimal(str(round(calculated_rate, 6)))
-                
-                # 粗利率が1.0以下の場合は警告
-                if gross_margin_rate <= 1.0:
-                    raise ValueError('仕切価格が県連価格より高い状態です。登録してもよいですか？')
-                
-                return gross_margin_rate
-            except (ValueError, TypeError):
-                pass
-    
-    # 過去の県連価格がない場合は手入力必須エラー
     raise ValueError(f'{period_year}年度の粗利率が未設定です。仕切価格・県連価格を手入力してください。')
 
 def approval_list(request):
@@ -1016,16 +1129,15 @@ def _process_approval(approval):
                     history.revision_reason = approval_history.revision_reason
                     history.save()
                 
-                # 新規粗利率をProductGrossMarginRateテーブルに登録（既存の場合はスキップ）
-                if not ProductGrossMarginRate.objects.filter(
+                # 粗利率テーブルの更新（未登録または既存が0.0の場合、または申請が0.0の場合）
+                margin_rate_obj, created = ProductGrossMarginRate.objects.get_or_create(
                     product=product,
-                    period_year=approval_history.period_year
-                ).exists():
-                    ProductGrossMarginRate.objects.create(
-                        product=product,
-                        period_year=approval_history.period_year,
-                        gross_margin_rate=approval_history.gross_margin_rate
-                    )
+                    period_year=approval_history.period_year,
+                    defaults={'gross_margin_rate': approval_history.gross_margin_rate}
+                )
+                if not created and (margin_rate_obj.gross_margin_rate == Decimal('0.0') or approval_history.gross_margin_rate == Decimal('0.0')):
+                    margin_rate_obj.gross_margin_rate = approval_history.gross_margin_rate
+                    margin_rate_obj.save()
     else:
         # 新規商品の作成
         product = Product.objects.create(
@@ -1044,6 +1156,7 @@ def _process_approval(approval):
         )
         
         # 価格履歴を作成し、新規粗利率をテーブルに登録
+        from dashboard.products_master.models import ProductGrossMarginRate
         for approval_history in approval.price_histories.filter(is_active=True):
             PriceHistory.objects.create(
                 product=product,
@@ -1057,16 +1170,15 @@ def _process_approval(approval):
                 revision_reason=approval_history.revision_reason,
             )
             
-            # 新規粗利率をProductGrossMarginRateテーブルに登録（既存の場合はスキップ）
-            if not ProductGrossMarginRate.objects.filter(
+            # 粗利率テーブルの更新（未登録または既存が0.0の場合、または申請が0.0の場合）
+            margin_rate_obj, created = ProductGrossMarginRate.objects.get_or_create(
                 product=product,
-                period_year=approval_history.period_year
-            ).exists():
-                ProductGrossMarginRate.objects.create(
-                    product=product,
-                    period_year=approval_history.period_year,
-                    gross_margin_rate=approval_history.gross_margin_rate
-                )
+                period_year=approval_history.period_year,
+                defaults={'gross_margin_rate': approval_history.gross_margin_rate}
+            )
+            if not created and (margin_rate_obj.gross_margin_rate == Decimal('0.0') or approval_history.gross_margin_rate == Decimal('0.0')):
+                margin_rate_obj.gross_margin_rate = approval_history.gross_margin_rate
+                margin_rate_obj.save()
     
     # 承認テーブルから削除
     approval.delete()

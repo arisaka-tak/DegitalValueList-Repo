@@ -1,5 +1,6 @@
 from django import template
 from decimal import Decimal
+import json
 
 register = template.Library()
 
@@ -38,3 +39,56 @@ def format_price(value):
             return str(value)
     except:
         return str(value) if value else '-'
+
+@register.filter
+def approval_to_json(approval):
+    """承認データをJSON形式に変換"""
+    try:
+        data = {
+            'product_number': approval.product_number if hasattr(approval, 'product_number') else None,
+            'product_code': approval.product_code or '',
+            'livestock_type': approval.livestock_type or '',
+            'category': approval.category or '',
+            'manufacturer': approval.manufacturer or '',
+            'product_name': approval.product_name or '',
+            'model_number': approval.model_number or '',
+            'specification': approval.specification or '',
+            'shipping_unit': approval.shipping_unit or '',
+            'shipping_fee': approval.shipping_fee or '',
+            'remarks': approval.remarks or '',
+        }
+        return json.dumps(data)
+    except:
+        return '{}'
+
+@register.filter
+def approval_histories_to_json(price_histories):
+    """承認価格履歴をJSON形式に変換"""
+    try:
+        data = []
+        for history in price_histories:
+            # 県連価格の表示値を計算
+            kenren_price_display = history.kenren_price
+            if not kenren_price_display:
+                calc_price = calc_kenren_price(history.wholesale_price, history.gross_margin_rate)
+                if calc_price:
+                    kenren_price_display = format_price(calc_price)
+                else:
+                    kenren_price_display = '都度見積'
+            
+            data.append({
+                'id': history.pk,
+                'period_year': history.period_year,
+                'effective_year_month': history.effective_year_month,
+                'wholesale_price': history.wholesale_price,
+                'kenren_price': history.kenren_price,
+                'kenren_price_display': kenren_price_display,
+                'gross_margin_rate': str(history.gross_margin_rate) if history.gross_margin_rate is not None else None,
+                'revision_reason': history.revision_reason or '',
+                'is_delete_request': getattr(history, 'is_delete_request', False),
+                'diff_flags': getattr(history, 'diff_flags', {}),
+                'is_editable': False  # 承認モードでは編集不可
+            })
+        return json.dumps(data)
+    except:
+        return '[]'

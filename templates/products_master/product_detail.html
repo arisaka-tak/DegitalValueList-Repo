@@ -37,7 +37,13 @@
                     <div class="card-body">
                         <form id="productForm" method="post">
                             {% csrf_token %}
-                            {% include 'products_master/partials/product_basic_info.html' with editable=True %}
+                            <product-basic-info-component 
+                                product-data='{{ product_json|default:"{}" }}'
+                                form-data='{{ form_data_json|default:"{}" }}'
+                                editable="true"
+                                is-new="{{ is_new|yesno:'true,false' }}"
+                                diff-flags='{{ diff_flags_json|default:"{}" }}'>
+                            </product-basic-info-component>
                         <!-- フォーム終了タグを価格履歴の後に移動 -->
                     </div>
                 </div>
@@ -163,4 +169,5 @@
     <!-- Webコンポーネント読み込み -->
     {% load static %}
     <script src="{% static 'js/components/price-history-component.js' %}"></script>
+    <script src="{% static 'js/components/product-basic-info-component.js' %}"></script>
 {% endblock %}

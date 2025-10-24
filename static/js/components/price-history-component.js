@@ -5,12 +5,15 @@ class PriceHistoryComponent extends HTMLElement {
     }
 
     connectedCallback() {
+        this.mode = this.getAttribute('mode') || 'edit';
+        this.showDiff = this.getAttribute('show-diff') === 'true';
+        this.editable = this.getAttribute('editable') !== 'false';
         this.render();
         this.setupEventListeners();
     }
 
     render() {
-        // 既存のHTMLをそのまま使用
+        const isApprovalMode = this.mode === 'approval';
         this.innerHTML = `
             <div class="table-responsive">
                 <table class="table table-sm" id="priceHistoryTable">
@@ -21,9 +24,9 @@ class PriceHistoryComponent extends HTMLElement {
                             <th>仕切価格</th>
                             <th>県連価格</th>
                             <th>粗利率</th>
-                            <th>改定額</th>
+                            ${!isApprovalMode ? '<th>改定額</th>' : ''}
                             <th>改定理由</th>
-                            <th>操作</th>
+                            ${!isApprovalMode ? '<th>操作</th>' : ''}
                         </tr>
                     </thead>
                     <tbody>
@@ -35,28 +38,44 @@ class PriceHistoryComponent extends HTMLElement {
     }
 
     renderExistingRows() {
-        // 既存の価格履歴データを表示（Djangoから渡されたデータを使用）
         const histories = JSON.parse(this.getAttribute('histories') || '[]');
-        return histories.map(history => `
-            <tr data-id="${history.id}" class="${!history.is_editable ? 'table-secondary' : ''}" style="${!history.is_editable ? 'color: #6c757d;' : ''}">
-                <td>${history.period_year}年度</td>
-                <td>${history.effective_year_month}</td>
-                <td class="${history.is_editable ? 'editable-cell' : ''}" data-field="wholesale_price" data-history-id="${history.id}">${history.wholesale_price}</td>
-                <td class="kenren-price-cell ${history.is_editable ? 'editable-cell' : ''}" data-field="kenren_price" data-history-id="${history.id}" style="${this.isAutoCalculated(history) ? 'color: green; font-weight: bold;' : ''}">${history.kenren_price_display}</td>
-                <td>${history.gross_margin_rate ? (parseFloat(history.gross_margin_rate) * 100).toFixed(1) + '%' : '自動算出'}</td>
-                <td>${history.revision_amount || '自動算出'}</td>
-                <td class="${history.is_editable ? 'editable-cell' : ''}" data-field="revision_reason" data-history-id="${history.id}">${history.revision_reason || ''}</td>
-                <td>
-                    ${history.is_editable ? `
-                        <button type="button" class="btn btn-sm btn-outline-danger delete-btn" data-action="mark-delete">削除</button>
-                        <input type="hidden" class="delete-flag" value="false">
-                    ` : '<span class="text-muted">編集不可</span>'}
-                </td>
-            </tr>
-        `).join('');
+        const isApprovalMode = this.mode === 'approval';
+        
+        return histories.map(history => {
+            const isDiffRow = this.showDiff && history.diff_flags;
+            const isDeleteRequest = history.is_delete_request;
+            
+            let rowClass = '';
+            let rowStyle = '';
+            
+            if (isDeleteRequest) {
+                rowClass = 'text-danger fw-bold';
+                rowStyle = 'text-decoration: line-through;';
+            } else if (!isApprovalMode && !history.is_editable) {
+                rowClass = 'table-secondary';
+                rowStyle = 'color: #6c757d;';
+            }
+            
+            return `
+                <tr data-id="${history.id}" class="${rowClass}" style="${rowStyle}">
+                    <td>${history.period_year}年度</td>
+                    <td>${history.effective_year_month}</td>
+                    <td class="${this.getCellClass(history, 'wholesale_price', isDiffRow)}" ${this.getCellAttributes(history, 'wholesale_price')}>${history.wholesale_price}</td>
+                    <td class="kenren-price-cell ${this.getCellClass(history, 'kenren_price', isDiffRow)}" ${this.getCellAttributes(history, 'kenren_price')} style="${this.getKenrenPriceStyle(history)}">${this.getKenrenPriceDisplay(history)}</td>
+                    <td>${this.getGrossMarginDisplay(history)}</td>
+                    ${!isApprovalMode ? `<td>${history.revision_amount !== null && history.revision_amount !== undefined ? history.revision_amount : '自動算出'}</td>` : ''}
+                    <td class="${this.getCellClass(history, 'revision_reason', isDiffRow)}" ${this.getCellAttributes(history, 'revision_reason')}>${history.revision_reason || (isDiffRow ? '' : '-')}</td>
+                    ${!isApprovalMode ? `<td>${this.getActionCell(history)}</td>` : ''}
+                </tr>
+            `;
+        }).join('');
     }
 
     setupEventListeners() {
+        if (this.mode === 'approval') {
+            return; // 承認モードではイベントリスナーを設定しない
+        }
+        
         // イベント委譲でボタンクリックを処理
         this.addEventListener('click', (e) => {
             const action = e.target.dataset.action;
@@ -82,8 +101,10 @@ class PriceHistoryComponent extends HTMLElement {
         });
     }
 
-    // 新規行追加機能（standalone版と同じ）
+    // 新規行追加機能
     addPriceRow() {
+        if (this.mode === 'approval') return; // 承認モードでは追加不可
+        
         const tbody = this.querySelector('#priceHistoryTable tbody');
         const newRow = document.createElement('tr');
         newRow.className = 'table-warning';
@@ -155,7 +176,7 @@ class PriceHistoryComponent extends HTMLElement {
 
     // インライン編集開始
     startInlineEdit(cell) {
-        if (cell.querySelector('input')) return; // 既に編集中
+        if (this.mode === 'approval' || cell.querySelector('input')) return; // 承認モードまたは既に編集中
         
         const originalValue = cell.textContent.trim();
         const field = cell.dataset.field;
@@ -261,17 +282,67 @@ class PriceHistoryComponent extends HTMLElement {
         }
     }
     
+    // 承認画面用のヘルパーメソッド
+    getCellClass(history, field, isDiffRow) {
+        let classes = [];
+        
+        if (this.mode !== 'approval' && this.editable && history.is_editable) {
+            classes.push('editable-cell');
+        }
+        
+        if (isDiffRow && history.diff_flags && history.diff_flags[field]) {
+            classes.push('text-danger fw-bold');
+        }
+        
+        return classes.join(' ');
+    }
+    
+    getCellAttributes(history, field) {
+        if (this.mode === 'approval' || !this.editable || !history.is_editable) {
+            return '';
+        }
+        return `data-field="${field}" data-history-id="${history.id}"`;
+    }
+    
+    getKenrenPriceStyle(history) {
+        if (this.isAutoCalculated(history)) {
+            return 'color: green; font-weight: bold;';
+        }
+        return '';
+    }
+    
+    getKenrenPriceDisplay(history) {
+        if (history.kenren_price) {
+            return history.kenren_price;
+        }
+        return history.kenren_price_display || '都度見積';
+    }
+    
+    getActionCell(history) {
+        if (!history.is_editable) {
+            return '<span class="text-muted">編集不可</span>';
+        }
+        return `
+            <button type="button" class="btn btn-sm btn-outline-danger delete-btn" data-action="mark-delete">削除</button>
+            <input type="hidden" class="delete-flag" value="false">
+        `;
+    }
+    
+    // 粗利率の表示値を取得
+    getGrossMarginDisplay(history) {
+        if (history.gross_margin_rate !== null && history.gross_margin_rate !== undefined && history.gross_margin_rate !== '') {
+            const rate = parseFloat(history.gross_margin_rate);
+            if (rate === 0.0) {
+                return '0.0%';
+            }
+            return (rate * 100).toFixed(1) + '%';
+        }
+        return '自動算出';
+    }
+    
     // 自動計算かどうかを判定
     isAutoCalculated(history) {
-        // Djangoのkenren_priceフィールドが空またはnullの場合は自動計算
-        // ここではDjangoから渡されたデータをチェックする必要がある
-        const histories = JSON.parse(this.getAttribute('histories') || '[]');
-        const currentHistory = histories.find(h => h.id === history.id);
-        if (currentHistory) {
-            // kenren_priceフィールドが空の場合は自動計算
-            return !currentHistory.kenren_price || currentHistory.kenren_price === null;
-        }
-        return false;
+        return !history.kenren_price || history.kenren_price === null;
     }
     
     // 外部から呼び出し可能なメソッド（既存のJavaScriptとの互換性）
