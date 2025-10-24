@@ -1,3 +1,4 @@
+import json
 from django.shortcuts import render, get_object_or_404
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -18,11 +19,29 @@ def product_detail(request, pk):
     
     form = ProductForm(instance=product)
     
+    # Web Component用のJSONデータを準備
+    price_histories_json = json.dumps([
+        {
+            'id': history.pk,
+            'period_year': history.period_year,
+            'effective_year_month': history.effective_year_month,
+            'wholesale_price': history.wholesale_price,
+            'kenren_price': history.kenren_price,  # 元のkenren_priceフィールド
+            'kenren_price_display': history.get_kenren_price_display(),
+            'gross_margin_rate': str(history.gross_margin_rate) if history.gross_margin_rate else None,
+            'revision_amount': history.get_revision_amount(),
+            'revision_reason': history.revision_reason or '',
+            'is_editable': history.is_editable()
+        }
+        for history in price_histories
+    ])
+    
     context = {
         'current_user': get_current_user(),
         'product': product,
         'form': form,
         'price_histories': price_histories,
+        'price_histories_json': price_histories_json,
         'breadcrumbs': get_breadcrumbs('product_detail', product_name=product.product_name)
     }
     return render(request, 'products_master/product_detail.html', context)
@@ -167,6 +186,7 @@ def product_detail_new(request):
         'product': None,  # 新規作成モード
         'form': form,
         'price_histories': [],  # 空の価格履歴
+        'price_histories_json': '[]',  # 空のJSON配列
         'is_new': True,  # 新規作成フラグ
         'breadcrumbs': get_breadcrumbs('product_new')
     }
@@ -236,40 +256,20 @@ def price_history_create(request, product_pk):
             if not effective_year_month:
                 return HttpResponse('Missing effective_year_month', status=400)
             
-            # 日付形式をバリデーション
+            # 日付バリデーション
             try:
-                if '/' not in effective_year_month:
-                    return HttpResponse('適用年月はYYYY/MM形式で入力してください', status=400)
-                
-                parts = effective_year_month.split('/')
-                if len(parts) != 2:
-                    return HttpResponse('適用年月はYYYY/MM形式で入力してください', status=400)
-                
-                year_str, month_str = parts
-                year = int(year_str)
-                month = int(month_str)
-                
-                if year < 2000 or year > 2099:
-                    return HttpResponse('年は2000～2099の範囲で入力してください', status=400)
-                
-                if month < 1 or month > 12:
-                    return HttpResponse('月は1～12の範囲で入力してください', status=400)
-                
-                # 正しい形式に整形（2025/1 → 2025/01）
-                effective_year_month = f"{year:04d}/{month:02d}"
-                
-            except (ValueError, IndexError):
-                return HttpResponse('適用年月はYYYY/MM形式で入力してください', status=400)
+                formatted_date = validate_date_format(effective_year_month)
+                check_business_rules(formatted_date, product)
+                effective_year_month = formatted_date
+            except ValueError as e:
+                return HttpResponse(str(e), status=400)
             
             if not wholesale_price:
                 wholesale_price = '都度見積'
             
             # 年度を自動算出
+            year, month = map(int, effective_year_month.split('/'))
             period_year = year if month >= 4 else year - 1
-            
-            # 重複チェック
-            if PriceHistory.objects.filter(product=product, effective_year_month=effective_year_month, is_active=True).exists():
-                return HttpResponse(f'{effective_year_month}の価格履歴は既に存在します', status=400)
             
             price_history = PriceHistory.objects.create(
                 product=product,
@@ -522,64 +522,36 @@ def submit_approval(request, pk=None):
             }
             return render(request, 'products_master/product_detail.html', context)
         
-        # 価格履歴のバリデーションを事前に実行
+        # 日付バリデーション
+        print("=== 日付バリデーション開始 ===")
+        validated_dates = []  # 同一申請内での重複チェック用
+        
         for key, value in request.POST.items():
             if key.startswith('new_effective_year_month_') and value.strip():
-                effective_year_month = value.strip()
-                # 適用年月のバリデーション
                 try:
-                    if '/' not in effective_year_month:
-                        raise ValueError('適用年月はYYYY/MM形式で入力してください')
+                    formatted_date = validate_date_format(value.strip())
+                    check_business_rules(formatted_date, product, validated_dates)
+                    validated_dates.append(formatted_date)
+                except ValueError as e:
+                    return _return_form_with_error(request, product, form, str(e))
+        
+        # 粗利率算定バリデーション
+        print("=== 粗利率算定バリデーション開始 ===")
+        for key, value in request.POST.items():
+            if key.startswith('new_effective_year_month_') and value.strip():
+                index = key.split('_')[-1]
+                wholesale_price = request.POST.get(f'new_wholesale_price_{index}', '').strip()
+                
+                if '/' in value:
+                    year, month = map(int, value.split('/'))
+                    period_year = year if month >= 4 else year - 1
                     
-                    parts = effective_year_month.split('/')
-                    if len(parts) != 2:
-                        raise ValueError('適用年月はYYYY/MM形式で入力してください')
-                    
-                    year_str, month_str = parts
-                    year = int(year_str)
-                    month = int(month_str)
-                    
-                    if year < 2000 or year > 2099:
-                        raise ValueError('年は2000～2099の範囲で入力してください')
-                    
-                    if month < 1 or month > 12:
-                        raise ValueError('月は1～12の範囲で入力してください')
-                    
-                except (ValueError, IndexError) as e:
-                    # バリデーションエラー時もフォームを再表示
-                    form = ProductForm(request.POST)
-                    preview_histories = []
-                    for key, value in request.POST.items():
-                        if key.startswith('new_effective_year_month_') and value.strip():
-                            index = key.split('_')[-1]
-                            effective_year_month = value.strip()
-                            wholesale_price = request.POST.get(f'new_wholesale_price_{index}', '').strip()
-                            kenren_price = request.POST.get(f'new_kenren_price_{index}', '').strip()
-                            revision_reason = request.POST.get(f'new_revision_reason_{index}', '').strip()
-                            
-                            preview_histories.append({
-                                'effective_year_month': effective_year_month,
-                                'wholesale_price': wholesale_price,
-                                'kenren_price': kenren_price,
-                                'revision_reason': revision_reason,
-                                'index': index
-                            })
-                    
-                    context = {
-                        'current_user': get_current_user(),
-                        'product': product,
-                        'form': form,
-                        'price_histories': product.price_histories.filter(is_active=True).order_by('-effective_year_month') if product else [],
-                        'preview_histories': preview_histories,
-                        'is_new': not bool(product),
-                        'error_message': str(e),
-                        'breadcrumbs': [
-                            {'title': '商品マスタ管理', 'url': '/products/'},
-                            {'title': '商品一覧', 'url': '/products/products/'},
-                            {'title': '新規作成' if not product else f'{product.product_name}', 'url': None}
-                        ]
-                    }
-                    return render(request, 'products_master/product_detail.html', context)
+                    try:
+                        calculate_gross_margin_rate(product, period_year, wholesale_price or '都度見積', request)
+                    except ValueError as e:
+                        return _return_form_with_error(request, product, form, str(e))
+        
+        print("=== バリデーション完了 ===")
         
         # 申請テーブルに商品情報をコピー
         if product:
@@ -653,7 +625,7 @@ def submit_approval(request, pk=None):
                 )
         
         # 新規履歴を申請テーブルに追加
-        print("=== 新規履歴の処理開始 ===")
+        print("=== 新規履歴の申請テーブル追加開始 ===")
         for key, value in request.POST.items():
             if key.startswith('new_effective_year_month_') and value.strip():
                 print(f"Found new history: {key} = {value}")
@@ -665,105 +637,12 @@ def submit_approval(request, pk=None):
                 print(f"Index: {index}, wholesale: {wholesale_price}, kenren: {kenren_price}")
                 
                 if '/' in effective_year_month:
-                    # 日付形式をバリデーション
-                    try:
-                        parts = effective_year_month.split('/')
-                        if len(parts) != 2:
-                            raise ValueError('適用年月はYYYY/MM形式で入力してください')
-                        
-                        year_str, month_str = parts
-                        year = int(year_str)
-                        month = int(month_str)
-                        
-                        if year < 2000 or year > 2099:
-                            raise ValueError('年は2000～2099の範囲で入力してください')
-                        
-                        if month < 1 or month > 12:
-                            raise ValueError('月は1～12の範囲で入力してください')
-                        
-                        # 正しい形式に整形
-                        effective_year_month = f"{year:04d}/{month:02d}"
-                        
-                    except (ValueError, IndexError) as e:
-                        # バリデーションエラー時もフォームを再表示
-                        form = ProductForm(request.POST)
-                        preview_histories = []
-                        for key, value in request.POST.items():
-                            if key.startswith('new_effective_year_month_') and value.strip():
-                                index = key.split('_')[-1]
-                                effective_year_month = value.strip()
-                                wholesale_price = request.POST.get(f'new_wholesale_price_{index}', '').strip()
-                                kenren_price = request.POST.get(f'new_kenren_price_{index}', '').strip()
-                                revision_reason = request.POST.get(f'new_revision_reason_{index}', '').strip()
-                                
-                                preview_histories.append({
-                                    'effective_year_month': effective_year_month,
-                                    'wholesale_price': wholesale_price,
-                                    'kenren_price': kenren_price,
-                                    'revision_reason': revision_reason,
-                                    'index': index
-                                })
-                        
-                        context = {
-                            'current_user': get_current_user(),
-                            'product': None,
-                            'form': form,
-                            'price_histories': [],
-                            'preview_histories': preview_histories,
-                            'is_new': True,
-                            'error_message': str(e),
-                            'breadcrumbs': [
-                                {'title': '商品マスタ管理', 'url': '/products/'},
-                                {'title': '商品一覧', 'url': '/products/products/'},
-                                {'title': '新規作成', 'url': None}
-                            ]
-                        }
-                        return render(request, 'products_master/product_detail.html', context)
-                    
+                    year, month = map(int, effective_year_month.split('/'))
                     period_year = year if month >= 4 else year - 1
+                    effective_year_month = f"{year:04d}/{month:02d}"
                     
-                    # 粗利率を算定
-                    try:
-                        print(f"Calculating gross margin rate: product={product}, period_year={period_year}, wholesale_price={wholesale_price}")
-                        gross_margin_rate = calculate_gross_margin_rate(product, period_year, wholesale_price or '都度見積', request)
-                        print(f"Calculated gross margin rate: {gross_margin_rate}")
-                    except ValueError as e:
-                        print(f"Gross margin rate calculation error: {e}")
-                        # 粗利率算定エラー時もフォームを再表示
-                        form = ProductForm(request.POST)
-                        # POSTデータから価格履歴を復元
-                        preview_histories = []
-                        for key, value in request.POST.items():
-                            if key.startswith('new_effective_year_month_') and value.strip():
-                                index = key.split('_')[-1]
-                                effective_year_month = value.strip()
-                                wholesale_price = request.POST.get(f'new_wholesale_price_{index}', '').strip()
-                                kenren_price = request.POST.get(f'new_kenren_price_{index}', '').strip()
-                                revision_reason = request.POST.get(f'new_revision_reason_{index}', '').strip()
-                                
-                                preview_histories.append({
-                                    'effective_year_month': effective_year_month,
-                                    'wholesale_price': wholesale_price,
-                                    'kenren_price': kenren_price,
-                                    'revision_reason': revision_reason,
-                                    'index': index
-                                })
-                        
-                        context = {
-                            'current_user': get_current_user(),
-                            'product': None,
-                            'form': form,
-                            'price_histories': [],
-                            'preview_histories': preview_histories,
-                            'is_new': True,
-                            'error_message': str(e),
-                            'breadcrumbs': [
-                                {'title': '商品マスタ管理', 'url': '/products/'},
-                                {'title': '商品一覧', 'url': '/products/products/'},
-                                {'title': '新規作成', 'url': None}
-                            ]
-                        }
-                        return render(request, 'products_master/product_detail.html', context)
+                    # 粗利率を再算定（既に事前チェック済みなのでエラーは発生しないはず）
+                    gross_margin_rate = calculate_gross_margin_rate(product, period_year, wholesale_price or '都度見積', request)
                     
                     print(f"Creating PriceHistoryApproval: {effective_year_month}")
                     PriceHistoryApproval.objects.create(
@@ -787,8 +666,129 @@ def submit_approval(request, pk=None):
         print(f"ERROR: {traceback.format_exc()}")
         return HttpResponse('<script>alert("エラー発生");</script>', status=500)
 
+def validate_date_format(effective_year_month):
+    """日付形式のバリデーションのみ"""
+    if '/' not in effective_year_month:
+        raise ValueError('適用年月はYYYY/MM形式で入力してください')
+    
+    parts = effective_year_month.split('/')
+    if len(parts) != 2:
+        raise ValueError('適用年月はYYYY/MM形式で入力してください')
+    
+    try:
+        year_str, month_str = parts
+        year = int(year_str)
+        month = int(month_str)
+    except (ValueError, IndexError):
+        raise ValueError('適用年月はYYYY/MM形式で入力してください')
+    
+    if year < 2000 or year > 2099:
+        raise ValueError('年は2000～2099の範囲で入力してください')
+    
+    if month < 1 or month > 12:
+        raise ValueError('月は1～12の範囲で入力してください')
+    
+    return f"{year:04d}/{month:02d}"
+
+def check_business_rules(formatted_date, product=None, existing_dates=None):
+    """ビジネスルールのチェック"""
+    if existing_dates is None:
+        existing_dates = []
+    
+    year, month = map(int, formatted_date.split('/'))
+    
+    # 既存商品の場合のチェック
+    if product:
+        temp_history = PriceHistory(product=product, effective_year_month=formatted_date)
+        if not temp_history.is_editable():
+            from datetime import datetime
+            today = datetime.now().strftime('%Y/%m')
+            latest_editable = PriceHistory.objects.filter(
+                product=product, effective_year_month__lt=today, is_active=True
+            ).order_by('-effective_year_month').first()
+            
+            if latest_editable:
+                raise ValueError(f'編集不可な範囲の日付です。{latest_editable.effective_year_month}より後の日付を入力してください。')
+            else:
+                raise ValueError('編集不可な範囲の日付です。')
+        
+        if PriceHistory.objects.filter(product=product, effective_year_month=formatted_date, is_active=True).exists():
+            raise ValueError(f'{formatted_date}の価格履歴は既に存在します。')
+    
+    # 2年度以上先の登録禁止
+    from datetime import datetime
+    current_year = datetime.now().year
+    current_month = datetime.now().month
+    current_period_year = current_year if current_month >= 4 else current_year - 1
+    input_period_year = year if month >= 4 else year - 1
+    
+    if input_period_year > current_period_year + 1:
+        raise ValueError(f'{input_period_year}年度は2年度以上先のため登録できません。')
+    
+    if formatted_date in existing_dates:
+        raise ValueError(f'{formatted_date}が重複しています。')
+
+def _return_form_with_error(request, product, form, error_message):
+    """エラー時のフォーム再表示用ヘルパー関数"""
+    if product:
+        price_histories = product.price_histories.filter(is_active=True).order_by('-effective_year_month')
+        price_histories_json = json.dumps([
+            {
+                'id': history.pk,
+                'period_year': history.period_year,
+                'effective_year_month': history.effective_year_month,
+                'wholesale_price': history.wholesale_price,
+                'kenren_price': history.kenren_price,
+                'kenren_price_display': history.get_kenren_price_display(),
+                'gross_margin_rate': str(history.gross_margin_rate) if history.gross_margin_rate else None,
+                'revision_amount': history.get_revision_amount(),
+                'revision_reason': history.revision_reason or '',
+                'is_editable': history.is_editable()
+            }
+            for history in price_histories
+        ])
+    else:
+        price_histories = []
+        price_histories_json = '[]'
+    
+    preview_histories = []
+    for key, value in request.POST.items():
+        if key.startswith('new_effective_year_month_') and value.strip():
+            index = key.split('_')[-1]
+            effective_year_month = value.strip()
+            wholesale_price = request.POST.get(f'new_wholesale_price_{index}', '').strip()
+            kenren_price = request.POST.get(f'new_kenren_price_{index}', '').strip()
+            revision_reason = request.POST.get(f'new_revision_reason_{index}', '').strip()
+            
+            preview_histories.append({
+                'effective_year_month': effective_year_month,
+                'wholesale_price': wholesale_price,
+                'kenren_price': kenren_price,
+                'revision_reason': revision_reason,
+                'index': index
+            })
+    
+    context = {
+        'current_user': get_current_user(),
+        'product': product,
+        'form': form,
+        'price_histories': price_histories,
+        'price_histories_json': price_histories_json,
+        'preview_histories': preview_histories,
+        'is_new': not bool(product),
+        'error_message': error_message,
+        'breadcrumbs': [
+            {'title': '商品マスタ管理', 'url': '/products/'},
+            {'title': '商品一覧', 'url': '/products/products/'},
+            {'title': '新規作成' if not product else f'{product.product_name}', 'url': None}
+        ]
+    }
+    return render(request, 'products_master/product_detail.html', context)
+
 def calculate_gross_margin_rate(product, period_year, wholesale_price, request=None):
-    """粗利率を算定"""
+    """粗利率を算定（シンプル版）"""
+    from dashboard.products_master.models import ProductGrossMarginRate, PriceHistory
+    
     # 現在入力されている県連価格を取得
     current_kenren_price = None
     if request:
@@ -800,128 +800,65 @@ def calculate_gross_margin_rate(product, period_year, wholesale_price, request=N
                     try:
                         current_kenren_price = float(kenren_value.replace(',', ''))
                     except (ValueError, AttributeError):
-                        # パターン2: 県連価格が文字列の場合はデフォルト値
-                        return Decimal('1.0')
+                        pass
                 break
+    
+    # ①県連価格が入力されている場合はチェック終了
+    if current_kenren_price is not None:
+        return Decimal('1.0')  # 仮の値（実際は使用されない）
+    
+    # ②県連価格が未入力の場合は粗利テーブルの登録確認
+    if product:
+        try:
+            margin_rate_record = ProductGrossMarginRate.objects.get(
+                product=product,
+                period_year=period_year
+            )
+            return margin_rate_record.gross_margin_rate
+        except ProductGrossMarginRate.DoesNotExist:
+            pass
     
     # 仕切価格のチェック
     try:
         wholesale_numeric = float(wholesale_price.replace(',', ''))
     except (ValueError, AttributeError):
-        # パターン2: 仕切価格が文字列の場合はデフォルト値
-        return Decimal('1.0')
+        raise ValueError('仕切価格が数字でない場合、県連価格は手入力してください。')
     
-    if wholesale_numeric <= 0:
-        return Decimal('1.0')
-    
-    # パターン1: どちらも数字の場合は直接計算
-    if current_kenren_price is not None:
-        gross_margin_rate = current_kenren_price / wholesale_numeric
-        return Decimal(str(round(gross_margin_rate, 6)))
-    
-    # パターン3: 仕切価格あり、県連価格空の場合は過去データで算定
-    
-    # 前年度最終県連価格を取得
-    prev_year = period_year - 1
-    prev_kenren_price = None
-    
-    if product:
-        prev_history = PriceHistory.objects.filter(
+    # 粗利テーブルに未登録の場合は過去の県連価格から算出
+    if product and wholesale_numeric > 0:
+        # 過去の価格履歴を取得（手入力・自動計算どちらでも）
+        past_history = PriceHistory.objects.filter(
             product=product,
-            period_year=prev_year,
+            period_year__lt=period_year,
             is_active=True
-        ).order_by('-effective_year_month').first()
+        ).order_by('-period_year', '-effective_year_month').first()
         
-        if prev_history:
+        if past_history:
             try:
-                prev_kenren_price = prev_history._get_numeric_kenren_price()
-                # 県連価格が文字列の場合はデフォルト値を使用
-                if prev_kenren_price is None:
-                    return Decimal('1.0')
-            except (ValueError, AttributeError):
-                return Decimal('1.0')
-    
-    # 前年度データがない場合、対象年度の「数字が入っている」最初の県連価格を使用
-    if prev_kenren_price is None and product:
-        histories = PriceHistory.objects.filter(
-            product=product,
-            period_year=period_year,
-            is_active=True
-        ).order_by('effective_year_month')
-        
-        for history in histories:
-            try:
-                numeric_kenren = history._get_numeric_kenren_price()
-                if numeric_kenren is not None:
-                    prev_kenren_price = numeric_kenren
-                    break
-            except (ValueError, AttributeError):
-                continue
-    
-    # 新商品の場合、現在入力されている県連価格を使用
-    if prev_kenren_price is None and request:
-        # 同じindexの県連価格を探す
-        current_index = None
-        for key, value in request.POST.items():
-            if key.startswith('new_wholesale_price_') and value.strip() == wholesale_price:
-                current_index = key.split('_')[-1]
-                break
-        
-        if current_index:
-            kenren_value = request.POST.get(f'new_kenren_price_{current_index}', '').strip()
-            if kenren_value:
-                try:
-                    prev_kenren_price = float(kenren_value.replace(',', ''))
-                except (ValueError, AttributeError):
-                    # 県連価格が「都度見積」等の文字列の場合はデフォルト値を使用
-                    return Decimal('1.0')
-    
-    # 年度初め仕切価格を取得
-    year_start_wholesale = None
-    
-    if product:
-        april_history = PriceHistory.objects.filter(
-            product=product,
-            period_year=period_year,
-            effective_year_month=f'{period_year}/04',
-            is_active=True
-        ).first()
-        
-        if april_history:
-            try:
-                year_start_wholesale = float(april_history.wholesale_price.replace(',', ''))
-            except (ValueError, AttributeError):
-                # 仕切価格が「都度見積」等の文字列の場合は「ない」と判断
+                # 手入力の県連価格がある場合
+                if past_history.kenren_price:
+                    past_kenren_price = float(str(past_history.kenren_price).replace(',', ''))
+                else:
+                    # 自動計算された県連価格を使用
+                    past_wholesale = float(str(past_history.wholesale_price).replace(',', '')) if past_history.wholesale_price != '都度見積' else None
+                    if past_wholesale and past_history.gross_margin_rate:
+                        past_kenren_price = past_wholesale * float(past_history.gross_margin_rate)
+                    else:
+                        raise ValueError('過去の価格データが不完全')
+                
+                calculated_rate = past_kenren_price / wholesale_numeric
+                gross_margin_rate = Decimal(str(round(calculated_rate, 6)))
+                
+                # 粗利率が1.0以下の場合は警告
+                if gross_margin_rate <= 1.0:
+                    raise ValueError('仕切価格が県連価格より高い状態です。登録してもよいですか？')
+                
+                return gross_margin_rate
+            except (ValueError, TypeError):
                 pass
     
-    # 4月データがない場合、年度内「数字が入っている」最初の仕切価格を使用
-    if year_start_wholesale is None and product:
-        histories = PriceHistory.objects.filter(
-            product=product,
-            period_year=period_year,
-            is_active=True
-        ).order_by('effective_year_month')
-        
-        for history in histories:
-            try:
-                numeric_wholesale = float(history.wholesale_price.replace(',', ''))
-                year_start_wholesale = numeric_wholesale
-                break
-            except (ValueError, AttributeError):
-                # 仕切価格が「都度見積」等の文字列の場合はスキップ
-                continue
-    
-    # 新商品の場合、現在の仕切価格を使用
-    if year_start_wholesale is None:
-        year_start_wholesale = wholesale_numeric
-    
-    # パターン3-1: 過去データで粗利算定可能
-    if prev_kenren_price is not None and year_start_wholesale > 0:
-        gross_margin_rate = prev_kenren_price / year_start_wholesale
-        return Decimal(str(round(gross_margin_rate, 6)))
-    
-    # パターン3-2: 過去データで粗利算定不可
-    raise ValueError('粗利率を算定できません。県連価格を手動で入力してください。')
+    # 過去の県連価格がない場合は手入力必須エラー
+    raise ValueError(f'{period_year}年度の粗利率が未設定です。仕切価格・県連価格を手入力してください。')
 
 def approval_list(request):
     """申請一覧画面"""
@@ -1042,7 +979,8 @@ def _process_approval(approval):
         product.approver = get_current_user()
         product.save()
         
-        # 価格履歴を更新
+        # 価格履歴を更新し、新規粗利率をテーブルに登録
+        from dashboard.products_master.models import ProductGrossMarginRate
         for approval_history in approval.price_histories.filter(is_active=True):
             if approval_history.is_delete_request:
                 # 削除申請の場合
@@ -1077,6 +1015,17 @@ def _process_approval(approval):
                     history.revision_amount = approval_history.revision_amount
                     history.revision_reason = approval_history.revision_reason
                     history.save()
+                
+                # 新規粗利率をProductGrossMarginRateテーブルに登録（既存の場合はスキップ）
+                if not ProductGrossMarginRate.objects.filter(
+                    product=product,
+                    period_year=approval_history.period_year
+                ).exists():
+                    ProductGrossMarginRate.objects.create(
+                        product=product,
+                        period_year=approval_history.period_year,
+                        gross_margin_rate=approval_history.gross_margin_rate
+                    )
     else:
         # 新規商品の作成
         product = Product.objects.create(
@@ -1094,7 +1043,7 @@ def _process_approval(approval):
             approver=get_current_user()
         )
         
-        # 価格履歴を作成
+        # 価格履歴を作成し、新規粗利率をテーブルに登録
         for approval_history in approval.price_histories.filter(is_active=True):
             PriceHistory.objects.create(
                 product=product,
@@ -1107,6 +1056,17 @@ def _process_approval(approval):
                 revision_amount=approval_history.revision_amount,
                 revision_reason=approval_history.revision_reason,
             )
+            
+            # 新規粗利率をProductGrossMarginRateテーブルに登録（既存の場合はスキップ）
+            if not ProductGrossMarginRate.objects.filter(
+                product=product,
+                period_year=approval_history.period_year
+            ).exists():
+                ProductGrossMarginRate.objects.create(
+                    product=product,
+                    period_year=approval_history.period_year,
+                    gross_margin_rate=approval_history.gross_margin_rate
+                )
     
     # 承認テーブルから削除
     approval.delete()

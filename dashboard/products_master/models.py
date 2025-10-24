@@ -215,6 +215,32 @@ class PriceHistory(models.Model):
         self.deleted_at = timezone.now()
         self.save()
 
+class ProductGrossMarginRate(models.Model):
+    """商品別年度別粗利率マスタ"""
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name='商品', related_name='gross_margin_rates')
+    period_year = models.IntegerField('年度', help_text='2025年度 = 2025/04～2026/03')
+    gross_margin_rate = models.DecimalField('粗利率', max_digits=10, decimal_places=6, validators=[MinValueValidator(Decimal('0'))], help_text='県連価格÷仕切価格')
+    
+    # 算定根拠（参考情報）
+    base_kenren_price = models.DecimalField('算定基準県連価格', max_digits=12, decimal_places=0, null=True, blank=True, help_text='粗利率算定に使用した県連価格')
+    base_wholesale_price = models.DecimalField('算定基準仕切価格', max_digits=12, decimal_places=0, null=True, blank=True, help_text='粗利率算定に使用した仕切価格')
+    calculation_note = models.TextField('算定メモ', blank=True, null=True, help_text='粗利率の算定根拠や備考')
+    
+    created_at = models.DateTimeField('作成日時', auto_now_add=True)
+    updated_at = models.DateTimeField('更新日時', auto_now=True)
+    
+    class Meta:
+        verbose_name = '商品別年度別粗利率'
+        verbose_name_plural = '商品別年度別粗利率'
+        unique_together = ['product', 'period_year']
+        ordering = ['product', '-period_year']
+        indexes = [
+            models.Index(fields=['product', 'period_year']),
+        ]
+    
+    def __str__(self):
+        return f"{self.product.product_name} - {self.period_year}年度 ({self.gross_margin_rate})"
+
 class ProductApproval(models.Model):
     """商品マスタ承認テーブル"""
     product_number = models.IntegerField('商品番号', help_text='システム自動採番の商品番号')
@@ -249,10 +275,9 @@ class ProductApproval(models.Model):
 
 class PriceHistoryApproval(models.Model):
     """価格改定履歴承認テーブル"""
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name='商品', related_name='price_history_approvals')
-    effective_date = models.DateField('適用日', help_text='価格適用開始日')
-    unit_price = models.DecimalField('単価', max_digits=12, decimal_places=2)
-    action_type = models.CharField('アクションタイプ', max_length=10, choices=[('create', '新規作成'), ('update', '更新'), ('delete', '削除')], default='create')
+    product = models.ForeignKey(ProductApproval, on_delete=models.CASCADE, verbose_name='商品', related_name='price_histories')
+    period_year = models.IntegerField('年度', help_text='2025年度 = 2025/04～2026/03')
+    effective_year_month = models.CharField('適用年月', max_length=7, help_text='YYYY/MM形式')
     
     gross_margin_rate = models.DecimalField('粗利率', max_digits=10, decimal_places=6, validators=[MinValueValidator(Decimal('0'))], null=True, blank=True)
     wholesale_price = models.CharField('仕切価格', max_length=50, blank=True, null=True)
@@ -277,7 +302,7 @@ class PriceHistoryApproval(models.Model):
     class Meta:
         verbose_name = '価格改定履歴承認'
         verbose_name_plural = '価格改定履歴承認'
-        ordering = ['-effective_date', 'product__product_number']
+        ordering = ['-effective_year_month', 'product__product_number']
     
     def __str__(self):
-        return f"{self.product.product_name} - {self.effective_date}"
+        return f"{self.product.product_name} - {self.effective_year_month}"

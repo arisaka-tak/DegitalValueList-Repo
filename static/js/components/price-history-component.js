@@ -1,0 +1,292 @@
+class PriceHistoryComponent extends HTMLElement {
+    constructor() {
+        super();
+        this.rowIndex = 0;
+    }
+
+    connectedCallback() {
+        this.render();
+        this.setupEventListeners();
+    }
+
+    render() {
+        // 既存のHTMLをそのまま使用
+        this.innerHTML = `
+            <div class="table-responsive">
+                <table class="table table-sm" id="priceHistoryTable">
+                    <thead>
+                        <tr>
+                            <th>年度</th>
+                            <th>適用年月</th>
+                            <th>仕切価格</th>
+                            <th>県連価格</th>
+                            <th>粗利率</th>
+                            <th>改定額</th>
+                            <th>改定理由</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${this.renderExistingRows()}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    renderExistingRows() {
+        // 既存の価格履歴データを表示（Djangoから渡されたデータを使用）
+        const histories = JSON.parse(this.getAttribute('histories') || '[]');
+        return histories.map(history => `
+            <tr data-id="${history.id}" class="${!history.is_editable ? 'table-secondary' : ''}" style="${!history.is_editable ? 'color: #6c757d;' : ''}">
+                <td>${history.period_year}年度</td>
+                <td>${history.effective_year_month}</td>
+                <td class="${history.is_editable ? 'editable-cell' : ''}" data-field="wholesale_price" data-history-id="${history.id}">${history.wholesale_price}</td>
+                <td class="kenren-price-cell ${history.is_editable ? 'editable-cell' : ''}" data-field="kenren_price" data-history-id="${history.id}" style="${this.isAutoCalculated(history) ? 'color: green; font-weight: bold;' : ''}">${history.kenren_price_display}</td>
+                <td>${history.gross_margin_rate ? (parseFloat(history.gross_margin_rate) * 100).toFixed(1) + '%' : '自動算出'}</td>
+                <td>${history.revision_amount || '自動算出'}</td>
+                <td class="${history.is_editable ? 'editable-cell' : ''}" data-field="revision_reason" data-history-id="${history.id}">${history.revision_reason || ''}</td>
+                <td>
+                    ${history.is_editable ? `
+                        <button type="button" class="btn btn-sm btn-outline-danger delete-btn" data-action="mark-delete">削除</button>
+                        <input type="hidden" class="delete-flag" value="false">
+                    ` : '<span class="text-muted">編集不可</span>'}
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    setupEventListeners() {
+        // イベント委譲でボタンクリックを処理
+        this.addEventListener('click', (e) => {
+            const action = e.target.dataset.action;
+            
+            switch(action) {
+                case 'add-new-row':
+                    this.addPriceRow();
+                    break;
+                case 'remove-new-row':
+                    this.removeNewRow(e.target);
+                    break;
+                case 'mark-delete':
+                    this.markForDeletion(e.target);
+                    break;
+            }
+        });
+        
+        // 編集可能セルのクリックイベント
+        this.addEventListener('click', (e) => {
+            if (e.target.classList.contains('editable-cell')) {
+                this.startInlineEdit(e.target);
+            }
+        });
+    }
+
+    // 新規行追加機能（standalone版と同じ）
+    addPriceRow() {
+        const tbody = this.querySelector('#priceHistoryTable tbody');
+        const newRow = document.createElement('tr');
+        newRow.className = 'table-warning';
+        newRow.setAttribute('data-id', 'new');
+        newRow.innerHTML = `
+            <td class="text-muted">自動算出</td>
+            <td><input type="text" class="form-control form-control-sm" name="new_effective_year_month_${this.rowIndex}" form="productForm" placeholder="YYYY/MM" required></td>
+            <td><input type="text" class="form-control form-control-sm" name="new_wholesale_price_${this.rowIndex}" form="productForm" placeholder="仕切価格"></td>
+            <td><input type="text" class="form-control form-control-sm" name="new_kenren_price_${this.rowIndex}" form="productForm" placeholder="県連価格"></td>
+            <td class="text-muted">自動算出</td>
+            <td class="text-muted">自動算出</td>
+            <td><input type="text" class="form-control form-control-sm" name="new_revision_reason_${this.rowIndex}" form="productForm" placeholder="改定理由"></td>
+            <td><button type="button" class="btn btn-sm btn-outline-secondary" data-action="remove-new-row">取消</button></td>
+        `;
+        tbody.insertBefore(newRow, tbody.firstChild);
+        this.rowIndex++;
+    }
+
+    // 新規行削除機能（standalone版と同じ）
+    removeNewRow(button) {
+        button.closest('tr').remove();
+    }
+
+    // 削除マーク機能（standalone版と同じ）
+    markForDeletion(button) {
+        const row = button.closest('tr');
+        const deleteFlag = row.querySelector('.delete-flag');
+        const historyId = row.dataset.id;
+        
+        if (row.classList.contains('marked-for-deletion')) {
+            // 削除マークを解除
+            row.classList.remove('marked-for-deletion');
+            row.style.backgroundColor = '';
+            row.style.textDecoration = '';
+            button.textContent = '削除';
+            button.className = 'btn btn-sm btn-outline-danger delete-btn';
+            deleteFlag.value = 'false';
+            this.updateDeleteFlag(historyId, 'false');
+        } else {
+            // 削除マークを付与
+            row.classList.add('marked-for-deletion');
+            row.style.backgroundColor = '#ffebee';
+            row.style.textDecoration = 'line-through';
+            button.textContent = '取消';
+            button.className = 'btn btn-sm btn-secondary delete-btn';
+            deleteFlag.value = 'true';
+            this.updateDeleteFlag(historyId, 'true');
+        }
+    }
+    
+    // 削除フラグをフォームに反映
+    updateDeleteFlag(historyId, value) {
+        const form = document.getElementById('productForm');
+        const inputName = `delete_${historyId}`;
+        
+        // 既存のhidden inputを削除
+        const existingInput = form.querySelector(`input[name="${inputName}"]`);
+        if (existingInput) {
+            existingInput.remove();
+        }
+        
+        // 新しいhidden inputを追加
+        const hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.name = inputName;
+        hiddenInput.value = value;
+        form.appendChild(hiddenInput);
+    }
+
+    // インライン編集開始
+    startInlineEdit(cell) {
+        if (cell.querySelector('input')) return; // 既に編集中
+        
+        const originalValue = cell.textContent.trim();
+        const field = cell.dataset.field;
+        const historyId = cell.dataset.historyId;
+        
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'form-control form-control-sm';
+        
+        // 県連価格が自動計算（緑色）の場合は空のフォームにする
+        if (field === 'kenren_price' && cell.style.color === 'green') {
+            input.value = '';
+        } else {
+            input.value = originalValue;
+        }
+        
+        input.name = `edit_${field}_${historyId}`;
+        input.setAttribute('form', 'productForm');
+        
+        cell.innerHTML = '';
+        cell.appendChild(input);
+        input.focus();
+        input.select();
+        
+        // Enterキーまたはフォーカス離脱で編集終了
+        const finishEdit = () => {
+            const newValue = input.value.trim();
+            cell.textContent = newValue || originalValue;
+            
+            // フォームにhidden inputを追加/更新
+            this.updateFormInput(field, historyId, newValue);
+            
+            // 県連価格を手動入力した場合は黒色で表示
+            if (field === 'kenren_price' && newValue) {
+                cell.style.color = 'black';
+                cell.style.fontWeight = 'normal';
+            }
+            
+            // 仕切価格が変更された場合は県連価格を再計算
+            if (field === 'wholesale_price') {
+                this.updateKenrenPrice(historyId, newValue);
+            }
+        };
+        
+        input.addEventListener('blur', finishEdit);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                finishEdit();
+            } else if (e.key === 'Escape') {
+                cell.textContent = originalValue;
+            }
+        });
+    }
+    
+    // フォームにhidden inputを追加/更新
+    updateFormInput(field, historyId, value) {
+        const form = document.getElementById('productForm');
+        const inputName = `edit_${field}_${historyId}`;
+        
+        // 既存のhidden inputを削除
+        const existingInput = form.querySelector(`input[name="${inputName}"]`);
+        if (existingInput) {
+            existingInput.remove();
+        }
+        
+        // 新しいhidden inputを追加
+        if (value) {
+            const hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = inputName;
+            hiddenInput.value = value;
+            form.appendChild(hiddenInput);
+        }
+    }
+    
+    // 県連価格の再計算
+    updateKenrenPrice(historyId, wholesalePrice) {
+        const row = this.querySelector(`tr[data-id="${historyId}"]`);
+        if (!row) return;
+        
+        const kenrenCell = row.querySelector('.kenren-price-cell');
+        if (!kenrenCell) return;
+        
+        // 簡易的な計算（実際の粗利率は不明なので1.1を仮定）
+        try {
+            if (wholesalePrice && wholesalePrice !== '都度見積') {
+                const price = parseFloat(wholesalePrice.replace(/,/g, ''));
+                const calculated = Math.floor(price * 1.1);
+                kenrenCell.textContent = calculated.toLocaleString();
+                // 自動計算の場合は緑色で表示
+                kenrenCell.style.color = 'green';
+                kenrenCell.style.fontWeight = 'bold';
+            } else {
+                kenrenCell.textContent = '都度見積';
+                kenrenCell.style.color = 'green';
+                kenrenCell.style.fontWeight = 'bold';
+            }
+        } catch (e) {
+            kenrenCell.textContent = '都度見積';
+            kenrenCell.style.color = 'green';
+            kenrenCell.style.fontWeight = 'bold';
+        }
+    }
+    
+    // 自動計算かどうかを判定
+    isAutoCalculated(history) {
+        // Djangoのkenren_priceフィールドが空またはnullの場合は自動計算
+        // ここではDjangoから渡されたデータをチェックする必要がある
+        const histories = JSON.parse(this.getAttribute('histories') || '[]');
+        const currentHistory = histories.find(h => h.id === history.id);
+        if (currentHistory) {
+            // kenren_priceフィールドが空の場合は自動計算
+            return !currentHistory.kenren_price || currentHistory.kenren_price === null;
+        }
+        return false;
+    }
+    
+    // 外部から呼び出し可能なメソッド（既存のJavaScriptとの互換性）
+    addNewRow() {
+        this.addPriceRow();
+    }
+}
+
+// Webコンポーネントを登録
+customElements.define('price-history-component', PriceHistoryComponent);
+
+// 既存のグローバル関数との互換性を保持
+window.addPriceRow = function() {
+    const component = document.querySelector('price-history-component');
+    if (component) {
+        component.addNewRow();
+    }
+};

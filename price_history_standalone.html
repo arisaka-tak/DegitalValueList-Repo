@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>価格改定履歴テーブル - 単体テスト</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .table-warning {
+            background-color: #fff3cd !important;
+        }
+        .marked-for-deletion {
+            background-color: #ffebee !important;
+            text-decoration: line-through !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">価格改定履歴</h5>
+                <button type="button" onclick="addPriceRow()" class="btn btn-sm btn-outline-primary">
+                    新規追加
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm" id="priceHistoryTable">
+                        <thead>
+                            <tr>
+                                <th>年度</th>
+                                <th>適用年月</th>
+                                <th>仕切価格</th>
+                                <th>県連価格</th>
+                                <th>粗利率</th>
+                                <th>改定額</th>
+                                <th>改定理由</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- サンプルデータ -->
+                            <tr data-id="1">
+                                <td>2025年度</td>
+                                <td>2025/04</td>
+                                <td>1,000</td>
+                                <td>1,100</td>
+                                <td>110.0%</td>
+                                <td>0</td>
+                                <td>年度初め価格</td>
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-outline-danger delete-btn" onclick="markForDeletion(this)">削除</button>
+                                    <input type="hidden" class="delete-flag" value="false">
+                                </td>
+                            </tr>
+                            <tr data-id="2">
+                                <td>2025年度</td>
+                                <td>2025/06</td>
+                                <td>1,050</td>
+                                <td>1,155</td>
+                                <td>110.0%</td>
+                                <td>55</td>
+                                <td>原材料費上昇</td>
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-outline-danger delete-btn" onclick="markForDeletion(this)">削除</button>
+                                    <input type="hidden" class="delete-flag" value="false">
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+
+    </div>
+
+    <script>
+        // 新規行追加機能
+        let rowIndex = 0;
+        
+        function addPriceRow() {
+            const tbody = document.querySelector('#priceHistoryTable tbody');
+            const newRow = document.createElement('tr');
+            newRow.className = 'table-warning';
+            newRow.setAttribute('data-id', 'new');
+            newRow.innerHTML = `
+                <td class="text-muted">自動算出</td>
+                <td><input type="text" class="form-control form-control-sm" name="new_effective_year_month_${rowIndex}" placeholder="YYYY/MM" required></td>
+                <td><input type="text" class="form-control form-control-sm" name="new_wholesale_price_${rowIndex}" placeholder="仕切価格"></td>
+                <td><input type="text" class="form-control form-control-sm" name="new_kenren_price_${rowIndex}" placeholder="県連価格"></td>
+                <td class="text-muted">自動算出</td>
+                <td class="text-muted">自動算出</td>
+                <td><input type="text" class="form-control form-control-sm" name="new_revision_reason_${rowIndex}" placeholder="改定理由"></td>
+                <td><button type="button" class="btn btn-sm btn-outline-secondary" onclick="removeNewRow(this)">取消</button></td>
+            `;
+            tbody.insertBefore(newRow, tbody.firstChild);
+            rowIndex++;
+        }
+        
+        // 新規行削除機能
+        function removeNewRow(button) {
+            button.closest('tr').remove();
+        }
+        
+        // 削除マーク機能
+        function markForDeletion(button) {
+            const row = button.closest('tr');
+            const deleteFlag = row.querySelector('.delete-flag');
+            
+            if (row.classList.contains('marked-for-deletion')) {
+                // 削除マークを解除
+                row.classList.remove('marked-for-deletion');
+                row.style.backgroundColor = '';
+                row.style.textDecoration = '';
+                button.textContent = '削除';
+                button.className = 'btn btn-sm btn-outline-danger delete-btn';
+                deleteFlag.value = 'false';
+            } else {
+                // 削除マークを付与
+                row.classList.add('marked-for-deletion');
+                row.style.backgroundColor = '#ffebee';
+                row.style.textDecoration = 'line-through';
+                button.textContent = '取消';
+                button.className = 'btn btn-sm btn-secondary delete-btn';
+                deleteFlag.value = 'true';
+            }
+        }
+        
+
+    </script>
+</body>
+</html>

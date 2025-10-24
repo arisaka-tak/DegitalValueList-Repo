@@ -92,7 +92,7 @@
                         </div>
                     </div>
                     <div class="card-body" id="price-history-container">
-                        {% include 'products_master/partials/price_history_table.html' %}
+                        <price-history-component histories='{{ price_histories_json|default:"[]" }}'></price-history-component>
                     </div>
                 </div>
             </div>
@@ -119,60 +119,23 @@
     .table-warning {
         background-color: #fff3cd !important;
     }
-    
-
+    .editable-cell {
+        cursor: pointer;
+        background-color: #f8f9fa;
+    }
+    .editable-cell:hover {
+        background-color: #e9ecef;
+    }
+    .table-secondary {
+        background-color: #e9ecef !important;
+    }
+    .table-secondary td {
+        color: #6c757d !important;
+    }
     </style>
     
     <script>
-    // 削除マーク機能
-    window.markForDeletion = function(button) {
-        const row = button.closest('tr');
-        const deleteFlag = row.querySelector('.delete-flag');
-        
-        if (row.classList.contains('marked-for-deletion')) {
-            // 削除マークを解除
-            row.classList.remove('marked-for-deletion');
-            row.style.backgroundColor = '';
-            row.style.textDecoration = '';
-            button.textContent = '削除';
-            button.className = 'btn btn-sm btn-outline-danger delete-btn';
-            deleteFlag.value = 'false';
-        } else {
-            // 削除マークを付与
-            row.classList.add('marked-for-deletion');
-            row.style.backgroundColor = '#ffebee';
-            row.style.textDecoration = 'line-through';
-            button.textContent = '取消';
-            button.className = 'btn btn-sm btn-secondary delete-btn';
-            deleteFlag.value = 'true';
-        }
-    }
-    
-    // 新規行追加機能
-    let rowIndex = 0;
-    window.addPriceRow = function() {
-        const tbody = document.querySelector('#priceHistoryTable tbody');
-        const newRow = document.createElement('tr');
-        newRow.className = 'table-warning';
-        newRow.setAttribute('data-id', 'new');
-        newRow.innerHTML = `
-            <td class="text-muted">自動算出</td>
-            <td><input type="text" class="form-control form-control-sm" name="new_effective_year_month_${rowIndex}" form="productForm" placeholder="YYYY/MM" required></td>
-            <td><input type="text" class="form-control form-control-sm" name="new_wholesale_price_${rowIndex}" form="productForm" placeholder="仕切価格"></td>
-            <td><input type="text" class="form-control form-control-sm" name="new_kenren_price_${rowIndex}" form="productForm" placeholder="県連価格"></td>
-            <td class="text-muted">自動算出</td>
-            <td class="text-muted">自動算出</td>
-            <td><input type="text" class="form-control form-control-sm" name="new_revision_reason_${rowIndex}" form="productForm" placeholder="改定理由"></td>
-            <td><button type="button" class="btn btn-sm btn-outline-secondary" onclick="removeNewRow(this)">取消</button></td>
-        `;
-        tbody.insertBefore(newRow, tbody.firstChild);
-        rowIndex++;
-    }
-    
-    // 新規行削除機能
-    window.removeNewRow = function(button) {
-        button.closest('tr').remove();
-    }
+    // 価格履歴機能はWebコンポーネントに移行済み
     
     // 申請ボタン処理
     window.submitApplication = function(button) {
@@ -196,4 +159,8 @@
         return false;
     }
     </script>
+    
+    <!-- Webコンポーネント読み込み -->
+    {% load static %}
+    <script src="{% static 'js/components/price-history-component.js' %}"></script>
 {% endblock %}
