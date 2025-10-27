@@ -1,8 +1,10 @@
 from django.urls import path
-from .product_list import views as list_views
-from .product_detail import views as detail_views
-from .product_create import views as create_views
-from .integrated_pricelist import views as pricelist_views
+from .product_list import product_list_views as list_views
+from .product_detail import product_detail_views as detail_views
+
+from .integrated_pricelist import integrated_pricelist_views as pricelist_views
+from .ai_price_extract import ai_price_extract_views as ai_views
+from .product_delete import product_delete_views as delete_views
 
 app_name = 'products_master'
 
@@ -11,10 +13,8 @@ urlpatterns = [
     path('products/', list_views.product_list, name='product_list'),
     path('products/<int:pk>/', detail_views.product_detail, name='product_detail'),
     path('new/', detail_views.product_detail_new, name='product_new'),
-    path('products/create/', create_views.product_create, name='product_create'),
-    path('products/<int:pk>/edit/', create_views.product_edit, name='product_edit'),
-    path('products/<int:pk>/copy/', create_views.product_copy, name='product_copy'),
-    path('products/<int:pk>/delete/', create_views.product_delete, name='product_delete'),
+    path('products/<int:pk>/copy/', detail_views.product_copy, name='product_copy'),
+
     path('products/<int:product_pk>/price-history/create/', detail_views.price_history_create, name='price_history_create'),
     path('products/<int:pk>/add-row/', detail_views.add_price_row, name='add_price_row'),
     path('new/add-row/', detail_views.add_price_row, name='add_price_row_new'),
@@ -36,7 +36,10 @@ urlpatterns = [
     path('integrated-pricelist/', pricelist_views.integrated_pricelist, name='integrated_pricelist'),
     
     # AI価格抽出
-    path('ai-extract/', list_views.ai_extract, name='ai_extract'),
-    path('ai-extract/process/', list_views.ai_extract_process, name='ai_extract_process'),
-    path('ai-extract/results/', list_views.ai_extract_results, name='ai_extract_results'),
+    path('ai-extract/', ai_views.ai_extract, name='ai_extract'),
+    path('ai-extract/process/', ai_views.ai_extract_process, name='ai_extract_process'),
+    path('ai-extract/results/', ai_views.ai_extract_results, name='ai_extract_results'),
+    
+    # 商品削除
+    path('products/<int:pk>/delete/', delete_views.product_delete, name='product_delete'),
 ]

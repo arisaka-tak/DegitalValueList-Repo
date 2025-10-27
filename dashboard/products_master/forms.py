@@ -7,12 +7,13 @@ class ProductForm(forms.ModelForm):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # None値を空文字列に変換
-        for field_name, field in self.fields.items():
-            if self.instance and hasattr(self.instance, field_name):
-                value = getattr(self.instance, field_name)
-                if value is None:
-                    self.initial[field_name] = ''
+        # None値を空文字列に変換（既存インスタンスのみ）
+        if self.instance and self.instance.pk:
+            for field_name, field in self.fields.items():
+                if hasattr(self.instance, field_name):
+                    value = getattr(self.instance, field_name)
+                    if value is None:
+                        self.initial[field_name] = ''
     
     class Meta:
         model = Product

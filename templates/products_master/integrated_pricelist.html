@@ -66,7 +66,7 @@
                                         <td>{{ history.product.category }}</td>
                                         <td>{{ history.product.manufacturer }}</td>
                                         <td>
-                                            <a href="{% url 'products_master:product_detail' history.product.pk %}" 
+                                            <a href="{% url 'products_master:product_detail' history.product.pk %}?from=pricelist{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}{% if page_obj.number != 1 %}&page={{ page_obj.number }}{% endif %}" 
                                                class="text-decoration-none">
                                                 {{ history.product.product_name }}
                                             </a>

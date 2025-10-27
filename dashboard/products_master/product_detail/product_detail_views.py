@@ -79,6 +79,16 @@ def product_detail(request, pk):
     }
     return render(request, 'products_master/product_detail.html', context)
 
+def product_copy(request, pk):
+    """商品コピー（基本情報をコピーして新規作成モードで詳細画面へ）"""
+    original_product = get_object_or_404(Product, pk=pk)
+    
+    # コピーモードで詳細画面にリダイレクト（copy_fromパラメータ付き）
+    from django.urls import reverse
+    from django.http import HttpResponseRedirect
+    url = reverse('products_master:product_new') + f'?copy_from={pk}'
+    return HttpResponseRedirect(url)
+
 def save_product_and_histories(request, product=None):
     """商品情報と価格履歴を一括保存"""
     print("=== save_product_and_histories START ===")
@@ -215,19 +225,50 @@ def product_detail_new(request):
             form = ProductForm()
     
     # 新規作成用JSONデータを準備
-    product_json = json.dumps({
-        'product_number': None,
-        'product_code': '',
-        'livestock_type': '',
-        'category': '',
-        'manufacturer': '',
-        'product_name': '',
-        'model_number': '',
-        'specification': '',
-        'shipping_unit': '',
-        'shipping_fee': '',
-        'remarks': '',
-    })
+    if copy_from_id:
+        try:
+            original_product = Product.objects.get(pk=copy_from_id)
+            product_json = json.dumps({
+                'product_number': None,
+                'product_code': original_product.product_code or '',
+                'livestock_type': original_product.livestock_type or '',
+                'category': original_product.category or '',
+                'manufacturer': original_product.manufacturer or '',
+                'product_name': original_product.product_name or '',
+                'model_number': original_product.model_number or '',
+                'specification': original_product.specification or '',
+                'shipping_unit': original_product.shipping_unit or '',
+                'shipping_fee': original_product.shipping_fee or '',
+                'remarks': original_product.remarks or '',
+            })
+        except Product.DoesNotExist:
+            product_json = json.dumps({
+                'product_number': None,
+                'product_code': '',
+                'livestock_type': '',
+                'category': '',
+                'manufacturer': '',
+                'product_name': '',
+                'model_number': '',
+                'specification': '',
+                'shipping_unit': '',
+                'shipping_fee': '',
+                'remarks': '',
+            })
+    else:
+        product_json = json.dumps({
+            'product_number': None,
+            'product_code': '',
+            'livestock_type': '',
+            'category': '',
+            'manufacturer': '',
+            'product_name': '',
+            'model_number': '',
+            'specification': '',
+            'shipping_unit': '',
+            'shipping_fee': '',
+            'remarks': '',
+        })
     
     form_data_json = json.dumps({
         'product_code': form.initial.get('product_code', ''),
@@ -739,21 +780,28 @@ def check_business_rules(formatted_date, product=None, existing_dates=None):
     
     # 既存商品の場合のチェック
     if product:
-        temp_history = PriceHistory(product=product, effective_year_month=formatted_date)
-        if not temp_history.is_editable():
-            from datetime import datetime
-            today = datetime.now().strftime('%Y/%m')
+        # 既存の価格履歴との重複チェック
+        if PriceHistory.objects.filter(product=product, effective_year_month=formatted_date, is_active=True).exists():
+            raise ValueError(f'{formatted_date}の価格履歴は既に存在します。')
+        
+        # 編集可能範囲のチェック
+        from datetime import datetime
+        today = datetime.now().strftime('%Y/%m')
+        
+        # 履歴が0→1になる場合（初回登録）は過去日付も許可
+        existing_count = PriceHistory.objects.filter(product=product, is_active=True).count()
+        
+        if existing_count > 0 and formatted_date < today:
+            raise ValueError(f'操作日より前の月（{formatted_date}）は登録できません。')
+        
+        # 過去の日付の場合、編集可能な最新の履歴より前は登録不可
+        if formatted_date < today:
             latest_editable = PriceHistory.objects.filter(
                 product=product, effective_year_month__lt=today, is_active=True
             ).order_by('-effective_year_month').first()
             
-            if latest_editable:
+            if latest_editable and formatted_date <= latest_editable.effective_year_month:
                 raise ValueError(f'編集不可な範囲の日付です。{latest_editable.effective_year_month}より後の日付を入力してください。')
-            else:
-                raise ValueError('編集不可な範囲の日付です。')
-        
-        if PriceHistory.objects.filter(product=product, effective_year_month=formatted_date, is_active=True).exists():
-            raise ValueError(f'{formatted_date}の価格履歴は既に存在します。')
     
     # 2年度以上先の登録禁止
     from datetime import datetime
@@ -1102,6 +1150,18 @@ def _process_approval(approval):
                     effective_year_month=approval_history.effective_year_month,
                     is_active=True
                 ).update(is_active=False)
+                
+                # 該当年度の有効履歴が空になる場合は粗利テーブルも削除
+                remaining_count = PriceHistory.objects.filter(
+                    product=product,
+                    period_year=approval_history.period_year,
+                    is_active=True
+                ).count()
+                if remaining_count == 0:
+                    ProductGrossMarginRate.objects.filter(
+                        product=product,
+                        period_year=approval_history.period_year
+                    ).delete()
             else:
                 # 更新または新規作成の場合
                 history, created = PriceHistory.objects.get_or_create(
@@ -1158,17 +1218,18 @@ def _process_approval(approval):
         # 価格履歴を作成し、新規粗利率をテーブルに登録
         from dashboard.products_master.models import ProductGrossMarginRate
         for approval_history in approval.price_histories.filter(is_active=True):
-            PriceHistory.objects.create(
-                product=product,
-                period_year=approval_history.period_year,
-                effective_year_month=approval_history.effective_year_month,
-                gross_margin_rate=approval_history.gross_margin_rate,
-                wholesale_price=approval_history.wholesale_price,
-                kenren_price=approval_history.kenren_price,
-                retail_price=approval_history.retail_price,
-                revision_amount=approval_history.revision_amount,
-                revision_reason=approval_history.revision_reason,
-            )
+            if not approval_history.is_delete_request:
+                PriceHistory.objects.create(
+                    product=product,
+                    period_year=approval_history.period_year,
+                    effective_year_month=approval_history.effective_year_month,
+                    gross_margin_rate=approval_history.gross_margin_rate,
+                    wholesale_price=approval_history.wholesale_price,
+                    kenren_price=approval_history.kenren_price,
+                    retail_price=approval_history.retail_price,
+                    revision_amount=approval_history.revision_amount,
+                    revision_reason=approval_history.revision_reason,
+                )
             
             # 粗利率テーブルの更新（未登録または既存が0.0の場合、または申請が0.0の場合）
             margin_rate_obj, created = ProductGrossMarginRate.objects.get_or_create(

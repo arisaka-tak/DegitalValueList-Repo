@@ -16,7 +16,11 @@
                                 formmethod="post"
                                 class="btn btn-success btn-sm"
                                 onclick="return submitApplication(this)">申請</button>
-                        <a href="{% url 'products_master:product_list' %}" class="btn btn-outline-secondary btn-sm">一覧に戻る</a>
+                        {% if request.GET.from == 'pricelist' %}
+                            <a href="{% url 'products_master:integrated_pricelist' %}{% if request.GET.month or request.GET.page %}?{% if request.GET.month %}month={{ request.GET.month }}{% endif %}{% if request.GET.month and request.GET.page %}&{% endif %}{% if request.GET.page %}page={{ request.GET.page }}{% endif %}{% endif %}" class="btn btn-outline-secondary btn-sm">価格表に戻る</a>
+                        {% else %}
+                            <a href="{% url 'products_master:product_list' %}" class="btn btn-outline-secondary btn-sm">一覧に戻る</a>
+                        {% endif %}
                     </div>
                     {% if not is_new %}
                         <a href="{% url 'products_master:product_delete' product.pk %}" class="btn btn-danger btn-sm">削除</a>

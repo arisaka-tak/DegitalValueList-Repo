@@ -180,10 +180,10 @@ class PriceHistory(models.Model):
         if self.effective_year_month > today:
             return True
         
-        # 過去の価格の場合、今日より前で最新のもののみ編集可能
+        # 今月以前の価格の場合、今月以前で最新のもののみ編集可能
         latest_past_history = PriceHistory.objects.filter(
             product=self.product,
-            effective_year_month__lt=today,
+            effective_year_month__lte=today,
             is_active=True
         ).order_by('-effective_year_month').first()
         

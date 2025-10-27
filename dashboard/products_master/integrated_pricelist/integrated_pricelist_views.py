@@ -67,7 +67,7 @@ def integrated_pricelist(request):
     price_histories = price_histories.order_by('product__product_number', '-effective_year_month')
     
     # ページネーション
-    paginator = Paginator(price_histories, 50)  # 50件ずつ表示
+    paginator = Paginator(price_histories, 200)  # 200件ずつ表示
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
     
