@@ -1,67 +1,91 @@
 # 開発ガイドライン
 
-## HTMX開発思想
+## Web Components + サーバーサイド中心開発思想
 
-このプロジェクトはHTMXの「HTML over the wire」思想に基づいて開発します。
+このプロジェクトは **サーバーサイド中心 + Web Components** の思想に基づいて開発します。
 
 ### 基本原則
 
-1. **サーバーサイド中心**: ロジックはサーバーサイド（Django）で処理
-2. **最小限のJavaScript**: 必要最小限のJSのみ使用
-3. **宣言的HTML**: HTMX属性でインタラクションを定義
-4. **シンプルな通信**: 1つのリクエストで必要な処理を完結
+1. **サーバーサイド中心**: ビジネスロジックはサーバーサイド（Django）で処理
+2. **Web Components**: 再利用可能なUI部品として実装
+3. **最小限のJavaScript**: 必要最小限の動的機能のみ
+4. **申請・承認ワークフロー**: データ更新は申請・承認で管理
 
 ## フロントエンド規約
 
-### HTMLテンプレート
+### Web Components実装
+
+```javascript
+// ✅ 良い例: Web Componentsで再利用可能なUI部品
+class ProductBasicInfoComponent extends HTMLElement {
+    connectedCallback() {
+        this.render();
+    }
+    
+    render() {
+        const productData = JSON.parse(this.getAttribute('product-data') || '{}');
+        // テンプレートレンダリング
+    }
+}
+
+customElements.define('product-basic-info-component', ProductBasicInfoComponent);
+```
 
 ```html
-<!-- ✅ 良い例: HTMXで宣言的に定義 -->
-<button hx-post="/api/save/" 
-        hx-include="#form1, #form2" 
-        hx-target="#result">
-    保存
-</button>
+<!-- ✅ 良い例: Web Componentsの使用 -->
+<product-basic-info-component 
+    product-data='{{ product_json }}'
+    form-data='{{ form_data_json }}'>
+</product-basic-info-component>
 
-<!-- ❌ 悪い例: JavaScriptで複雑な処理 -->
-<button onclick="complexSaveFunction()">保存</button>
+<!-- ❌ 悪い例: 複雑なJavaScript処理 -->
+<div id="complex-form" onload="initComplexForm()"></div>
 ```
 
 ### JavaScript使用ルール
 
-- **使用OK**: DOM操作（表示/非表示、スタイル変更）
-- **使用NG**: API通信、複雑なビジネスロジック
+- **使用OK**: Web Components内のDOM操作、イベントハンドリング
+- **使用NG**: 直接のAPI通信、グローバル状態管理
 
 ```javascript
-// ✅ 良い例: シンプルなDOM操作
-function toggleVisibility(element) {
-    element.style.display = element.style.display === 'none' ? 'block' : 'none';
+// ✅ 良い例: Web Components内のシンプルな処理
+renderField(fieldName, productData, formData) {
+    const value = productData[fieldName] || '';
+    const formValue = formData[fieldName] !== undefined ? formData[fieldName] : value;
+    return `<input type="text" value="${this.escapeHtml(formValue)}">`;
 }
 
-// ❌ 悪い例: 複雑なAPI通信
-function saveAllData() {
-    Promise.all([fetch('/api1'), fetch('/api2')]).then(...)
+// ❌ 悪い例: 複雑な状態管理
+class GlobalStateManager {
+    async saveAllData() {
+        // 複雑な処理...
+    }
 }
 ```
 
 ## バックエンド規約
 
-### ビュー設計
+### 申請・承認ワークフロー
 
 ```python
-def my_view(request):
-    if request.method == 'POST':
-        # 一括処理: 画面の全データを処理
-        return process_all_data(request)
-    else:
-        # 表示処理
-        return render(request, 'template.html', context)
+def product_detail(request, pk):
+    """商品詳細画面（閲覧モード）"""
+    product = get_object_or_404(Product, pk=pk)
+    # 表示のみ、編集は申請で実施
+    return render(request, 'product_detail.html', context)
 
-def process_all_data(request):
-    """画面の全データを一括処理"""
+def submit_approval(request, pk=None):
+    """申請テーブルにデータをコピー"""
     # 1. バリデーション
-    # 2. データ保存/更新/削除
-    # 3. レスポンス返却
+    # 2. 申請テーブルにコピー
+    # 3. 元テーブルのステータスを「申請中」に更新
+    pass
+
+def approve_application(request, pk):
+    """申請を承認して本テーブルに反映"""
+    # 1. 申請テーブルからデータ取得
+    # 2. 本テーブルに反映
+    # 3. 申請テーブルから削除
     pass
 ```
 
@@ -70,38 +94,38 @@ def process_all_data(request):
 #### フォームフィールド命名規則
 
 ```html
-<!-- 新規データ -->
-<input name="new_field_0" value="...">
-<input name="new_field_1" value="...">
+<!-- 新規価格履歴 -->
+<input name="new_effective_year_month_0" value="2025/10">
+<input name="new_wholesale_price_0" value="1000">
+<input name="new_kenren_price_0" value="1100">
 
-<!-- 既存データ更新 -->
-<input name="edit_field_123" value="...">  <!-- 123はレコードID -->
+<!-- 既存価格履歴更新 -->
+<input name="edit_wholesale_price_123" value="1200">  <!-- 123は履歴ID -->
+<input name="edit_kenren_price_123" value="1320">
 
 <!-- 削除フラグ -->
 <input type="hidden" name="delete_123" value="true">
 ```
 
-#### サーバーサイド処理
+#### 申請テーブル処理
 
 ```python
-def process_all_data(request):
-    # 新規データ処理
+def submit_approval(request, pk=None):
+    # 新規履歴を申請テーブルに追加
     for key, value in request.POST.items():
-        if key.startswith('new_'):
-            # 新規作成処理
-            pass
+        if key.startswith('new_effective_year_month_') and value.strip():
+            index = key.split('_')[-1]
+            # PriceHistoryApprovalに保存
     
-    # 更新データ処理
-    for key, value in request.POST.items():
-        if key.startswith('edit_'):
-            # 更新処理
-            pass
+    # 既存履歴の更新内容を申請テーブルにコピー
+    for history in product.price_histories.filter(is_active=True):
+        wholesale_price = request.POST.get(f'edit_wholesale_price_{history.pk}', '')
+        # 更新内容をPriceHistoryApprovalに保存
     
-    # 削除データ処理
+    # 削除申請処理
     for key, value in request.POST.items():
         if key.startswith('delete_') and value == 'true':
-            # 削除処理
-            pass
+            # is_delete_request=Trueで保存
 ```
 
 ## ファイル構成規約
@@ -111,101 +135,118 @@ def process_all_data(request):
 ```
 templates/
 ├── base.html                    # ベーステンプレート
-├── app_name/
-│   ├── list.html               # 一覧画面
-│   ├── detail.html             # 詳細画面
-│   └── partials/               # HTMX用部分テンプレート
-│       ├── table.html          # テーブル全体
-│       ├── row.html            # テーブル行
-│       └── form_section.html   # フォーム部分
+├── components/                  # 共通コンポーネント
+│   ├── breadcrumb.html
+│   ├── page_header.html
+│   └── bottom_action_bar.html
+└── products_master/
+    ├── product_list.html        # 商品一覧
+    ├── product_detail.html      # 商品詳細
+    ├── integrated_pricelist.html # デジタル価格表
+    └── partials/               # 部分テンプレート
+        └── price_history_table.html
+```
+
+### Web Components構成
+
+```
+static/js/components/
+├── product-basic-info-component.js
+└── price-history-component.js
 ```
 
 ### ビュー構成
 
 ```
-views/
-├── __init__.py
-├── list_views.py               # 一覧系ビュー
-├── detail_views.py             # 詳細系ビュー
-└── api_views.py                # HTMX用APIビュー
+products_master/
+├── product_list/
+│   └── product_list_views.py
+├── product_detail/
+│   └── product_detail_views.py
+└── integrated_pricelist/
+    └── integrated_pricelist_views.py
 ```
 
 ## 実装パターン
 
-### 1. 一覧画面パターン
+### 1. Web Componentsパターン
 
 ```html
-<!-- 検索フォーム -->
-<form hx-get="/search/" hx-target="#results">
-    <input name="q" type="search">
-    <button type="submit">検索</button>
-</form>
+<!-- 商品基本情報コンポーネント -->
+<product-basic-info-component 
+    product-data='{{ product_json }}'
+    form-data='{{ form_data_json }}'
+    editable="true"
+    is-new="{{ is_new|yesno:'true,false' }}">
+</product-basic-info-component>
 
-<!-- 結果表示エリア -->
-<div id="results">
-    {% include 'partials/table.html' %}
-</div>
+<!-- 価格履歴コンポーネント -->
+<price-history-component 
+    histories='{{ price_histories_json }}'>
+</price-history-component>
 ```
 
-### 2. 詳細画面パターン
+### 2. 申請フォームパターン
 
 ```html
-<!-- 一括保存フォーム -->
-<form id="mainForm">
-    <!-- 基本情報 -->
-    <!-- 関連データ -->
+<!-- 一括申請フォーム -->
+<form id="productForm" method="post">
+    {% csrf_token %}
+    <!-- Web Componentsがフォームフィールドを生成 -->
 </form>
 
-<!-- 保存ボタン -->
-<button hx-post="/save/" 
-        hx-include="#mainForm" 
-        hx-target="body">
-    保存
+<!-- 申請ボタン -->
+<button type="submit" 
+        form="productForm"
+        formaction="{% url 'submit_approval' %}"
+        onclick="return submitApplication(this)">
+    申請
 </button>
 ```
 
-### 3. 動的追加パターン
+### 3. 承認フローパターン
 
 ```html
-<!-- 追加ボタン -->
-<button hx-get="/add-row/" 
-        hx-target="#container">
-    行追加
+<!-- 承認ボタン -->
+<button onclick="acceptApplication()" 
+        class="btn btn-success">
+    承認
 </button>
 
-<!-- コンテナ -->
-<div id="container">
-    {% include 'partials/table.html' %}
-</div>
+<button onclick="rejectApplication()" 
+        class="btn btn-danger">
+    却下
+</button>
 ```
 
 ## 禁止事項
 
 ### ❌ やってはいけないこと
 
-1. **複雑なJavaScript**: 複数のfetch()を組み合わせた処理
-2. **差分更新**: 個別のフィールド更新API
-3. **クライアントサイドバリデーション**: サーバーサイドで実施
-4. **状態管理**: JavaScriptでの複雑な状態管理
+1. **直接データ更新**: 申請・承認を経ずに本テーブルを更新
+2. **複雑なJavaScript**: Web Components外での複雑な処理
+3. **グローバル状態**: JavaScriptでのグローバル状態管理
+4. **余計な修正**: 目的外のコード変更でバグを混入
 
 ### ✅ 推奨すること
 
-1. **サーバーサイド処理**: 全ロジックをDjangoで実装
-2. **一括処理**: 1つのリクエストで完結
-3. **宣言的HTML**: HTMX属性での定義
-4. **シンプルなJS**: DOM操作のみ
+1. **申請・承認フロー**: 全てのデータ更新はワークフローで管理
+2. **Web Components**: 再利用可能なUI部品として実装
+3. **サーバーサイド処理**: ビジネスロジックはDjangoで実装
+4. **最小限の修正**: 目的に必要な最小限のコード変更
 
 ## レビューチェックリスト
 
 新機能実装時は以下をチェック：
 
-- [ ] JavaScriptでAPI通信していないか？
-- [ ] 1つのリクエストで処理が完結するか？
-- [ ] HTMX属性で宣言的に定義されているか？
-- [ ] サーバーサイドで一括処理されているか？
+- [ ] 申請・承認フローを経ているか？
+- [ ] Web Componentsで再利用可能に実装されているか？
+- [ ] ビジネスロジックがサーバーサイドにあるか？
 - [ ] 命名規則に従っているか？
+- [ ] 余計なコード変更がないか？
 
 ## 参考資料
 
-- [HTMX公式ドキュメント](https://htmx.org/)
-- [HTML over the wire思想](https://hotwired.dev/)
+- [Web Components MDN](https://developer.mozilla.org/ja/docs/Web/Web_Components)
+- [Django 公式ドキュメント](https://docs.djangoproject.com/)
+- [Bootstrap 5.1.3](https://getbootstrap.com/docs/5.1/)

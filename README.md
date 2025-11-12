@@ -1,14 +1,14 @@
 # デジタル価格表システム
 
-Django + HTMX で構築された商品価格管理システム
+Django + Web Components で構築された商品価格管理システム
 
 ## 開発思想
 
-このプロジェクトは **HTMX の「HTML over the wire」思想** に基づいて開発されています。
+このプロジェクトは **サーバーサイド中心 + Web Components** の思想に基づいて開発されています。
 
 - サーバーサイド中心のアーキテクチャ
-- 最小限のJavaScript
-- 宣言的なHTML属性でのインタラクション定義
+- Web Components による再利用可能なUI部品
+- 最小限のJavaScriptでの動的機能
 
 ## 開発ガイドライン
 
@@ -24,18 +24,16 @@ ZCS_DegitalValueList/
 ├── dashboard/
 │   └── products_master/       # 商品マスタ管理アプリ
 │       ├── product_list/      # 商品一覧機能
-│       ├── product_detail/    # 商品詳細・承認機能
-│       ├── product_create/    # 商品作成・編集機能
+│       ├── product_detail/    # 商品詳細・申請機能
 │       └── integrated_pricelist/ # デジタル価格表機能
 ├── templates/                 # HTMLテンプレート
 │   ├── components/           # 共通コンポーネント
 │   └── products_master/      # 商品マスタ用テンプレート
 ├── static/                   # 静的ファイル（CSS/JS）
+│   └── js/components/        # Web Components
 ├── digital_pricelist_system/ # プロジェクト設定
 │   ├── breadcrumbs.py       # パンくずリスト管理
 │   └── utils.py             # 共通ユーティリティ
-├── DEVELOPMENT_GUIDELINES.md # 開発ガイドライン
-├── TECHNICAL_CONVENTIONS.md  # 技術的約束事
 └── Django_run.py            # 開発サーバー起動スクリプト
 ```
 
@@ -79,10 +77,10 @@ python manage.py runserver
 
 ### 商品マスタ管理
 - 商品一覧・検索・ページネーション
-- 商品詳細・リアルタイム編集（HTMX）
+- 商品詳細・編集（Web Components）
 - 価格履歴管理・動的追加・削除
 - 粗利率自動算出・県連価格計算
-- 商品コピー機能
+- 商品コピー機能・申請機能
 
 ### 承認ワークフロー
 - 新規作成・更新・削除申請
@@ -91,27 +89,29 @@ python manage.py runserver
 - 一括承認・個別承認・却下機能
 
 ### デジタル価格表
-- 指定月時点での価格表表示
+- 指定月時点での価格表表示（200件/ページ）
 - 最新価格履歴の自動選択
-- ページネーション対応
+- 商品詳細への直接リンク
+- 検索状態保持機能
 
 ### 技術スタック
-- **Backend**: Django 4.2.7
-- **Frontend**: HTMX 1.9.10 + Bootstrap 5.1.3
-- **Database**: SQLite (開発) / PostgreSQL (本番予定)
-- **UI/UX**: サイドナビゲーション + レスポンシブデザイン
+- **Backend**: Django 5.2
+- **Frontend**: Web Components + Bootstrap 5.1.3
+- **Database**: SQLite (開発)
+- **UI/UX**: サイドナビゲーション + レスポンシブデザイン + 固定ボトムバー
 
 ## 開発ルール
 
 ### ✅ 推奨
 - サーバーサイドでのロジック処理
-- HTMX属性での宣言的定義
-- 1つのリクエストでの一括処理
+- Web Componentsでの再利用可能なUI部品
+- 申請・承認ワークフローの活用
+- 最小限のコード修正
 
 ### ❌ 禁止
 - 複雑なJavaScript処理
 - クライアントサイドでのAPI通信
-- 個別フィールドの差分更新
+- 余計な修正によるバグの混入
 
 ## コミット規約
 

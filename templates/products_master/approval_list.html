@@ -14,20 +14,11 @@
         <!-- 検索フォーム -->
         <div class="row mb-4">
             <div class="col-12">
-                <div class="card">
-                    <div class="card-body">
-                        <form method="GET" class="row g-3">
-                            <div class="col-md-8">
-                                <input type="text" class="form-control" name="search" 
-                                       value="{{ search_query }}" placeholder="商品名、メーカー、商品コードで検索">
-                            </div>
-                            <div class="col-md-4">
-                                <button type="submit" class="btn btn-primary">検索</button>
-                                <a href="{% url 'products_master:approval_list' %}" class="btn btn-outline-secondary">クリア</a>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+                <search-form-component 
+                    search-query="{{ search_query }}"
+                    placeholder="商品名、メーカー、商品コードで検索"
+                    clear-url="{% url 'products_master:approval_list' %}">
+                </search-form-component>
             </div>
         </div>
 
@@ -112,4 +103,7 @@
             </div>
         </div>
     </div>
+    
+    <!-- Webコンポーネント読み込み -->
+    <script src="{% static 'js/components/search-form-component.js' %}"></script>
 {% endblock %}

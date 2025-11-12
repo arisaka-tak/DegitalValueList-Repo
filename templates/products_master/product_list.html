@@ -20,6 +20,17 @@
             {% endfor %}
         {% endif %}
 
+        <!-- 検索フォーム -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <search-form-component 
+                    search-query="{{ search_query }}"
+                    placeholder="商品名、メーカー、商品コードで検索"
+                    clear-url="{% url 'products_master:product_list' %}">
+                </search-form-component>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-body">
                 {% if page_obj %}
@@ -113,4 +124,8 @@
             </div>
         </div>
     </div>
+    
+    <!-- Webコンポーネント読み込み -->
+    {% load static %}
+    <script src="{% static 'js/components/search-form-component.js' %}"></script>
 {% endblock %}
