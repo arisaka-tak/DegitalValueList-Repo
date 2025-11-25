@@ -43,15 +43,19 @@ def ai_extract_process(request):
         
         # 結果画面に渡すためセッションに保存
         print("Debug: Saving to session...")
-        print(f"Results type: {type(results)}")
-        if 'results' in results:
-            for i, result in enumerate(results['results']):
-                if 'candidates' in result:
-                    for j, candidate in enumerate(result['candidates']):
-                        print(f"Candidate {i}-{j} product type: {type(candidate.get('product'))}")
+        print(f"Results: {results}")
+        
+        # セッション保存前の状態確認
+        for i, result in enumerate(results.get('results', [])):
+            print(f"Before session - Product {i}: status={result.get('status')}, candidates={len(result.get('candidates', []))}")
         
         request.session['ai_extract_results'] = results
         request.session['ai_extract_json'] = json_data
+        
+        # セッション保存後の確認
+        saved_results = request.session.get('ai_extract_results')
+        for i, result in enumerate(saved_results.get('results', [])):
+            print(f"After session - Product {i}: status={result.get('status')}, candidates={len(result.get('candidates', []))}")
         
         return JsonResponse({'success': True, 'redirect_url': '/products/ai-extract/results/'})
         
@@ -72,6 +76,12 @@ def ai_extract_results(request):
     """照合結果表示画面"""
     results = request.session.get('ai_extract_results')
     json_data = request.session.get('ai_extract_json')
+    
+    # デバッグ: セッションから取得したデータを確認
+    print(f"Debug: Retrieved from session - results type: {type(results)}")
+    if results and 'results' in results:
+        for i, result in enumerate(results['results']):
+            print(f"Retrieved - Product {i}: status={result.get('status')}, candidates={len(result.get('candidates', []))}")
     
     if not results or not json_data:
         messages.error(request, '照合結果が見つかりません。再度実行してください。')

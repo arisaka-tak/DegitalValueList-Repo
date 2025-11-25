@@ -49,13 +49,14 @@ def normalize_text(text):
     return text
 
 
-def find_similar_products(extracted_data, threshold=70):
+def find_similar_products(extracted_data, threshold=70, debug=False):
     """
     抽出されたデータから類似商品を検索
     
     Args:
         extracted_data (dict): AI抽出データ
         threshold (int): 類似度閾値
+        debug (bool): デバッグ情報出力
     
     Returns:
         list: 候補商品リスト
@@ -78,6 +79,7 @@ def find_similar_products(extracted_data, threshold=70):
         products = Product.objects.all()
     
     candidates = []
+    debug_info = []
     
     for product in products:
         # 商品マスタ側の検索対象テキスト（全パターン）
@@ -135,6 +137,15 @@ def find_similar_products(extracted_data, threshold=70):
             normalize_text(search_keywords['model_number']) == normalize_text(product.model_number)):
             max_score += 15
         
+        # デバッグ情報収集
+        if debug:
+            debug_info.append({
+                'product_name': product.product_name,
+                'score': max_score,
+                'matched_field': best_match_field,
+                'threshold': threshold
+            })
+        
         # 閾値以上の場合のみ候補に追加
         if max_score >= threshold:
             candidates.append({
@@ -152,6 +163,16 @@ def find_similar_products(extracted_data, threshold=70):
                 'manufacturer': product.manufacturer or '-',
                 'product_number': product.product_number,
             })
+    
+    # デバッグ情報出力
+    if debug:
+        print(f"\n=== デバッグ情報: {extracted_data.get('product_name', 'Unknown')} ===")
+        print(f"検索対象: {search_keywords}")
+        print(f"商品数: {len(debug_info)}")
+        for info in sorted(debug_info, key=lambda x: x['score'], reverse=True)[:5]:
+            print(f"  {info['product_name']}: {info['score']}点 ({info['matched_field']})")
+        print(f"閾値: {threshold}点")
+        print(f"マッチ数: {len(candidates)}")
     
     # スコア順でソート
     return sorted(candidates, key=lambda x: x['score'], reverse=True)[:10]
@@ -187,8 +208,8 @@ def process_extraction_results(json_data):
             })
             continue
         
-        # 商品照合実行
-        candidates = find_similar_products(product_data)
+        # 商品照合実行（デバッグ有効）
+        candidates = find_similar_products(product_data, debug=True)
         
         results.append({
             'index': i,
