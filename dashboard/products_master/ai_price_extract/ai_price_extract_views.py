@@ -125,7 +125,7 @@ def _process_ai_extract_submission(request, results, json_data):
         print(f"Debug: effective_year_month = {effective_year_month}")
         if not effective_year_month:
             messages.error(request, '適用年月を指定してください。')
-            return redirect('products_master:ai_extract_results')
+            return redirect(request.path)
         
         # 年月をdatetimeに変換
         effective_date = datetime.strptime(effective_year_month, '%Y-%m').date()
@@ -176,6 +176,10 @@ def _process_ai_extract_submission(request, results, json_data):
                 }
             )
             
+            # フォームデータを優先的に使用（データベースに保存済み）
+            product_match = request.POST.get(f'product_match_{i}')
+            print(f"Debug: Using form data product_match_{i} = {product_match}")
+            
             # 既に確定済み（スキップ・申請済）のデータは処理しない
             if detail.status in ['スキップ', '申請済']:
                 continue
@@ -209,7 +213,7 @@ def _process_ai_extract_submission(request, results, json_data):
             
             # 申請テーブルでの重複チェック
             existing_approval = ProductApproval.objects.filter(
-                product_number=product.product_number,
+                product_number=product.pk,
                 is_active=True
             ).first()
             if existing_approval:
@@ -378,6 +382,29 @@ def ai_extract_rematch(request):
         
         if results and 'results' in results and len(results['results']) > 0:
             result = results['results'][0]
+            
+            # 候補に現在の仕切価格情報を追加
+            from datetime import datetime
+            today = datetime.now().strftime('%Y/%m')
+            
+            for candidate in result.get('candidates', []):
+                product_pk = candidate.get('product', {}).get('pk')
+                if product_pk:
+                    try:
+                        product = Product.objects.get(pk=product_pk)
+                        current_price_history = product.price_histories.filter(
+                            effective_year_month__lte=today,
+                            is_active=True
+                        ).order_by('-effective_year_month').first()
+                        
+                        current_wholesale_price = '-'
+                        if current_price_history:
+                            current_wholesale_price = current_price_history.wholesale_price or '-'
+                        
+                        candidate['product']['current_wholesale_price'] = current_wholesale_price
+                    except Product.DoesNotExist:
+                        candidate['product']['current_wholesale_price'] = '-'
+            
             print(f"Debug: API returning result: {result}")
             return JsonResponse({
                 'success': True,
@@ -532,3 +559,118 @@ def ai_extract_pdf_api(request):
         return JsonResponse({'error': str(e)}, status=400)
     except Exception as e:
         return JsonResponse({'error': f'予期しないエラー: {str(e)}'}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def ai_extract_update_detail(request):
+    """AI抽出履歴の明細データを更新"""
+    try:
+        print(f"Debug: Request body: {request.body}")
+        data = json.loads(request.body)
+        print(f"Debug: Parsed data: {data}")
+        transaction_pk = data.get('transaction_pk')
+        sequence = data.get('sequence')
+        field = data.get('field')
+        value = data.get('value')
+        
+        print(f"Debug: transaction_pk={transaction_pk}, sequence={sequence}, field={field}, value={value}")
+        
+        # 一括更新か単一更新かを判定
+        if 'updates' in data:
+            print(f"Debug: Batch update mode")
+        elif not all([transaction_pk, sequence, field]):
+            print(f"Debug: Missing parameters for single update")
+            return JsonResponse({'error': 'パラメータが不正です'}, status=400)
+        elif not transaction_pk:
+            print(f"Debug: Missing transaction_pk")
+            return JsonResponse({'error': 'トランザクションIDが必要です'}, status=400)
+        
+        # 明細データを取得
+        detail = AIExtractTransactionDetail.objects.get(
+            transaction__pk=transaction_pk,
+            sequence=int(sequence)
+        )
+        
+        # 一括更新の場合
+        if 'updates' in data:
+            updates = data.get('updates', [])
+            for update in updates:
+                sequence = update.get('sequence')
+                field = update.get('field')
+                value = update.get('value')
+                
+                try:
+                    detail = AIExtractTransactionDetail.objects.get(
+                        transaction__pk=transaction_pk,
+                        sequence=sequence
+                    )
+                    
+                    if field == 'extracted_price':
+                        detail.extracted_price = str(value) if value else ''
+                    elif field == 'extracted_revision_reason':
+                        detail.extracted_revision_reason = str(value) if value else ''
+                    elif field == 'matched_product':
+                        if value:
+                            try:
+                                product = Product.objects.get(pk=value)
+                                detail.matched_product = product
+                                detail.selected_candidate_text = f"{detail.match_score or 0}% - {product.product_name}"
+                            except Product.DoesNotExist:
+                                detail.matched_product = None
+                                detail.selected_candidate_text = 'スキップ'
+                        else:
+                            detail.matched_product = None
+                            detail.selected_candidate_text = 'スキップ'
+                    
+                    detail.save()
+                    
+                except AIExtractTransactionDetail.DoesNotExist:
+                    continue
+        
+        # 単一更新の場合（後方互換性のため保持）
+        else:
+            field = data.get('field')
+            value = data.get('value')
+            
+            if field == 'extracted_price':
+                detail.extracted_price = str(value) if value else ''
+            elif field == 'extracted_revision_reason':
+                detail.extracted_revision_reason = str(value) if value else ''
+            elif field == 'extracted_product_name':
+                detail.extracted_product_name = str(value) if value else ''
+            elif field == 'extracted_model_number':
+                detail.extracted_model_number = str(value) if value else ''
+            elif field == 'extracted_specification':
+                detail.extracted_specification = str(value) if value else ''
+            elif field == 'extracted_manufacturer':
+                detail.extracted_manufacturer = str(value) if value else ''
+            elif field == 'matched_product':
+                if value:
+                    try:
+                        product = Product.objects.get(pk=value)
+                        detail.matched_product = product
+                        detail.selected_candidate_text = f"{detail.match_score or 0}% - {product.product_name}"
+                    except Product.DoesNotExist:
+                        detail.matched_product = None
+                        detail.selected_candidate_text = 'スキップ'
+                else:
+                    detail.matched_product = None
+                    detail.selected_candidate_text = 'スキップ'
+            
+            detail.save()
+        
+        print(f"Debug: Update successful")
+        return JsonResponse({'success': True})
+        
+    except AIExtractTransactionDetail.DoesNotExist as e:
+        print(f"Debug: Detail not found: {e}")
+        return JsonResponse({'error': '明細データが見つかりません'}, status=404)
+    except json.JSONDecodeError as e:
+        print(f"Debug: JSON decode error: {e}")
+        return JsonResponse({'error': 'JSONデータが不正です'}, status=400)
+    except Exception as e:
+        print(f"Debug: Unexpected error: {e}")
+        import traceback
+        print(f"Debug: Traceback: {traceback.format_exc()}")
+        return JsonResponse({'error': f'処理エラー: {str(e)}'}, status=500)

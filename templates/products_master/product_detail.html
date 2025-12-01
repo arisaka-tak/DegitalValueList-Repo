@@ -42,9 +42,10 @@
                                 form-data='{{ form_data_json|default:"{}" }}'
                                 editable="true"
                                 is-new="{{ is_new|yesno:'true,false' }}"
-                                diff-flags='{{ diff_flags_json|default:"{}" }}'>
+                                diff-flags='{{ diff_flags_json|default:"{}" }}'
+                                error-fields='{{ error_fields_json|default:"[]" }}'>
                             </product-basic-info-component>
-                        <!-- フォーム終了タグを価格履歴の後に移動 -->
+                        </form>
                     </div>
                 </div>
             </div>
@@ -90,7 +91,6 @@
                 {% include 'components/price_history_section.html' with section_title="価格改定履歴" show_diff_note=False show_add_button=True histories_json=price_histories_json|default:"[]" mode="edit" show_diff=False editable=True %}
             </div>
         </div>
-                        </form>
     </div>
 
     <!-- ボトムアクションバー -->
@@ -143,8 +143,37 @@
         button.disabled = true;
         button.textContent = '処理中...';
         
-        // フォームをPOSTで送信
+        // フォームを取得
         const form = document.getElementById('productForm');
+        
+        // ページ内のすべての入力要素をフォームに追加
+        const allInputs = document.querySelectorAll('input, textarea, select');
+        console.log('Found inputs:', allInputs.length);
+        
+        allInputs.forEach(input => {
+            console.log(`Input: name="${input.name}", value="${input.value}", type="${input.type}"`);
+            if (input.name && !form.querySelector(`[name="${input.name}"]`)) {
+                const hiddenInput = document.createElement('input');
+                hiddenInput.type = 'hidden';
+                hiddenInput.name = input.name;
+                hiddenInput.value = input.value;
+                form.appendChild(hiddenInput);
+                console.log(`Added hidden input: ${input.name} = ${input.value}`);
+            } else if (input.name) {
+                console.log(`Skipped (already exists): ${input.name}`);
+            } else {
+                console.log(`Skipped (no name): ${input.type}`);
+            }
+        });
+        
+        // フォームの内容を確認
+        const formData = new FormData(form);
+        console.log('Final form data:');
+        for (let [key, value] of formData.entries()) {
+            console.log(`  ${key}: ${value}`);
+        }
+        
+        // フォームをPOSTで送信
         form.method = 'post';
         form.action = button.getAttribute('formaction');
         form.submit();

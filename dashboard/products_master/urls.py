@@ -45,6 +45,7 @@ urlpatterns = [
     path('ai-extract/pdf-process/', ai_views.ai_extract_pdf_process, name='ai_extract_pdf_process'),
     path('ai-extract/pdf-api/', ai_views.ai_extract_pdf_api, name='ai_extract_pdf_api'),
     path('ai-extract/rematch/', ai_views.ai_extract_rematch, name='ai_extract_rematch'),
+    path('ai-extract/update-detail/', ai_views.ai_extract_update_detail, name='ai_extract_update_detail'),
     path('ai-extract/history/<int:pk>/', ai_history_views.ai_extract_history_detail, name='ai_extract_history_detail'),
     path('ai-extract/history/<int:pk>/delete/', ai_history_views.ai_extract_history_delete, name='ai_extract_history_delete'),
     

@@ -52,8 +52,8 @@ def calculate_field_score(ai_text, master_text, max_points):
     matched_count = len(ai_bigrams & master_bigrams)
     match_ratio = matched_count / len(ai_bigrams)
     
-    # 50%以上のマッチでスコア付与
-    if match_ratio >= 0.5:
+    # 70%以上のマッチでスコア付与
+    if match_ratio >= 0.7:
         return int(max_points * match_ratio)
     
     return 0
@@ -151,7 +151,7 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
         if ai_product_bigrams and master_keyword_list:
             product_matched = len(ai_product_bigrams & master_keyword_list)
             product_bonus_ratio = product_matched / len(ai_product_bigrams)
-            if product_bonus_ratio >= 0.5:  # 50%以上
+            if product_bonus_ratio >= 0.7:  # 70%以上
                 bonus_score += 15
         
         # 型式由来キーワードの一致率ボーナス（AI型式 vs マスタキーワードカラム）
@@ -159,7 +159,7 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
         if ai_model_bigrams and master_keyword_list:
             model_matched = len(ai_model_bigrams & master_keyword_list)
             model_bonus_ratio = model_matched / len(ai_model_bigrams)
-            if model_bonus_ratio >= 0.5:  # 50%以上
+            if model_bonus_ratio >= 0.7:  # 70%以上
                 bonus_score += 15
         
         # メーカー名一致ボーナス（2-gram照合70%以上）
@@ -206,13 +206,12 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
                     'model_number': product.model_number,
                     'specification': product.specification,
                     'manufacturer': product.manufacturer,
-                    'product_number': product.product_number,
                 },
                 'score': min(max_score, 100),  # 100%上限
                 'matched_field': best_match_field,
                 'display_info': f"{product.product_name} | {product.model_number or '-'} | {product.specification or '-'}",
                 'manufacturer': product.manufacturer or '-',
-                'product_number': product.product_number,
+
             })
     
     # デバッグ情報出力
@@ -227,8 +226,8 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
             print(f"  最終スコア: {info['score']}点 (閾値:{threshold}点)")
             print(f"  内訳: ベース{info['base_score']} - 減点{info['penalty']} + ボーナス{info['bonus_score']} = {info['score']}")
             print(f"  基本一致率: {info['match_ratio']} ({info['matched_keywords']})")
-            print(f"  商品名ボーナス: {info.get('product_bonus_ratio', 0):.1%} → {'+15点' if info.get('product_bonus_ratio', 0) >= 0.5 else '0点'}")
-            print(f"  型式ボーナス: {info.get('model_bonus_ratio', 0):.1%} → {'+15点' if info.get('model_bonus_ratio', 0) >= 0.5 else '0点'}")
+            print(f"  商品名ボーナス: {info.get('product_bonus_ratio', 0):.1%} → {'+15点' if info.get('product_bonus_ratio', 0) >= 0.7 else '0点'}")
+            print(f"  型式ボーナス: {info.get('model_bonus_ratio', 0):.1%} → {'+15点' if info.get('model_bonus_ratio', 0) >= 0.7 else '0点'}")
             print(f"  メーカーボーナス: → {'+5点' if info.get('manufacturer_bonus', 0) > 0 else '0点'}")
             print(f"  マスターキーワード: {info['master_keywords'][:15]}{'...' if len(info['master_keywords']) > 15 else ''}")
         print(f"\n結果: {len(candidates)}件が閾値{threshold}点以上でマッチ")

@@ -65,25 +65,55 @@
                                     <td class="text-center align-middle">{{ result.index|add:1 }}</td>
                                     <td>
                                         <div id="display_{{ result.index }}">
-                                            <div class="fw-bold">{{ result.extracted_data.product_name|default:'-' }}</div>
-                                            <div class="small text-muted">
-                                                型式: {{ result.extracted_data.model_number|default:'-' }} | 
-                                                規格: {{ result.extracted_data.specification|default:'-' }}
-                                            </div>
-                                            <div class="small text-muted">{{ result.extracted_data.manufacturer|default:'-' }}</div>
+                                            {% if is_history_view and details %}
+                                                {% for detail in details %}
+                                                    {% if detail.sequence == result.index|add:1 %}
+                                                        <div class="fw-bold">{{ detail.extracted_product_name|default:'-' }}</div>
+                                                        <div class="small text-muted">
+                                                            型式: {{ detail.extracted_model_number|default:'-' }} | 
+                                                            規格: {{ detail.extracted_specification|default:'-' }}
+                                                        </div>
+                                                        <div class="small text-muted">{{ detail.extracted_manufacturer|default:'-' }}</div>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            {% else %}
+                                                <div class="fw-bold">{{ result.extracted_data.product_name|default:'-' }}</div>
+                                                <div class="small text-muted">
+                                                    型式: {{ result.extracted_data.model_number|default:'-' }} | 
+                                                    規格: {{ result.extracted_data.specification|default:'-' }}
+                                                </div>
+                                                <div class="small text-muted">{{ result.extracted_data.manufacturer|default:'-' }}</div>
+                                            {% endif %}
                                         </div>
                                         <!-- 編集モード -->
                                         <div id="edit_{{ result.index }}" style="display:none;">
-                                            <input type="text" class="form-control form-control-sm mb-1" id="product_name_{{ result.index }}" value="{{ result.extracted_data.product_name|default:'' }}" placeholder="商品名">
-                                            <div class="row g-1">
-                                                <div class="col-6">
-                                                    <input type="text" class="form-control form-control-sm" id="model_number_{{ result.index }}" value="{{ result.extracted_data.model_number|default:'' }}" placeholder="型式">
+                                            {% if is_history_view and details %}
+                                                {% for detail in details %}
+                                                    {% if detail.sequence == result.index|add:1 %}
+                                                        <input type="text" class="form-control form-control-sm mb-1" id="product_name_{{ result.index }}" value="{{ detail.extracted_product_name|default:'' }}" placeholder="商品名">
+                                                        <div class="row g-1">
+                                                            <div class="col-6">
+                                                                <input type="text" class="form-control form-control-sm" id="model_number_{{ result.index }}" value="{{ detail.extracted_model_number|default:'' }}" placeholder="型式">
+                                                            </div>
+                                                            <div class="col-6">
+                                                                <input type="text" class="form-control form-control-sm" id="specification_{{ result.index }}" value="{{ detail.extracted_specification|default:'' }}" placeholder="規格">
+                                                            </div>
+                                                        </div>
+                                                        <input type="text" class="form-control form-control-sm mt-1" id="manufacturer_{{ result.index }}" value="{{ detail.extracted_manufacturer|default:'' }}" placeholder="メーカー">
+                                                    {% endif %}
+                                                {% endfor %}
+                                            {% else %}
+                                                <input type="text" class="form-control form-control-sm mb-1" id="product_name_{{ result.index }}" value="{{ result.extracted_data.product_name|default:'' }}" placeholder="商品名">
+                                                <div class="row g-1">
+                                                    <div class="col-6">
+                                                        <input type="text" class="form-control form-control-sm" id="model_number_{{ result.index }}" value="{{ result.extracted_data.model_number|default:'' }}" placeholder="型式">
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <input type="text" class="form-control form-control-sm" id="specification_{{ result.index }}" value="{{ result.extracted_data.specification|default:'' }}" placeholder="規格">
+                                                    </div>
                                                 </div>
-                                                <div class="col-6">
-                                                    <input type="text" class="form-control form-control-sm" id="specification_{{ result.index }}" value="{{ result.extracted_data.specification|default:'' }}" placeholder="規格">
-                                                </div>
-                                            </div>
-                                            <input type="text" class="form-control form-control-sm mt-1" id="manufacturer_{{ result.index }}" value="{{ result.extracted_data.manufacturer|default:'' }}" placeholder="メーカー">
+                                                <input type="text" class="form-control form-control-sm mt-1" id="manufacturer_{{ result.index }}" value="{{ result.extracted_data.manufacturer|default:'' }}" placeholder="メーカー">
+                                            {% endif %}
                                         </div>
                                     </td>
                                     <td class="align-middle">
@@ -94,7 +124,7 @@
                                                         <span class="text-muted">{{ result.extracted_data.new_price|default:'-' }}</span>
                                                         <input type="hidden" name="new_price_{{ result.index }}" value="{{ result.extracted_data.new_price|default:'' }}">
                                                     {% else %}
-                                                        <input type="number" class="form-control form-control-sm" name="new_price_{{ result.index }}" value="{{ result.extracted_data.new_price|default:'' }}" placeholder="新仕切価格">
+                                                        <input type="number" class="form-control form-control-sm" name="new_price_{{ result.index }}" value="{{ detail.extracted_price|default:'' }}" placeholder="新仕切価格">
                                                     {% endif %}
                                                 {% endif %}
                                             {% endfor %}
@@ -110,7 +140,7 @@
                                                         <span class="text-muted">{{ result.extracted_data.revision_reason|default:'-' }}</span>
                                                         <input type="hidden" name="revision_reason_{{ result.index }}" value="{{ result.extracted_data.revision_reason|default:'' }}">
                                                     {% else %}
-                                                        <input type="text" class="form-control form-control-sm" name="revision_reason_{{ result.index }}" value="{{ result.extracted_data.revision_reason|default:'' }}" placeholder="改定理由">
+                                                        <input type="text" class="form-control form-control-sm" name="revision_reason_{{ result.index }}" value="{{ detail.extracted_revision_reason|default:'' }}" placeholder="改定理由">
                                                     {% endif %}
                                                 {% endif %}
                                             {% endfor %}
@@ -128,16 +158,59 @@
                                                             <input type="hidden" name="product_match_{{ result.index }}" value="{{ detail.matched_product.pk|default:'' }}">
                                                         {% else %}
                                                             {% if result.status == 'success' %}
-                                                                <select class="form-select form-select-sm" name="product_match_{{ result.index }}">
+                                                                <select class="form-select form-select-sm" name="product_match_{{ result.index }}" onchange="showProductDetail({{ result.index }}, this.value)">
                                                                     <option value="">-- 選択 --</option>
                                                                     {% for candidate in result.candidates %}
-                                                                    <option value="{{ candidate.product.pk }}"{% if forloop.first %} selected{% endif %}>
-                                                                        {{ candidate.score }}% [{{ candidate.product.product_number }}] {{ candidate.product.product_name|truncatechars:25 }}
+                                                                    <option value="{{ candidate.product.pk }}"{% if detail.matched_product.pk == candidate.product.pk %} selected{% endif %}>
+                                                                        {{ candidate.score }}% [{{ candidate.product.pk }}] {{ candidate.product.product_name|truncatechars:25 }}
                                                                     </option>
                                                                     {% endfor %}
                                                                     <option value="">スキップ</option>
                                                                 </select>
                                                                 <div class="small text-success mt-1">{{ result.candidates|length }}件の候補</div>
+                                                                <!-- 商品詳細カード -->
+                                                                <div id="product_detail_{{ result.index }}" class="card mt-2" style="{% if not detail.matched_product %}display:none;{% endif %}">
+                                                                    <div class="card-body p-2">
+                                                                        <div class="row g-1">
+                                                                            <div class="col-6">
+                                                                                <div class="small text-muted">現在仕切価格</div>
+                                                                                <div class="fw-bold" id="current_price_{{ result.index }}">
+                                                                                    {% if detail.matched_product %}
+                                                                                        {% for candidate in result.candidates %}
+                                                                                            {% if candidate.product.pk == detail.matched_product.pk %}
+                                                                                                {{ candidate.product.current_wholesale_price }}
+                                                                                            {% endif %}
+                                                                                        {% endfor %}
+                                                                                    {% endif %}
+                                                                                </div>
+                                                                            </div>
+                                                                            <div class="col-6">
+                                                                                <div class="small text-muted">型式</div>
+                                                                                <div id="model_{{ result.index }}">
+                                                                                    {% if detail.matched_product %}
+                                                                                        {{ detail.matched_product.model_number|default:'-' }}
+                                                                                    {% endif %}
+                                                                                </div>
+                                                                            </div>
+                                                                            <div class="col-6">
+                                                                                <div class="small text-muted">規格</div>
+                                                                                <div id="spec_{{ result.index }}">
+                                                                                    {% if detail.matched_product %}
+                                                                                        {{ detail.matched_product.specification|default:'-' }}
+                                                                                    {% endif %}
+                                                                                </div>
+                                                                            </div>
+                                                                            <div class="col-6">
+                                                                                <div class="small text-muted">メーカー</div>
+                                                                                <div id="mfg_{{ result.index }}">
+                                                                                    {% if detail.matched_product %}
+                                                                                        {{ detail.matched_product.manufacturer|default:'-' }}
+                                                                                    {% endif %}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
                                                             {% elif result.status == 'no_match' %}
                                                                 <div class="small text-warning">該当商品なし</div>
                                                                 <input type="hidden" name="product_match_{{ result.index }}" value="">
@@ -154,7 +227,7 @@
                                                         <option value="">-- 選択 --</option>
                                                         {% for candidate in result.candidates %}
                                                         <option value="{{ candidate.product.pk }}"{% if forloop.first %} selected{% endif %}>
-                                                            {{ candidate.score }}% [{{ candidate.product.product_number }}] {{ candidate.product.product_name|truncatechars:25 }}
+                                                            {{ candidate.score }}% [{{ candidate.product.pk }}] {{ candidate.product.product_name|truncatechars:25 }}
                                                         </option>
                                                         {% endfor %}
                                                         <option value="">スキップ</option>
@@ -199,13 +272,13 @@
                                                         <span class="text-muted">ロック済</span>
                                                     {% else %}
                                                         <div class="btn-group-vertical" role="group">
-                                                            <button type="button" class="btn btn-outline-primary btn-sm px-2 py-1" onclick="toggleEdit({{ result.index }})" title="編集">
+                                                            <button type="button" class="btn btn-outline-primary btn-sm px-2 py-1" onclick="toggleEdit('{{ result.index }}')" title="編集">
                                                                 ✏️
                                                             </button>
-                                                            <button type="button" class="btn btn-outline-success btn-sm px-2 py-1" onclick="reMatch({{ result.index }})" title="再照合">
+                                                            <button type="button" class="btn btn-outline-success btn-sm px-2 py-1" onclick="reMatch('{{ result.index }}')" title="再照合">
                                                                 🔄
                                                             </button>
-                                                            <button type="button" class="btn btn-outline-warning btn-sm px-2 py-1" onclick="skipProduct({{ result.index }})" title="スキップ">
+                                                            <button type="button" class="btn btn-outline-warning btn-sm px-2 py-1" onclick="skipProduct('{{ result.index }}')" title="スキップ">
                                                                 ⏭️
                                                             </button>
                                                         </div>
@@ -214,13 +287,13 @@
                                             {% endfor %}
                                         {% else %}
                                             <div class="btn-group-vertical" role="group">
-                                                <button type="button" class="btn btn-outline-primary btn-sm px-2 py-1" onclick="toggleEdit({{ result.index }})" title="編集">
+                                                <button type="button" class="btn btn-outline-primary btn-sm px-2 py-1" onclick="toggleEdit('{{ result.index }}')" title="編集">
                                                     ✏️
                                                 </button>
-                                                <button type="button" class="btn btn-outline-success btn-sm px-2 py-1" onclick="reMatch({{ result.index }})" title="再照合">
+                                                <button type="button" class="btn btn-outline-success btn-sm px-2 py-1" onclick="reMatch('{{ result.index }}')" title="再照合">
                                                     🔄
                                                 </button>
-                                                <button type="button" class="btn btn-outline-warning btn-sm px-2 py-1" onclick="skipProduct({{ result.index }})" title="スキップ">
+                                                <button type="button" class="btn btn-outline-warning btn-sm px-2 py-1" onclick="skipProduct('{{ result.index }}')" title="スキップ">
                                                     ⏭️
                                                 </button>
                                             </div>
@@ -237,12 +310,43 @@
             <!-- アクションボタン -->
             <div class="d-flex justify-content-between mt-3">
                 <a href="{% url 'products_master:ai_extract' %}" class="btn btn-secondary">戻る</a>
-                <button type="submit" class="btn btn-primary">価格履歴申請データを作成</button>
+                <button type="submit" class="btn btn-primary" onclick="return saveAllBeforeSubmit()">価格履歴申請データを作成</button>
             </div>
         </form>
     </div>
     
     <script>
+    // 商品詳細カード表示切り替え
+    function showProductDetail(index, productId) {
+        const card = document.getElementById(`product_detail_${index}`);
+        
+        if (!productId) {
+            card.style.display = 'none';
+            return;
+        }
+        
+        // 候補データから商品情報を取得
+        const candidates = window.candidatesData && window.candidatesData[index] ? window.candidatesData[index] : [];
+        const candidate = candidates.find(c => c.product.pk == productId);
+        
+        if (candidate) {
+            document.getElementById(`current_price_${index}`).textContent = candidate.product.current_wholesale_price || '-';
+            document.getElementById(`model_${index}`).textContent = candidate.product.model_number || '-';
+            document.getElementById(`spec_${index}`).textContent = candidate.product.specification || '-';
+            document.getElementById(`mfg_${index}`).textContent = candidate.product.manufacturer || '-';
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    }
+    
+    // 候補データをJavaScriptで使用できるように保存
+    window.candidatesData = {
+        {% for result in results.results %}
+        {{ result.index }}: {{ result.candidates|safe }},
+        {% endfor %}
+    };
+    
     // 編集モード切り替え
     function toggleEdit(index) {
         const display = document.getElementById(`display_${index}`);
@@ -257,6 +361,9 @@
         } else {
             // 編集内容を表示部分に反映
             updateDisplayFromEdit(index);
+            
+            // データベースに保存
+            saveEditChanges(index);
             
             display.style.display = 'block';
             edit.style.display = 'none';
@@ -344,7 +451,6 @@
             priceInput.style.backgroundColor = '#fff3cd';
         }
         
-        // スキップメッセージ表示
         const container = document.getElementById(`match_results_${index}`);
         if (container) {
             const skipMsg = container.querySelector('.skip-message');
@@ -364,13 +470,16 @@
         
         if (result.status === 'success') {
             html = `
-                <select class="form-select form-select-sm" name="product_match_${index}">
+                <select class="form-select form-select-sm" name="product_match_${index}" onchange="showProductDetail(${index}, this.value)">
                     <option value="">-- 選択 --</option>
             `;
             if (result.candidates && result.candidates.length > 0) {
+                // 候補データを更新
+                window.candidatesData[index] = result.candidates;
+                
                 result.candidates.forEach((candidate, i) => {
                     html += `<option value="${candidate.product.pk}"${i === 0 ? ' selected' : ''}>
-                        ${candidate.score}% [${candidate.product.product_number}] ${candidate.product.product_name.substring(0, 25)}
+                        ${candidate.score}% [${candidate.product.pk}] ${candidate.product.product_name.substring(0, 25)}
                     </option>`;
                 });
             }
@@ -378,20 +487,422 @@
                     <option value="">スキップ</option>
                 </select>
                 <div class="small text-success mt-1">${result.candidates ? result.candidates.length : 0}件の候補</div>
+                <!-- 商品詳細カード -->
+                <div id="product_detail_${index}" class="card mt-2" style="display:block;">
+                    <div class="card-body p-2">
+                        <div class="row g-1">
+                            <div class="col-6">
+                                <div class="small text-muted">現在仕切価格</div>
+                                <div class="fw-bold" id="current_price_${index}">${result.candidates && result.candidates[0] ? result.candidates[0].product.current_wholesale_price || '-' : '-'}</div>
+                            </div>
+                            <div class="col-6">
+                                <div class="small text-muted">型式</div>
+                                <div id="model_${index}">${result.candidates && result.candidates[0] ? result.candidates[0].product.model_number || '-' : '-'}</div>
+                            </div>
+                            <div class="col-6">
+                                <div class="small text-muted">規格</div>
+                                <div id="spec_${index}">${result.candidates && result.candidates[0] ? result.candidates[0].product.specification || '-' : '-'}</div>
+                            </div>
+                            <div class="col-6">
+                                <div class="small text-muted">メーカー</div>
+                                <div id="mfg_${index}">${result.candidates && result.candidates[0] ? result.candidates[0].product.manufacturer || '-' : '-'}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             `;
         } else if (result.status === 'no_match') {
             html = `
                 <div class="small text-warning">該当商品なし</div>
                 <input type="hidden" name="product_match_${index}" value="">
+                <div id="product_detail_${index}" class="card mt-2" style="display:none;"></div>
             `;
         } else {
             html = `
                 <div class="small text-danger">${result.message || 'エラー'}</div>
                 <input type="hidden" name="product_match_${index}" value="">
+                <div id="product_detail_${index}" class="card mt-2" style="display:none;"></div>
             `;
         }
         
         if (container) container.innerHTML = html;
+    }
+    
+    // 編集内容をデータベースに保存
+    function saveEditChanges(index) {
+        {% if is_history_view and transaction %}
+        const transactionPk = {{ transaction.pk }};
+        const sequence = index + 1;
+        
+        // 各フィールドを個別に保存
+        const priceInput = document.querySelector(`input[name="new_price_${index}"]`);
+        const reasonInput = document.querySelector(`input[name="revision_reason_${index}"]`);
+        const productSelect = document.querySelector(`select[name="product_match_${index}"]`);
+        
+        // 編集モードの入力フィールド
+        const productNameInput = document.getElementById(`product_name_${index}`);
+        const modelNumberInput = document.getElementById(`model_number_${index}`);
+        const specificationInput = document.getElementById(`specification_${index}`);
+        const manufacturerInput = document.getElementById(`manufacturer_${index}`);
+        
+        const savePromises = [];
+        
+        // 新価格を保存
+        if (priceInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_price',
+                        value: priceInput.value
+                    })
+                })
+            );
+        }
+        
+        // 改定理由を保存
+        if (reasonInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_revision_reason',
+                        value: reasonInput.value
+                    })
+                })
+            );
+        }
+        
+        // 商品選択を保存
+        if (productSelect) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'matched_product',
+                        value: productSelect.value
+                    })
+                })
+            );
+        }
+        
+        // 商品名を保存
+        if (productNameInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_product_name',
+                        value: productNameInput.value
+                    })
+                })
+            );
+        }
+        
+        // 型式を保存
+        if (modelNumberInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_model_number',
+                        value: modelNumberInput.value
+                    })
+                })
+            );
+        }
+        
+        // 規格を保存
+        if (specificationInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_specification',
+                        value: specificationInput.value
+                    })
+                })
+            );
+        }
+        
+        // メーカーを保存
+        if (manufacturerInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_manufacturer',
+                        value: manufacturerInput.value
+                    })
+                })
+            );
+        }
+        
+        // 全ての保存が完了するまで待機
+        Promise.all(savePromises)
+            .then(responses => {
+                console.log('保存成功');
+            })
+            .catch(error => {
+                console.error('保存エラー:', error);
+            });
+        {% endif %}
+    }
+    
+    // 再照合なしで保存のみ実行
+    function saveEditChangesOnly(index) {
+        {% if is_history_view and transaction %}
+        const transactionPk = {{ transaction.pk }};
+        const sequence = index + 1;
+        
+        console.log(`Saving data for index ${index}, sequence ${sequence}`);
+        
+        // 各フィールドを個別に保存（編集モードでなくても取得できるフィールド）
+        const priceInput = document.querySelector(`input[name="new_price_${index}"]`);
+        const reasonInput = document.querySelector(`input[name="revision_reason_${index}"]`);
+        const productSelect = document.querySelector(`select[name="product_match_${index}"]`);
+        
+        // 編集モードの入力フィールド（存在する場合のみ）
+        const productNameInput = document.getElementById(`product_name_${index}`);
+        const modelNumberInput = document.getElementById(`model_number_${index}`);
+        const specificationInput = document.getElementById(`specification_${index}`);
+        const manufacturerInput = document.getElementById(`manufacturer_${index}`);
+        
+        console.log(`Fields found - price: ${!!priceInput}, reason: ${!!reasonInput}, product: ${!!productSelect}, name: ${!!productNameInput}`);
+        
+        const savePromises = [];
+        
+        // 新価格を保存
+        if (priceInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_price',
+                        value: priceInput.value
+                    })
+                })
+            );
+        }
+        
+        // 改定理由を保存
+        if (reasonInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_revision_reason',
+                        value: reasonInput.value
+                    })
+                })
+            );
+        }
+        
+        // 商品選択を保存
+        if (productSelect) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'matched_product',
+                        value: productSelect.value
+                    })
+                })
+            );
+        }
+        
+        // 商品名を保存
+        if (productNameInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_product_name',
+                        value: productNameInput.value
+                    })
+                })
+            );
+        }
+        
+        // 型式を保存
+        if (modelNumberInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_model_number',
+                        value: modelNumberInput.value
+                    })
+                })
+            );
+        }
+        
+        // 規格を保存
+        if (specificationInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_specification',
+                        value: specificationInput.value
+                    })
+                })
+            );
+        }
+        
+        // メーカーを保存
+        if (manufacturerInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_manufacturer',
+                        value: manufacturerInput.value
+                    })
+                })
+            );
+        }
+        
+        return Promise.all(savePromises);
+        {% else %}
+        return Promise.resolve();
+        {% endif %}
+    }
+    
+    // 全明細の編集内容を保存してから申請処理を実行
+    function saveAllBeforeSubmit() {
+        {% if is_history_view %}
+        const form = document.querySelector('form');
+        
+        // 編集モードの値をフォームにhiddenフィールドとして追加
+        {% for result in results.results %}
+        const index{{ result.index }} = {{ result.index }};
+        const productNameInput{{ result.index }} = document.getElementById(`product_name_${index{{ result.index }}}`);
+        const modelNumberInput{{ result.index }} = document.getElementById(`model_number_${index{{ result.index }}}`);
+        const specificationInput{{ result.index }} = document.getElementById(`specification_${index{{ result.index }}}`);
+        const manufacturerInput{{ result.index }} = document.getElementById(`manufacturer_${index{{ result.index }}}`);
+        
+        if (productNameInput{{ result.index }}) {
+            const hiddenName = document.createElement('input');
+            hiddenName.type = 'hidden';
+            hiddenName.name = `extracted_product_name_${index{{ result.index }}}`;
+            hiddenName.value = productNameInput{{ result.index }}.value;
+            form.appendChild(hiddenName);
+        }
+        
+        if (modelNumberInput{{ result.index }}) {
+            const hiddenModel = document.createElement('input');
+            hiddenModel.type = 'hidden';
+            hiddenModel.name = `extracted_model_number_${index{{ result.index }}}`;
+            hiddenModel.value = modelNumberInput{{ result.index }}.value;
+            form.appendChild(hiddenModel);
+        }
+        
+        if (specificationInput{{ result.index }}) {
+            const hiddenSpec = document.createElement('input');
+            hiddenSpec.type = 'hidden';
+            hiddenSpec.name = `extracted_specification_${index{{ result.index }}}`;
+            hiddenSpec.value = specificationInput{{ result.index }}.value;
+            form.appendChild(hiddenSpec);
+        }
+        
+        if (manufacturerInput{{ result.index }}) {
+            const hiddenMfg = document.createElement('input');
+            hiddenMfg.type = 'hidden';
+            hiddenMfg.name = `extracted_manufacturer_${index{{ result.index }}}`;
+            hiddenMfg.value = manufacturerInput{{ result.index }}.value;
+            form.appendChild(hiddenMfg);
+        }
+        {% endfor %}
+        
+        return true; // フォーム送信を続行
+        {% else %}
+        return true; // 通常のフォーム送信
+        {% endif %}
     }
     </script>
 {% endblock %}

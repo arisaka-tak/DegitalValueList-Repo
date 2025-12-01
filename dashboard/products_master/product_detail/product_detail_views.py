@@ -801,6 +801,21 @@ def _return_form_with_error(request, product, form, error_message):
         'remarks': request.POST.get('remarks', ''),
     })
     
+    # エラーフィールドを特定
+    error_fields = []
+    if '商品名は必須です' in error_message:
+        error_fields.append('product_name')
+    if '商品コードは9桁の数字で入力してください' in error_message:
+        error_fields.append('product_code')
+    if '畜種は必須です' in error_message:
+        error_fields.append('livestock_type')
+    if 'カテゴリは必須です' in error_message:
+        error_fields.append('category')
+    if 'メーカーは必須です' in error_message:
+        error_fields.append('manufacturer')
+    
+    error_fields_json = json.dumps(error_fields)
+    
     preview_histories = []
     for key, value in request.POST.items():
         if key.startswith('new_effective_year_month_') and value.strip():
@@ -830,6 +845,7 @@ def _return_form_with_error(request, product, form, error_message):
         'preview_histories': preview_histories,
         'is_new': not bool(product),
         'error_message': error_message,
+        'error_fields_json': error_fields_json,
         'breadcrumbs': [
             {'title': '商品マスタ管理', 'url': '/products/'},
             {'title': '商品一覧', 'url': '/products/products/'},
@@ -1272,19 +1288,29 @@ def cancel_application(request, pk):
 
 def validate_form_data(request, product=None):
     """共通フォームバリデーション"""
+    # デバッグ: POSTデータの内容を詳細出力
+    print(f"Debug: POST data for validation:")
+    for key, value in request.POST.items():
+        print(f"  {key}: '{value}'")
+    
     # 商品情報の取得
+    product_name_raw = request.POST.get('product_name', '')
+    print(f"Debug: product_name raw value: '{product_name_raw}' (type: {type(product_name_raw)})")
+    
     product_data = {
         'product_code': request.POST.get('product_code', '') or '',
         'livestock_type': request.POST.get('livestock_type', '') or '',
         'category': request.POST.get('category', '') or '',
         'manufacturer': request.POST.get('manufacturer', '') or '',
-        'product_name': request.POST.get('product_name', '') or '',
+        'product_name': product_name_raw or '',
         'model_number': request.POST.get('model_number', '') or '',
         'specification': request.POST.get('specification', '') or '',
         'shipping_unit': request.POST.get('shipping_unit', '') or '',
         'shipping_fee': request.POST.get('shipping_fee', '') or '',
         'remarks': request.POST.get('remarks', '') or ''
     }
+    
+    print(f"Debug: product_data after processing: {product_data}")
     
     # 新規価格履歴の取得
     new_histories = []
@@ -1307,8 +1333,16 @@ def validate_form_data(request, product=None):
     errors = []
     
     # 商品名は必須
+    print(f"Debug: Checking product_name: '{product_data['product_name']}' (empty: {not product_data['product_name']})")
     if not product_data['product_name']:
+        print(f"Debug: Product name validation failed - empty value")
         errors.append('商品名は必須です')
+    
+    # 商品コードのバリデーション（未入力または9桁の数字のみ）
+    product_code = product_data['product_code'].strip()
+    if product_code:
+        if not (product_code.isdigit() and len(product_code) == 9):
+            errors.append('商品コードは9桁の数字で入力してください')
     
     # 新規価格履歴のバリデーション
     validated_dates = []
