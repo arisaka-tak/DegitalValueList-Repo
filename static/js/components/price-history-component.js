@@ -60,8 +60,8 @@ class PriceHistoryComponent extends HTMLElement {
                 <tr data-id="${history.id}" class="${rowClass}" style="${rowStyle}">
                     <td>${history.period_year}年度</td>
                     <td>${history.effective_year_month}</td>
-                    <td class="${this.getCellClass(history, 'wholesale_price', isDiffRow)}" ${this.getCellAttributes(history, 'wholesale_price')}>${history.wholesale_price}</td>
-                    <td class="kenren-price-cell ${this.getCellClass(history, 'kenren_price', isDiffRow)}" ${this.getCellAttributes(history, 'kenren_price')} style="${this.getKenrenPriceStyle(history)}">${this.getKenrenPriceDisplay(history)}</td>
+                    <td class="${this.getCellClass(history, 'wholesale_price', isDiffRow)}" ${this.getCellAttributes(history, 'wholesale_price')}>${this.formatPrice(history.wholesale_price)}</td>
+                    <td class="kenren-price-cell ${this.getCellClass(history, 'kenren_price', isDiffRow)}" ${this.getCellAttributes(history, 'kenren_price')} style="${this.getKenrenPriceStyle(history)}">${this.formatPrice(this.getKenrenPriceDisplay(history))}</td>
                     <td>${this.getGrossMarginDisplay(history)}</td>
                     ${!isApprovalMode ? `<td>${history.revision_amount !== null && history.revision_amount !== undefined ? history.revision_amount : '自動算出'}</td>` : ''}
                     <td class="${this.getCellClass(history, 'revision_reason', isDiffRow)}" ${this.getCellAttributes(history, 'revision_reason')}>${history.revision_reason || (isDiffRow ? '' : '-')}</td>
@@ -204,9 +204,16 @@ class PriceHistoryComponent extends HTMLElement {
         // Enterキーまたはフォーカス離脱で編集終了
         const finishEdit = () => {
             const newValue = input.value.trim();
-            cell.textContent = newValue || originalValue;
             
-            // フォームにhidden inputを追加/更新
+            // 価格フィールドの場合はカンマ区切りでフォーマット
+            let displayValue = newValue || originalValue;
+            if ((field === 'wholesale_price' || field === 'kenren_price') && newValue) {
+                displayValue = this.formatPrice(newValue);
+            }
+            
+            cell.textContent = displayValue;
+            
+            // フォームにhidden inputを追加/更新（元の値で保存）
             this.updateFormInput(field, historyId, newValue);
             
             // 県連価格を手動入力した場合は黒色で表示
@@ -328,14 +335,16 @@ class PriceHistoryComponent extends HTMLElement {
         `;
     }
     
-    // 粗利率の表示値を取得
+    // 粗利率の表示値を取得（1.1 → 10%）
     getGrossMarginDisplay(history) {
         if (history.gross_margin_rate !== null && history.gross_margin_rate !== undefined && history.gross_margin_rate !== '') {
             const rate = parseFloat(history.gross_margin_rate);
             if (rate === 0.0) {
                 return '0.0%';
             }
-            return (rate * 100).toFixed(1) + '%';
+            // 粗利率を計算（(1.1 - 1) * 100 = 10%）
+            const profitRate = (rate - 1) * 100;
+            return profitRate.toFixed(1) + '%';
         }
         return '自動算出';
     }
@@ -343,6 +352,30 @@ class PriceHistoryComponent extends HTMLElement {
     // 自動計算かどうかを判定
     isAutoCalculated(history) {
         return !history.kenren_price || history.kenren_price === null;
+    }
+    
+    // 価格をカンマ区切りでフォーマット
+    formatPrice(value) {
+        try {
+            if (value === null || value === undefined || value === '') {
+                return '-';
+            }
+            
+            // 「都度見積」などの文字列はそのまま返す
+            if (typeof value === 'string' && isNaN(value.replace(/,/g, ''))) {
+                return value;
+            }
+            
+            // 数値に変換してカンマ区切り
+            const numValue = parseFloat(String(value).replace(/,/g, ''));
+            if (isNaN(numValue)) {
+                return value;
+            }
+            
+            return numValue.toLocaleString();
+        } catch (e) {
+            return value || '-';
+        }
     }
     
     // 外部から呼び出し可能なメソッド（既存のJavaScriptとの互換性）

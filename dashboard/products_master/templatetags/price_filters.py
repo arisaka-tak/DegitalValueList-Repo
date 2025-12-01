@@ -62,6 +62,24 @@ def approval_to_json(approval):
         return '{}'
 
 @register.filter
+def format_gross_margin_rate(value):
+    """粗利率を％表記に変換（1.1 → 10%）"""
+    try:
+        if value is None or value == '':
+            return '-'
+        
+        # Decimalやfloatを数値に変換
+        margin_rate = float(str(value))
+        
+        # 粗利率を計算（(1.1 - 1) * 100 = 10%）
+        profit_rate = (margin_rate - 1) * 100
+        
+        # 小数点第一位まで表示
+        return f"{profit_rate:.1f}%"
+    except (ValueError, TypeError, Exception):
+        return str(value) if value else '-'
+
+@register.filter
 def approval_histories_to_json(price_histories):
     """承認価格履歴をJSON形式に変換"""
     try:

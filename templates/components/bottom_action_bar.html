@@ -31,18 +31,23 @@
             
             {% elif action_type == 'approval_detail' %}
                 <!-- 承認詳細画面 -->
-                {% if is_editable %}
-                    <!-- 再申請待ちの場合 -->
-                    <button type="submit" form="productForm" class="btn btn-outline-primary btn-sm" onclick="return handleSave(event)">保存</button>
-                    <button type="submit" form="productForm" name="submit_approval" value="1" class="btn btn-success btn-sm">申請</button>
-                    <a href="{% url 'products_master:approval_list' %}" class="btn btn-outline-secondary btn-sm">一覧に戻る</a>
-                {% else %}
-                    <!-- 通常の申請の場合 -->
-                    <button onclick="acceptApplication()" class="btn btn-success btn-sm">承認</button>
-                    <button onclick="rejectApplication()" class="btn btn-warning btn-sm">却下</button>
+                <div class="d-flex justify-content-between align-items-center w-100">
+                    <div style="width: 60px;"></div> <!-- 左側スペーサー -->
+                    <div class="d-flex gap-2">
+                        {% if is_editable %}
+                            <!-- 再申請待ちの場合 -->
+                            <button type="submit" form="productForm" class="btn btn-outline-primary btn-sm" onclick="return handleSave(event)">一時保存</button>
+                            <button type="submit" form="productForm" name="submit_approval" value="1" class="btn btn-success btn-sm">申請</button>
+                            <a href="{% url 'products_master:approval_list' %}" class="btn btn-outline-secondary btn-sm">一覧に戻る</a>
+                        {% else %}
+                            <!-- 通常の申請の場合 -->
+                            <button onclick="acceptApplication()" class="btn btn-success btn-sm">承認</button>
+                            <button onclick="rejectApplication()" class="btn btn-warning btn-sm">却下</button>
+                            <a href="{% url 'products_master:approval_list' %}" class="btn btn-outline-secondary btn-sm">一覧に戻る</a>
+                        {% endif %}
+                    </div>
                     <button onclick="cancelApplication()" class="btn btn-danger btn-sm">申請取消</button>
-                    <a href="{% url 'products_master:approval_list' %}" class="btn btn-outline-secondary btn-sm">一覧に戻る</a>
-                {% endif %}
+                </div>
             {% endif %}
         </div>
     </div>
