@@ -63,8 +63,14 @@ def integrated_pricelist(request):
             is_active=True
         )
     
-    # 商品番号順でソート
-    price_histories = price_histories.order_by('product__product_number', '-effective_year_month')
+    # 異種、分類、メーカー、商品名順でソート
+    # TODO: 将来的に商品マスタに「表示順序」フィールドを追加して細かい制御を実現
+    price_histories = price_histories.order_by(
+        'product__livestock_type',
+        'product__category', 
+        'product__manufacturer',
+        'product__product_name'
+    )
     
     # ページネーション
     paginator = Paginator(price_histories, 200)  # 200件ずつ表示
