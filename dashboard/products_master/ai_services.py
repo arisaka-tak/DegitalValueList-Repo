@@ -3,47 +3,84 @@ AI価格抽出関連のサービス
 """
 import unicodedata
 import re
-try:
-    from fuzzywuzzy import fuzz
-except ImportError:
-    # fuzzywuzzyが利用できない場合のフォールバック
-    class MockFuzz:
-        @staticmethod
-        def ratio(a, b):
-            return 80 if a.lower() in b.lower() or b.lower() in a.lower() else 50
-        
-        @staticmethod
-        def partial_ratio(a, b):
-            return MockFuzz.ratio(a, b)
-        
-        @staticmethod
-        def token_sort_ratio(a, b):
-            return MockFuzz.ratio(a, b)
-        
-        @staticmethod
-        def token_set_ratio(a, b):
-            return MockFuzz.ratio(a, b)
-    
-    fuzz = MockFuzz()
+from fuzzywuzzy import fuzz
 
 from .models import Product
 
 
+def get_bigrams(text):
+    """文字列を2-gramに分割（日本語と英数字の境界で分離）"""
+    if not text:
+        return set()
+    
+    # 日本語、英字、数字の境界で分割（ハイフン、スペースを区切り文字として扱う）
+    segments = re.findall(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+|[A-Za-z]+|[0-9]+', text.replace(' ', ''))
+    
+    bigrams = set()
+    for segment in segments:
+        if len(segment) >= 2:
+            # セグメント内で2-gram作成のみ
+            bigrams.update([segment[i:i+2] for i in range(len(segment) - 1)])
+        elif len(segment) == 1:
+            # 1文字の場合はそのまま追加
+            bigrams.add(segment)
+    
+    return bigrams
+
+def calculate_field_score(ai_text, master_text, max_points):
+    """
+    フィールド別スコア計算（2-gramマッチ率ベース）
+    
+    Args:
+        ai_text (str): AI抽出テキスト
+        master_text (str): マスターテキスト
+        max_points (int): 最大点数
+    
+    Returns:
+        int: スコア (0-max_points)
+    """
+    if not ai_text or not master_text:
+        return 0
+    
+    ai_bigrams = get_bigrams(normalize_text(ai_text))
+    master_bigrams = get_bigrams(normalize_text(master_text))
+    
+    if not ai_bigrams:
+        return 0
+    
+    # AI側の2-gramのうち何個がマスターに含まれるか
+    matched_count = len(ai_bigrams & master_bigrams)
+    match_ratio = matched_count / len(ai_bigrams)
+    
+    # 50%以上のマッチでスコア付与
+    if match_ratio >= 0.5:
+        return int(max_points * match_ratio)
+    
+    return 0
+
+
+
 def normalize_text(text):
-    """テキストを正規化（全角→半角、カタカナ統一等）"""
+    """テキストを正規化（全角→半角、ひらがな→カタカナ、記号統一、空白除去等）"""
     if not text:
         return ""
     
     # 1. 全角英数字→半角英数字
     text = unicodedata.normalize('NFKC', text)
     
-    # 2. ひらがな→カタカナ
+    # 2. ひらがな→カタカナ（漢字はそのまま）
     text = ''.join([chr(ord(c) + 0x60) if 'ひ' <= c <= 'ゖ' else c for c in text])
     
-    # 3. 空白文字統一・除去
-    text = re.sub(r'\s+', '', text)
+    # 3. 記号の統一（全て半角スペースに変換）
+    text = re.sub(r'[−–—ー－ｰ]', ' ', text)  # 各種ハイフン→半角スペース
+    text = re.sub(r'[・·•]', ' ', text)  # 中点→半角スペース
+    text = re.sub(r'[（）]', ' ', text)  # 全角括弧→半角スペース
+    text = re.sub(r'[\(\)]', ' ', text)  # 半角括弧→半角スペース
     
-    # 4. 大文字小文字統一
+    # 4. 空白文字統一（除去しない）
+    text = re.sub(r'\s+', ' ', text)  # 複数の空白を1つに統一
+    
+    # 5. 大文字小文字統一
     text = text.upper()
     
     return text
@@ -61,93 +98,107 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
     Returns:
         list: 候補商品リスト
     """
-    # 抽出データから検索キーワード生成
-    search_keywords = {
-        'product_name': extracted_data.get('product_name', ''),
-        'model_number': extracted_data.get('model_number', ''),
-        'manufacturer': extracted_data.get('manufacturer', ''),
-        'specification': extracted_data.get('specification', ''),
-    }
+    # AI抽出データを取得
+    ai_product_name = extracted_data.get('product_name', '')
+    ai_specification = extracted_data.get('specification', '')
+    ai_model_number = extracted_data.get('model_number', '')
     
-    # メーカー名での事前絞り込み
-    if search_keywords['manufacturer'] and search_keywords['manufacturer'].strip():
-        normalized_manufacturer = normalize_text(search_keywords['manufacturer'])
-        products = Product.objects.filter(
-            manufacturer__icontains=normalized_manufacturer[:10]  # 部分一致で絞り込み
-        )
-    else:
-        products = Product.objects.all()
+    # AI側のキーワードリストBを作成
+    ai_product_bigrams = get_bigrams(normalize_text(ai_product_name))
+    ai_spec_bigrams = get_bigrams(normalize_text(ai_specification))
+    ai_model_bigrams = get_bigrams(normalize_text(ai_model_number))
+    ai_keyword_list = ai_product_bigrams | ai_spec_bigrams | ai_model_bigrams
+    
+    # 全商品を対象とした照合
+    products = Product.objects.all()
+    if debug:
+        print(f"全商品対象: {products.count()}件")
     
     candidates = []
     debug_info = []
+    processed_count = 0
     
     for product in products:
-        # 商品マスタ側の検索対象テキスト（全パターン）
-        search_targets = [
-            # 基本パターン
-            product.product_name or '',
-            product.model_number or '',
-            product.specification or '',
-            
-            # 組み合わせパターン
-            f"{product.product_name or ''} {product.model_number or ''}".strip(),
-            f"{product.product_name or ''} {product.specification or ''}".strip(),
-            f"{product.model_number or ''} {product.specification or ''}".strip(),
-            f"{product.manufacturer or ''} {product.product_name or ''}".strip(),
-            
-            # 全部入りパターン
-            f"{product.manufacturer or ''} {product.product_name or ''} {product.model_number or ''} {product.specification or ''}".strip(),
-        ]
+        # マスター側のキーワードリストAを作成（常に動的生成）
+        master_product_bigrams = get_bigrams(normalize_text(product.product_name or ''))
+        master_spec_bigrams = get_bigrams(normalize_text(product.specification or ''))
+        master_model_bigrams = get_bigrams(normalize_text(product.model_number or ''))
+        master_keyword_list = master_product_bigrams | master_spec_bigrams | master_model_bigrams
         
-        max_score = 0
-        best_match_field = ''
-        field_names = ['商品名', '型式', '規格', '商品名+型式', '商品名+規格', '型式+規格', 'メーカー+商品名', '全項目']
+
         
-        # 抽出データの各フィールドと照合
-        for keyword_name, keyword_value in search_keywords.items():
-            if not keyword_value or keyword_value.strip() == '':
-                continue
-                
-            normalized_keyword = normalize_text(keyword_value)
-            
-            for i, target in enumerate(search_targets):
-                if target and len(target.strip()) > 0:
-                    normalized_target = normalize_text(target)
-                    
-                    # 複数の類似度計算
-                    scores = [
-                        fuzz.ratio(normalized_keyword, normalized_target),
-                        fuzz.partial_ratio(normalized_keyword, normalized_target),
-                        fuzz.token_sort_ratio(normalized_keyword, normalized_target),
-                        fuzz.token_set_ratio(normalized_keyword, normalized_target),  # 順序無視
-                    ]
-                    
-                    current_max = max(scores)
-                    if current_max > max_score:
-                        max_score = current_max
-                        best_match_field = field_names[i]
+        # 空のキーワードリストの場合はスキップ
+        if not ai_keyword_list or not master_keyword_list:
+            continue
         
-        # メーカー一致ボーナス
-        if (search_keywords['manufacturer'] and product.manufacturer and 
-            normalize_text(search_keywords['manufacturer']) in normalize_text(product.manufacturer)):
-            max_score += 10
+        # キーワードリストの一致率を計算
+        matched_keywords = len(ai_keyword_list & master_keyword_list)
+        total_ai_keywords = len(ai_keyword_list)
+        match_ratio = matched_keywords / total_ai_keywords if total_ai_keywords > 0 else 0
         
-        # 型式完全一致ボーナス  
-        if (search_keywords['model_number'] and product.model_number and 
-            normalize_text(search_keywords['model_number']) == normalize_text(product.model_number)):
-            max_score += 15
+        # 基本加点: AI→マスタ一致率 * 80
+        base_score = int(match_ratio * 80)
+        
+        # 余剰減点: マスタの余剰部分による減点
+        excess_ratio = (len(master_keyword_list) - matched_keywords) / len(master_keyword_list) if len(master_keyword_list) > 0 else 0
+        penalty = int(excess_ratio * 20)
+        
+        # ボーナススコアを計算
+        bonus_score = 0
+        
+        # 商品名由来キーワードの一致率ボーナス（AI商品名 vs マスタキーワードカラム）
+        product_bonus_ratio = 0
+        if ai_product_bigrams and master_keyword_list:
+            product_matched = len(ai_product_bigrams & master_keyword_list)
+            product_bonus_ratio = product_matched / len(ai_product_bigrams)
+            if product_bonus_ratio >= 0.5:  # 50%以上
+                bonus_score += 15
+        
+        # 型式由来キーワードの一致率ボーナス（AI型式 vs マスタキーワードカラム）
+        model_bonus_ratio = 0
+        if ai_model_bigrams and master_keyword_list:
+            model_matched = len(ai_model_bigrams & master_keyword_list)
+            model_bonus_ratio = model_matched / len(ai_model_bigrams)
+            if model_bonus_ratio >= 0.5:  # 50%以上
+                bonus_score += 15
+        
+        # メーカー名一致ボーナス（2-gram照合70%以上）
+        manufacturer_bonus = 0
+        ai_manufacturer = extracted_data.get('manufacturer', '')
+        if ai_manufacturer and product.manufacturer:
+            ai_manufacturer_bigrams = get_bigrams(normalize_text(ai_manufacturer))
+            master_manufacturer_bigrams = get_bigrams(normalize_text(product.manufacturer))
+            if ai_manufacturer_bigrams:
+                manufacturer_matched = len(ai_manufacturer_bigrams & master_manufacturer_bigrams)
+                manufacturer_match_ratio = manufacturer_matched / len(ai_manufacturer_bigrams)
+                if manufacturer_match_ratio >= 0.7:  # 70%以上
+                    manufacturer_bonus = 5
+                    bonus_score += manufacturer_bonus
+        
+        # 最終スコア = 基本加点 - 余剰減点 + ボーナス
+        max_score = base_score - penalty + bonus_score
+        best_match_field = '2-gramキーワードリスト'
         
         # デバッグ情報収集
         if debug:
             debug_info.append({
                 'product_name': product.product_name,
                 'score': max_score,
-                'matched_field': best_match_field,
+                'base_score': base_score,
+                'penalty': penalty,
+                'bonus_score': bonus_score,
+                'match_ratio': f"{match_ratio:.2%}",
+                'excess_ratio': f"{excess_ratio:.2%}",
+                'matched_keywords': f"{matched_keywords}/{total_ai_keywords}",
+                'product_bonus_ratio': product_bonus_ratio,
+                'model_bonus_ratio': model_bonus_ratio,
+                'manufacturer_bonus': manufacturer_bonus,
+                'master_keywords': list(master_keyword_list),
                 'threshold': threshold
             })
         
         # 閾値以上の場合のみ候補に追加
-        if max_score >= threshold:
+        if max_score >= threshold and max_score > 0:
             candidates.append({
                 'product': {
                     'pk': product.pk,
@@ -166,13 +217,21 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
     
     # デバッグ情報出力
     if debug:
-        print(f"\n=== デバッグ情報: {extracted_data.get('product_name', 'Unknown')} ===")
-        print(f"検索対象: {search_keywords}")
-        print(f"商品数: {len(debug_info)}")
+        print(f"\n=== 照合結果: {extracted_data.get('product_name', 'Unknown')} ===")
+        print(f"AI入力: 商品名='{ai_product_name}', 型式='{ai_model_number}', 規格='{ai_specification}', メーカー='{extracted_data.get('manufacturer', '')}'") 
+        print(f"AI正規化後キーワード: {list(ai_keyword_list)}")
+        print(f"照合対象商品数: {len(debug_info)}件")
+        print(f"\n--- 上位5件の照合詳細 ---")
         for info in sorted(debug_info, key=lambda x: x['score'], reverse=True)[:5]:
-            print(f"  {info['product_name']}: {info['score']}点 ({info['matched_field']})")
-        print(f"閾値: {threshold}点")
-        print(f"マッチ数: {len(candidates)}")
+            print(f"\n商品: {info['product_name']}")
+            print(f"  最終スコア: {info['score']}点 (閾値:{threshold}点)")
+            print(f"  内訳: ベース{info['base_score']} - 減点{info['penalty']} + ボーナス{info['bonus_score']} = {info['score']}")
+            print(f"  基本一致率: {info['match_ratio']} ({info['matched_keywords']})")
+            print(f"  商品名ボーナス: {info.get('product_bonus_ratio', 0):.1%} → {'+15点' if info.get('product_bonus_ratio', 0) >= 0.5 else '0点'}")
+            print(f"  型式ボーナス: {info.get('model_bonus_ratio', 0):.1%} → {'+15点' if info.get('model_bonus_ratio', 0) >= 0.5 else '0点'}")
+            print(f"  メーカーボーナス: → {'+5点' if info.get('manufacturer_bonus', 0) > 0 else '0点'}")
+            print(f"  マスターキーワード: {info['master_keywords'][:15]}{'...' if len(info['master_keywords']) > 15 else ''}")
+        print(f"\n結果: {len(candidates)}件が閾値{threshold}点以上でマッチ")
     
     # スコア順でソート
     return sorted(candidates, key=lambda x: x['score'], reverse=True)[:10]
@@ -189,6 +248,7 @@ def process_extraction_results(json_data):
         dict: 処理結果
     """
     if 'products' not in json_data:
+        print(f"Debug: Processing product {i}: {product_data}")
         return {
             'status': 'error',
             'message': 'JSONに"products"キーが見つかりません'
@@ -197,12 +257,12 @@ def process_extraction_results(json_data):
     results = []
     
     for i, product_data in enumerate(json_data['products']):
-        # 必須フィールドチェック
-        if not product_data.get('product_name'):
+        # 必須フィールドチェック（商品名、型式、規格のいずれかが必要）
+        if not any([product_data.get('product_name'), product_data.get('model_number'), product_data.get('specification')]):
             results.append({
                 'index': i,
                 'status': 'error',
-                'message': '商品名が見つかりません',
+                'message': '商品名、型式、規格のいずれかが必要です',
                 'extracted_data': product_data,
                 'candidates': []
             })
@@ -218,6 +278,7 @@ def process_extraction_results(json_data):
             'extracted_data': product_data,
             'candidates': candidates
         })
+        print(f"Debug: Product {i} extracted_data: {product_data}")
     
     return {
         'status': 'success',

@@ -29,10 +29,7 @@
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">申請一覧 ({{ approvals|length }}件)</h5>
                         {% if approvals %}
-                        <button type="button" class="btn btn-success" 
-                                hx-post="{% url 'products_master:bulk_approve' %}"
-                                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                                hx-confirm="一括承認しますか？">一括承認</button>
+                        <button type="button" class="btn btn-success" id="bulk-approve-btn" disabled>選択した項目を一括承認</button>
                         {% endif %}
                     </div>
                     <div class="card-body">
@@ -41,6 +38,7 @@
                                 <table class="table table-hover">
                                     <thead>
                                         <tr>
+                                            <th><input type="checkbox" id="select-all-checkbox"></th>
                                             <th>商品番号</th>
                                             <th>商品名</th>
                                             <th>メーカー</th>
@@ -54,6 +52,7 @@
                                     <tbody>
                                         {% for approval in approvals %}
                                         <tr>
+                                            <td><input type="checkbox" class="approval-checkbox" value="{{ approval.pk }}"></td>
                                             <td>
                                                 {% if approval.product_number > 0 %}
                                                     {{ approval.product_number }}
@@ -72,6 +71,8 @@
                                             <td>
                                                 {% if approval.status == '削除申請' %}
                                                     <span class="badge bg-danger">削除申請</span>
+                                                {% elif approval.status == '再申請待ち' %}
+                                                    <span class="badge bg-warning">再申請待ち</span>
                                                 {% else %}
                                                     <span class="badge bg-primary">変更申請</span>
                                                 {% endif %}
@@ -83,10 +84,14 @@
                                                         hx-post="{% url 'products_master:approve_application' approval.pk %}"
                                                         hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
                                                         hx-confirm="承認しますか？">承認</button>
-                                                <button type="button" class="btn btn-sm btn-danger"
+                                                <button type="button" class="btn btn-sm btn-warning me-1"
                                                         hx-post="{% url 'products_master:reject_application' approval.pk %}"
                                                         hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                                                        hx-confirm="却下しますか？">却下</button>
+                                                        hx-confirm="申請を却下しますか？（再申請待ちに変更）">却下</button>
+                                                <button type="button" class="btn btn-sm btn-danger"
+                                                        hx-post="{% url 'products_master:cancel_application' approval.pk %}"
+                                                        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                                                        hx-confirm="申請を取消しますか？">申請取消</button>
                                             </td>
                                         </tr>
                                         {% endfor %}
@@ -106,4 +111,71 @@
     
     <!-- Webコンポーネント読み込み -->
     <script src="{% static 'js/components/search-form-component.js' %}"></script>
+    
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const selectAllCheckbox = document.getElementById('select-all-checkbox');
+        const bulkApproveBtn = document.getElementById('bulk-approve-btn');
+        const approvalCheckboxes = document.querySelectorAll('.approval-checkbox');
+        
+        // 全選択チェックボックスの処理
+        selectAllCheckbox.addEventListener('change', function() {
+            approvalCheckboxes.forEach(checkbox => {
+                checkbox.checked = this.checked;
+            });
+            updateBulkApproveButton();
+        });
+        
+        // 個別チェックボックスの処理
+        approvalCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', updateBulkApproveButton);
+        });
+        
+        // 一括承認ボタンの状態更新
+        function updateBulkApproveButton() {
+            const checkedCount = document.querySelectorAll('.approval-checkbox:checked').length;
+            bulkApproveBtn.disabled = checkedCount === 0;
+            bulkApproveBtn.textContent = checkedCount > 0 ? `選択した${checkedCount}件を一括承認` : '選択した項目を一括承認';
+            
+            // 全選択チェックボックスの状態更新
+            const allChecked = Array.from(approvalCheckboxes).every(cb => cb.checked);
+            const someChecked = Array.from(approvalCheckboxes).some(cb => cb.checked);
+            selectAllCheckbox.checked = allChecked;
+            selectAllCheckbox.indeterminate = someChecked && !allChecked;
+        }
+        
+        // 一括承認ボタンの処理
+        bulkApproveBtn.addEventListener('click', function() {
+            const checkedIds = Array.from(document.querySelectorAll('.approval-checkbox:checked'))
+                .map(cb => cb.value);
+            
+            if (checkedIds.length === 0) return;
+            
+            if (confirm(`選択した${checkedIds.length}件を一括承認しますか？`)) {
+                // POSTリクエストで選択したIDを送信
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '{% url "products_master:bulk_approve" %}';
+                
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
+                const csrfInput = document.createElement('input');
+                csrfInput.type = 'hidden';
+                csrfInput.name = 'csrfmiddlewaretoken';
+                csrfInput.value = csrfToken;
+                form.appendChild(csrfInput);
+                
+                checkedIds.forEach(id => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'approval_ids';
+                    input.value = id;
+                    form.appendChild(input);
+                });
+                
+                document.body.appendChild(form);
+                form.submit();
+            }
+        });
+    });
+    </script>
 {% endblock %}

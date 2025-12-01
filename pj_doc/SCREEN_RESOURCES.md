@@ -22,39 +22,54 @@
 ### バックエンド
 - **View**: `dashboard/products_master/product_list/product_list_views.py`
   - `product_list()` - 商品一覧表示・検索・ページネーション
+  - `regenerate_keywords_batch()` - キーワード一括再生成API
 
 ### フロントエンド
 - **Template**: `templates/products_master/product_list.html`
 - **CSS**: Bootstrap 5.1.3（CDN）
-- **JavaScript**: なし（標準的なHTMLフォーム）
+- **JavaScript**: キーワード再生成バッチ処理
 
 ### 役割
 - 商品の検索・一覧表示
 - ページネーション
 - 新規作成・編集・削除へのリンク
+- 商品キーワード一括再生成機能
 
 ---
 
-## 3. AI価格読取画面
+## 3. AI価格抽出機能
 
 ### バックエンド
 - **View**: `dashboard/products_master/ai_price_extract/ai_price_extract_views.py`
-  - `ai_extract()` - AI価格抽出画面表示
-  - `ai_extract_process()` - 画像アップロード・AI処理
-  - `ai_extract_results()` - 抽出結果表示・商品登録
+  - `ai_extract()` - AI価格抽出入力画面
+  - `ai_extract_process()` - JSON処理・商品照合・履歴保存
+  - `ai_extract_rematch()` - 再照合API
+- **View**: `dashboard/products_master/ai_price_extract/ai_history_views.py`
+  - `ai_extract_history()` - AI抽出履歴一覧
+  - `ai_extract_history_detail()` - 履歴詳細・申請画面
+  - `ai_extract_history_delete()` - 履歴論理削除
+- **Services**: `dashboard/products_master/ai_services.py`
+  - `find_similar_products()` - 商品照合ロジック（2-gram + 加点減点方式）
+  - `process_extraction_results()` - 抽出結果処理
+- **Models**: `dashboard/products_master/ai_extract_models.py`
+  - `AIExtractTransaction` - AI抽出トランザクション（論理削除対応）
+  - `AIExtractTransactionDetail` - AI抽出明細
 
 ### フロントエンド
 - **Template**: 
-  - `templates/products_master/ai_extract.html` - アップロード画面
-  - `templates/products_master/ai_extract_results.html` - 結果画面
+  - `templates/products_master/ai_extract_input.html` - JSON入力画面
+  - `templates/products_master/ai_extract_results.html` - 照合結果・申請画面（履歴詳細と共用）
+  - `templates/products_master/ai_extract_history.html` - 履歴一覧画面
 - **CSS**: Bootstrap 5.1.3（CDN）
-- **JavaScript**: ファイルアップロード処理
+- **JavaScript**: 編集・再照合・申請処理
 
 ### 役割
-- 価格表画像のアップロード
-- AI による価格情報の自動抽出
-- 抽出結果の確認・編集
-- 商品マスタへの一括登録
+- AI抽出JSONデータの入力・処理
+- 商品マスタとの自動照合（改良された2-gramアルゴリズム）
+- 照合結果の編集・再照合
+- 価格履歴申請データの作成
+- 抽出履歴の管理・論理削除
+- 3カ月経過後の自動物理削除
 
 ---
 
@@ -172,11 +187,14 @@
 
 ### 商品関連画面共通（2,3,4,5,6,7,8番）
 - **Models**: `dashboard/products_master/models.py`
-  - `Product` - 商品マスタ（全商品関連画面）
+  - `Product` - 商品マスタ（全商品関連画面）+ 2-gramキーワード検索対応
   - `PriceHistory` - 価格履歴（4,6,7,8番画面）
   - `ProductApproval` - 商品申請（5,6,7番画面）
   - `PriceHistoryApproval` - 価格履歴申請（6,7番画面）
   - `ProductGrossMarginRate` - 粗利率マスタ（4,6,7番画面）
+- **Services**: `dashboard/products_master/product_services.py`
+  - `update_product_keywords()` - 商品キーワード更新
+  - `regenerate_all_product_keywords()` - 全商品キーワード一括再生成
 - **URLs**: `dashboard/products_master/urls.py` - 全商品関連画面
 
 ### 特定画面グループ共通
@@ -209,11 +227,37 @@
 
 ---
 
+## AI商品照合アルゴリズム
+
+### 2-gram + 加点減点方式
+```
+最終スコア = 基本加点(80) - 余剰減点(20) + 品名ボーナス(15) + 型式ボーナス(15)
+```
+
+#### 基本加点
+- AI抽出キーワード → マスタキーワードの一致率 × 80点
+- AI側を基準とした包含関係を評価
+
+#### 余剰減点
+- マスタの余剰キーワード率 × 20点
+- 長すぎるマスタデータのスコアを適切に下げる
+
+#### フィールド別ボーナス
+- 品名フィールド一致率50%以上: +15点
+- 型式フィールド一致率50%以上: +15点
+
+#### 効果
+- AI抽出が短い場合でも適切な長さのマスタが選ばれる
+- 「牛用」→「牛用飼料」が「牛用配合飼料専用添加物」より高スコア
+- フィールド別評価で精密なマッチング
+
+---
+
 ## 技術スタック
 
 ### バックエンド
-- **Django**: 4.2.7
-- **Python**: 3.x
+- **Django**: 5.2.7
+- **Python**: 3.11+
 - **Database**: SQLite（開発）
 
 ### フロントエンド

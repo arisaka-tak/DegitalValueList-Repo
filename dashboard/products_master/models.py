@@ -11,7 +11,6 @@ class ActiveProductManager(models.Manager):
 
 class Product(models.Model):
     """商品マスタ"""
-    product_number = models.IntegerField('商品番号', unique=True, null=True, blank=True, help_text='システム自動採番の商品番号')
     product_code = models.CharField('商品コード', max_length=50, blank=True, null=True, help_text='ユーザー管理用の商品コード')
     livestock_type = models.CharField('畜種', max_length=50, blank=True, null=True)
     category = models.CharField('分類', max_length=100, blank=True, null=True)
@@ -22,6 +21,9 @@ class Product(models.Model):
     shipping_unit = models.CharField('発送単位', max_length=50, blank=True, null=True)
     shipping_fee = models.CharField('送料', max_length=100, blank=True, null=True)
     remarks = models.TextField('備考', blank=True, null=True)
+    
+    # 検索用キーワード
+    bigram_keywords = models.TextField('2-gramキーワード', blank=True, null=True, help_text='JSON形式の2-gramキーワードリスト')
     
     # ワークフロー用フィールド
     applicant = models.CharField('申請者', max_length=100, blank=True, null=True)
@@ -42,11 +44,11 @@ class Product(models.Model):
     class Meta:
         verbose_name = '商品マスタ'
         verbose_name_plural = '商品マスタ'
-        ordering = ['product_number']
+        ordering = ['pk']
     
     def __str__(self):
         status = "" if self.is_active else "[削除済]"
-        return f"{self.product_number}: {self.product_name} {status}"
+        return f"{self.pk}: {self.product_name} {status}"
     
     def soft_delete(self):
         """論理削除を実行"""
@@ -61,10 +63,6 @@ class Product(models.Model):
         self.save()
     
     def save(self, *args, **kwargs):
-        # 新規作成時に商品番号を自動採番
-        if not self.pk and not self.product_number:
-            last_product = Product.objects.order_by('-product_number').first()
-            self.product_number = (last_product.product_number + 1) if last_product else 1
         super().save(*args, **kwargs)
 
 class PriceHistory(models.Model):
@@ -106,7 +104,7 @@ class PriceHistory(models.Model):
     class Meta:
         verbose_name = '価格改定履歴'
         verbose_name_plural = '価格改定履歴'
-        ordering = ['-effective_year_month', 'product__product_number']
+        ordering = ['-effective_year_month', 'product__pk']
         indexes = [
             models.Index(fields=['period_year', 'product']),
         ]
@@ -243,7 +241,7 @@ class ProductGrossMarginRate(models.Model):
 
 class ProductApproval(models.Model):
     """商品マスタ承認テーブル"""
-    product_number = models.IntegerField('商品番号', help_text='システム自動採番の商品番号')
+    product_number = models.IntegerField('元商品のpk', default=-999, help_text='元になった商品マスタのpk（新規の場合は負の値）')
     product_code = models.CharField('商品コード', max_length=50, blank=True, null=True, help_text='ユーザー管理用の商品コード')
     livestock_type = models.CharField('畜種', max_length=50, blank=True, null=True)
     category = models.CharField('分類', max_length=100, blank=True, null=True)
@@ -268,7 +266,7 @@ class ProductApproval(models.Model):
     class Meta:
         verbose_name = '商品マスタ承認'
         verbose_name_plural = '商品マスタ承認'
-        ordering = ['product_number']
+        ordering = ['pk']
     
     def __str__(self):
         return f"{self.product_number}: {self.product_name}"
@@ -302,7 +300,86 @@ class PriceHistoryApproval(models.Model):
     class Meta:
         verbose_name = '価格改定履歴承認'
         verbose_name_plural = '価格改定履歴承認'
-        ordering = ['-effective_year_month', 'product__product_number']
+        ordering = ['-effective_year_month', 'product__pk']
     
     def __str__(self):
         return f"{self.product.product_name} - {self.effective_year_month}"
+    
+    def is_editable(self):
+        """編集可能かどうかを判定（申請テーブル用）"""
+        # 再申請待ちでない場合は編集不可
+        if self.product.status != '再申請待ち':
+            return False
+        
+        # 再申請待ちの場合は商品マスタと同じ日付ロジックを適用
+        from datetime import datetime
+        today = datetime.now().strftime('%Y/%m')
+        
+        # 未来の価格は編集可能
+        if self.effective_year_month > today:
+            return True
+        
+        # 今月以前の価格の場合、今月以前で最新のもののみ編集可能
+        latest_past_history = PriceHistoryApproval.objects.filter(
+            product=self.product,
+            effective_year_month__lte=today,
+            is_active=True
+        ).order_by('-effective_year_month').first()
+        
+        return latest_past_history and latest_past_history.pk == self.pk
+    
+    def is_deletable(self):
+        """削除可能かどうかを判定（申請テーブル用）"""
+        return self.is_editable()
+    
+    def get_kenren_price_display(self):
+        """県連価格の表示用値を取得（申請テーブル用）"""
+        if self.kenren_price:
+            return self.kenren_price
+        
+        try:
+            if self.wholesale_price and self.gross_margin_rate:
+                wholesale_numeric = float(self.wholesale_price.replace(',', ''))
+                calculated_price = wholesale_numeric * float(self.gross_margin_rate)
+                return f"{calculated_price:,.0f}"
+        except (ValueError, TypeError, AttributeError):
+            pass
+        
+        return "都度見積"
+    
+    def get_revision_amount(self):
+        """改定額を動的計算（申請テーブル用）"""
+        try:
+            current_kenren_price = self._get_display_kenren_price()
+            if current_kenren_price is None:
+                return 0
+            
+            previous_history = PriceHistoryApproval.objects.filter(
+                product=self.product,
+                effective_year_month__lt=self.effective_year_month,
+                is_active=True
+            ).order_by('-effective_year_month').first()
+            
+            if previous_history:
+                previous_kenren_price = previous_history._get_display_kenren_price()
+                if previous_kenren_price is not None:
+                    return int(current_kenren_price - previous_kenren_price)
+            
+            return 0
+        except Exception:
+            return 0
+    
+    def _get_display_kenren_price(self):
+        """表示用の県連価格数値を取得（申請テーブル用）"""
+        try:
+            if self.kenren_price:
+                return float(self.kenren_price.replace(',', ''))
+            
+            if self.wholesale_price and self.gross_margin_rate:
+                wholesale_numeric = float(self.wholesale_price.replace(',', ''))
+                calculated_price = wholesale_numeric * float(self.gross_margin_rate)
+                return int(calculated_price)
+            
+            return None
+        except (ValueError, TypeError, AttributeError):
+            return None

@@ -15,6 +15,13 @@ class ProductForm(forms.ModelForm):
                     if value is None:
                         self.initial[field_name] = ''
     
+    def clean_product_code(self):
+        product_code = self.cleaned_data.get('product_code') or ''
+        product_code = product_code.strip() if product_code else ''
+        if product_code and (len(product_code) != 9 or not product_code.isdigit()):
+            raise forms.ValidationError('商品コードは9桁の数字で入力してください。')
+        return product_code
+    
     class Meta:
         model = Product
         fields = [
@@ -23,7 +30,7 @@ class ProductForm(forms.ModelForm):
             'shipping_fee', 'remarks'
         ]
         widgets = {
-            'product_code': forms.TextInput(attrs={'class': 'form-control'}),
+            'product_code': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '9桁の数字または空欄'}),
             'livestock_type': forms.TextInput(attrs={'class': 'form-control'}),
             'category': forms.TextInput(attrs={'class': 'form-control'}),
             'manufacturer': forms.TextInput(attrs={'class': 'form-control'}),
@@ -65,3 +72,37 @@ PriceHistoryFormSet = inlineformset_factory(
     can_delete=True,  # 削除可能
     can_order=False
 )
+
+class PDFUploadForm(forms.Form):
+    """PDFアップロード用フォーム"""
+    pdf_file = forms.FileField(
+        label='PDFファイル',
+        widget=forms.FileInput(attrs={
+            'class': 'form-control',
+            'accept': '.pdf',
+            'id': 'pdf-file-input'
+        }),
+        help_text='価格表やカタログのPDFファイルをアップロードしてください（最大10MB）'
+    )
+    transaction_name = forms.CharField(
+        label='処理名',
+        max_length=200,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': '例：2024年12月価格表'
+        }),
+        help_text='この処理を識別するための名前を入力してください'
+    )
+    
+    def clean_pdf_file(self):
+        pdf_file = self.cleaned_data.get('pdf_file')
+        if pdf_file:
+            # ファイルサイズチェック（10MB制限）
+            if pdf_file.size > 10 * 1024 * 1024:
+                raise forms.ValidationError('ファイルサイズは10MB以下にしてください。')
+            
+            # ファイル形式チェック
+            if not pdf_file.name.lower().endswith('.pdf'):
+                raise forms.ValidationError('PDFファイルのみアップロード可能です。')
+        
+        return pdf_file

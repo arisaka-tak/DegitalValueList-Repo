@@ -1,10 +1,11 @@
 import json
 from django.shortcuts import render, get_object_or_404
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.template.loader import render_to_string
 from dashboard.products_master.models import Product, PriceHistory, ProductApproval, PriceHistoryApproval
-from django.db.models import Q
+from django.db.models import Q, Max
+from django.db import connection
 from decimal import Decimal
 from dashboard.products_master.forms import ProductForm
 from digital_pricelist_system.utils import get_current_user
@@ -38,7 +39,7 @@ def product_detail(request, pk):
     
     # 商品情報用JSONデータを準備
     product_json = json.dumps({
-        'product_number': product.product_number if product else None,
+        'product_number': product.pk if product else None,
         'product_code': product.product_code if product else '',
         'livestock_type': product.livestock_type if product else '',
         'category': product.category if product else '',
@@ -93,6 +94,12 @@ def save_product_and_histories(request, product=None):
     """商品情報と価格履歴を一括保存"""
     print("=== save_product_and_histories START ===")
     try:
+        # 削除フラグがある場合は申請処理にリダイレクト
+        has_delete_request = any(key.startswith('delete_') and value == 'true' for key, value in request.POST.items())
+        if has_delete_request:
+            print("削除申請が検出されました。申請処理にリダイレクトします。")
+            return submit_approval(request, product.pk if product else None)
+        
         # 1. 商品基本情報の保存
         if product:
             # 既存商品の更新
@@ -157,28 +164,7 @@ def save_product_and_histories(request, product=None):
                     except (PriceHistory.DoesNotExist, ValueError) as e:
                         print(f"History {history_id} error: {e}")
         
-        # 4. 削除処理
-        print(f"=== 削除処理開始 ===")
-        for key, value in request.POST.items():
-            if key.startswith('delete_'):
-                print(f"Found delete key: {key} = {value}")
-                if value == 'true':
-                    print(f"Delete history: {key} = {value}")
-                    history_id = key.split('_')[1]
-                    try:
-                        history = PriceHistory.objects.get(pk=history_id, product=product)
-                        print(f"Found history {history_id}: {history.effective_year_month}")
-                        print(f"is_deletable: {history.is_deletable()}")
-                        if history.is_deletable():
-                            history.is_active = False
-                            history.save()
-                            print(f"Successfully deleted history {history_id}")
-                        else:
-                            print(f"History {history_id} is not deletable")
-                    except (PriceHistory.DoesNotExist, ValueError) as e:
-                        print(f"History {history_id} delete error: {e}")
-        
-        print("=== 削除処理終了 ===")
+
         print("=== RETURNING SUCCESS ===")
         # 新規作成の場合は詳細画面にリダイレクト
         if request.path.endswith('/new/'):
@@ -565,183 +551,128 @@ def preview_save(request, pk=None):
     
     return render(request, 'products_master/partials/save_preview_modal.html', context)
 
-def submit_approval(request, pk=None):
-    """申請テーブルにデータをコピー"""
+def submit_approval_core(request, pk=None, is_reapplication=False):
+    """申請処理のコア機能（結果とエラーメッセージを返す）"""
+    print(f"=== submit_approval_core called: pk={pk}, method={request.method}, is_reapplication={is_reapplication} ===")
+    print(f"Request path: {request.path}")
+    print(f"POST data keys: {list(request.POST.keys())}")
+    
+    if pk:
+        try:
+            product = Product.objects.get(pk=pk)
+            if product.status:
+                raise ValueError("この商品は既に申請中です")
+        except Product.DoesNotExist:
+            product = None
+    else:
+        product = None
+    
+    # 共通バリデーションを使用
+    print("=== バリデーション開始 ===")
     try:
-        print(f"=== submit_approval called: pk={pk}, method={request.method} ===")
-        print(f"Request path: {request.path}")
-        print(f"POST data keys: {list(request.POST.keys())}")
+        product_data, new_histories = validate_form_data(request, product)
+        print(f"Validation successful: {len(new_histories)} new histories")
+    except ValueError as e:
+        print(f"Validation error: {str(e)}")
+        raise ValueError(str(e))
+    except Exception as e:
+        print(f"Unexpected validation error: {str(e)}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        raise ValueError(f"バリデーションエラー: {str(e)}")
+    print("=== バリデーション完了 ===")
+    
+    # 申請テーブルに商品情報をコピー
+    if product:
+        temp_product_number = product.pk
+        Product.objects.filter(pk=product.pk).update(status='申請中', approver='')
+    else:
+        last_temp = ProductApproval.objects.filter(product_number__lt=0).order_by('product_number').first()
+        temp_product_number = (last_temp.product_number - 1) if last_temp else -1
+        print(f"New product temp number: {temp_product_number}")
+    
+    approval_product = ProductApproval.objects.create(
+        product_number=temp_product_number,
+        product_code=product_data['product_code'],
+        livestock_type=product_data['livestock_type'],
+        category=product_data['category'],
+        manufacturer=product_data['manufacturer'],
+        product_name=product_data['product_name'],
+        model_number=product_data['model_number'],
+        specification=product_data['specification'],
+        shipping_unit=product_data['shipping_unit'],
+        shipping_fee=product_data['shipping_fee'],
+        remarks=product_data['remarks'],
+        applicant=get_current_user()
+    )
+    print(f"Created ProductApproval: pk={approval_product.pk}, product_number={approval_product.product_number}")
+    
+    # 価格履歴を申請テーブルにコピー
+    if product:
+        for history in product.price_histories.filter(is_active=True):
+            wholesale_price = request.POST.get(f'edit_wholesale_price_{history.pk}', '').strip()
+            kenren_price = request.POST.get(f'edit_kenren_price_{history.pk}', '').strip()
+            revision_reason = request.POST.get(f'edit_revision_reason_{history.pk}', '').strip()
+            delete_flag = request.POST.get(f'delete_{history.pk}', 'false')
+            
+            PriceHistoryApproval.objects.create(
+                product=approval_product,
+                period_year=history.period_year,
+                effective_year_month=history.effective_year_month,
+                gross_margin_rate=history.gross_margin_rate,
+                wholesale_price=wholesale_price if wholesale_price else history.wholesale_price,
+                kenren_price=kenren_price if kenren_price else history.kenren_price,
+                retail_price=history.retail_price,
+                revision_amount=0,
+                revision_reason=revision_reason if revision_reason else history.revision_reason,
+                is_delete_request=(delete_flag == 'true'),
+                applicant=get_current_user()
+            )
+    
+    # 新規履歴を申請テーブルに追加
+    existing_approval_dates = list(PriceHistoryApproval.objects.filter(
+        product=approval_product
+    ).values_list('effective_year_month', flat=True))
+    
+    for history in new_histories:
+        year, month = map(int, history['effective_year_month'].split('/'))
+        period_year = year if month >= 4 else year - 1
+        effective_year_month = f"{year:04d}/{month:02d}"
         
-        # 重複申請チェック用のログ
-        existing_approvals = ProductApproval.objects.filter(is_active=True)
-        print(f"Existing approvals count: {existing_approvals.count()}")
-        for approval in existing_approvals:
-            print(f"  - Approval {approval.pk}: {approval.product_name} (product_number: {approval.product_number})")
+        check_business_rules(effective_year_month, product, existing_approval_dates)
+        existing_approval_dates.append(effective_year_month)
         
+        gross_margin_rate = determine_gross_margin_rate(product, period_year, history['wholesale_price'] or '都度見積', request)
+        
+        PriceHistoryApproval.objects.create(
+            product=approval_product,
+            period_year=period_year,
+            effective_year_month=effective_year_month,
+            gross_margin_rate=gross_margin_rate,
+            wholesale_price=history['wholesale_price'] or '都度見積',
+            kenren_price=history['kenren_price'] if history['kenren_price'] else None,
+            revision_amount=0,
+            revision_reason=history['revision_reason'],
+            applicant=get_current_user()
+        )
+    
+    print(f"=== submit_approval_core completed successfully ===")
+    return approval_product
+
+def submit_approval(request, pk=None):
+    """申請処理（既存の呼び出し用）"""
+    try:
+        submit_approval_core(request, pk)
+        return HttpResponse('<script>alert("申請完了");location.href="/products/products/";</script>')
+    except ValueError as e:
+        # バリデーションエラーの場合
         if pk:
             product = get_object_or_404(Product, pk=pk)
-            # ステータスが空でない商品は多重申請を禁止
-            if product.status:
-                return HttpResponse('<script>alert("この商品は既に申請中です");history.back();</script>')
-        else:
-            product = None
-        
-        # 商品情報を取得
-        if product:
             form = ProductForm(request.POST, instance=product)
         else:
+            product = None
             form = ProductForm(request.POST)
-        
-        if not form.is_valid():
-            # 具体的なエラーメッセージを取得
-            error_messages = []
-            for field, errors in form.errors.items():
-                field_name = form.fields[field].label if field in form.fields else field
-                for error in errors:
-                    error_messages.append(f'{field_name}: {error}')
-            
-            error_message = ', '.join(error_messages) if error_messages else '商品情報にエラーがあります'
-            return _return_form_with_error(request, product, form, error_message)
-        
-        # 日付バリデーション
-        print("=== 日付バリデーション開始 ===")
-        validated_dates = []  # 同一申請内での重複チェック用
-        
-        for key, value in request.POST.items():
-            if key.startswith('new_effective_year_month_') and value.strip():
-                try:
-                    formatted_date = validate_date_format(value.strip())
-                    check_business_rules(formatted_date, product, validated_dates)
-                    validated_dates.append(formatted_date)
-                except ValueError as e:
-                    return _return_form_with_error(request, product, form, str(e))
-        
-        # 粗利率算定バリデーション
-        print("=== 粗利率算定バリデーション開始 ===")
-        for key, value in request.POST.items():
-            if key.startswith('new_effective_year_month_') and value.strip():
-                index = key.split('_')[-1]
-                wholesale_price = request.POST.get(f'new_wholesale_price_{index}', '').strip()
-                
-                if '/' in value:
-                    year, month = map(int, value.split('/'))
-                    period_year = year if month >= 4 else year - 1
-                    
-                    try:
-                        determine_gross_margin_rate(product, period_year, wholesale_price or '都度見積', request)
-                    except ValueError as e:
-                        return _return_form_with_error(request, product, form, str(e))
-        
-        print("=== バリデーション完了 ===")
-        
-        # 申請テーブルに商品情報をコピー
-        if product:
-            # 既存商品の場合
-            temp_product_number = product.product_number
-            # 商品マスタ側のステータスのみ「申請中」に更新（商品情報は更新しない）
-            Product.objects.filter(pk=product.pk).update(status='申請中', approver='')
-        else:
-            # 新規商品の場合は仮番号を自動採番
-            last_temp = ProductApproval.objects.filter(product_number__lt=0).order_by('product_number').first()
-            temp_product_number = (last_temp.product_number - 1) if last_temp else -1
-            print(f"New product temp number: {temp_product_number} (last_temp: {last_temp.product_number if last_temp else 'None'})")
-        
-        # 申請テーブルに商品情報をコピー
-        if product:
-            # 既存商品の場合はフォームデータを使用（申請内容）
-            approval_product = ProductApproval.objects.create(
-                product_number=temp_product_number,
-                product_code=form.cleaned_data.get('product_code'),
-                livestock_type=form.cleaned_data.get('livestock_type'),
-                category=form.cleaned_data.get('category'),
-                manufacturer=form.cleaned_data.get('manufacturer'),
-                product_name=form.cleaned_data.get('product_name'),
-                model_number=form.cleaned_data.get('model_number'),
-                specification=form.cleaned_data.get('specification'),
-                shipping_unit=form.cleaned_data.get('shipping_unit'),
-                shipping_fee=form.cleaned_data.get('shipping_fee'),
-                remarks=form.cleaned_data.get('remarks'),
-                applicant=get_current_user()
-            )
-        else:
-            # 新規商品の場合はフォームデータを使用
-            approval_product = ProductApproval.objects.create(
-                product_number=temp_product_number,
-                product_code=form.cleaned_data.get('product_code'),
-                livestock_type=form.cleaned_data.get('livestock_type'),
-                category=form.cleaned_data.get('category'),
-                manufacturer=form.cleaned_data.get('manufacturer'),
-                product_name=form.cleaned_data.get('product_name'),
-                model_number=form.cleaned_data.get('model_number'),
-                specification=form.cleaned_data.get('specification'),
-                shipping_unit=form.cleaned_data.get('shipping_unit'),
-                shipping_fee=form.cleaned_data.get('shipping_fee'),
-                remarks=form.cleaned_data.get('remarks'),
-                applicant=get_current_user()
-            )
-        print(f"Created ProductApproval: pk={approval_product.pk}, product_number={approval_product.product_number}, name={approval_product.product_name}")
-        
-        # 価格履歴を申請テーブルにコピー
-        if product:
-            # 既存商品の場合
-            for history in product.price_histories.filter(is_active=True):
-                # 更新内容をチェック
-                wholesale_price = request.POST.get(f'edit_wholesale_price_{history.pk}', '').strip()
-                kenren_price = request.POST.get(f'edit_kenren_price_{history.pk}', '').strip()
-                revision_reason = request.POST.get(f'edit_revision_reason_{history.pk}', '').strip()
-                delete_flag = request.POST.get(f'delete_{history.pk}', 'false')
-                
-                PriceHistoryApproval.objects.create(
-                    product=approval_product,
-                    period_year=history.period_year,
-                    effective_year_month=history.effective_year_month,
-                    gross_margin_rate=history.gross_margin_rate,
-                    wholesale_price=wholesale_price if wholesale_price else history.wholesale_price,
-                    kenren_price=kenren_price if kenren_price else history.kenren_price,
-                    retail_price=history.retail_price,
-                    revision_amount=0,
-                    revision_reason=revision_reason if revision_reason else history.revision_reason,
-                    is_delete_request=(delete_flag == 'true'),
-                    applicant=get_current_user()
-                )
-        
-        # 新規履歴を申請テーブルに追加
-        print("=== 新規履歴の申請テーブル追加開始 ===")
-        for key, value in request.POST.items():
-            if key.startswith('new_effective_year_month_') and value.strip():
-                print(f"Found new history: {key} = {value}")
-                index = key.split('_')[-1]
-                effective_year_month = value.strip()
-                wholesale_price = request.POST.get(f'new_wholesale_price_{index}', '').strip()
-                kenren_price = request.POST.get(f'new_kenren_price_{index}', '').strip()
-                revision_reason = request.POST.get(f'new_revision_reason_{index}', '').strip()
-                print(f"Index: {index}, wholesale: {wholesale_price}, kenren: {kenren_price}")
-                
-                if '/' in effective_year_month:
-                    year, month = map(int, effective_year_month.split('/'))
-                    period_year = year if month >= 4 else year - 1
-                    effective_year_month = f"{year:04d}/{month:02d}"
-                    
-                    # 粗利率を再算定
-                    gross_margin_rate = determine_gross_margin_rate(product, period_year, wholesale_price or '都度見積', request)
-                    
-                    print(f"Creating PriceHistoryApproval: {effective_year_month}")
-                    PriceHistoryApproval.objects.create(
-                        product=approval_product,
-                        period_year=period_year,
-                        effective_year_month=effective_year_month,
-                        gross_margin_rate=gross_margin_rate,
-                        wholesale_price=wholesale_price or '都度見積',
-                        kenren_price=kenren_price if kenren_price else None,
-                        revision_amount=0,
-                        revision_reason=revision_reason,
-                        applicant=get_current_user()
-                    )
-                    print(f"Successfully created PriceHistoryApproval for {effective_year_month}")
-        
-        print(f"=== submit_approval completed successfully ===")
-        return HttpResponse('<script>alert("申請完了");location.href="/products/products/";</script>')
-        
+        return _return_form_with_error(request, product, form, str(e))
     except Exception as e:
         import traceback
         print(f"ERROR: {traceback.format_exc()}")
@@ -772,7 +703,7 @@ def validate_date_format(effective_year_month):
     return f"{year:04d}/{month:02d}"
 
 def check_business_rules(formatted_date, product=None, existing_dates=None):
-    """ビジネスルールのチェック"""
+    """ビジネスルールのチェック（共通化）"""
     if existing_dates is None:
         existing_dates = []
     
@@ -803,7 +734,7 @@ def check_business_rules(formatted_date, product=None, existing_dates=None):
             if latest_editable and formatted_date <= latest_editable.effective_year_month:
                 raise ValueError(f'編集不可な範囲の日付です。{latest_editable.effective_year_month}より後の日付を入力してください。')
     
-    # 2年度以上先の登録禁止
+    # 2年度以上先の登録禁止（共通チェック）
     from datetime import datetime
     current_year = datetime.now().year
     current_month = datetime.now().month
@@ -813,6 +744,7 @@ def check_business_rules(formatted_date, product=None, existing_dates=None):
     if input_period_year > current_period_year + 1:
         raise ValueError(f'{input_period_year}年度は2年度以上先のため登録できません。')
     
+    # 重複チェック（共通チェック）
     if formatted_date in existing_dates:
         raise ValueError(f'{formatted_date}が重複しています。')
 
@@ -838,7 +770,7 @@ def _return_form_with_error(request, product, form, error_message):
         
         # 商品情報JSON
         product_json = json.dumps({
-            'product_number': product.product_number,
+            'product_number': product.pk,
             'product_code': product.product_code or '',
             'livestock_type': product.livestock_type or '',
             'category': product.category or '',
@@ -925,11 +857,18 @@ def get_kenren_price_input(request, wholesale_price):
     return None, None
 
 def calculate_margin_from_prices(kenren_price, wholesale_price):
-    """県連価格と仕切価格から粗利率を計算"""
+    """県連価格と仕切価格から粗利率を計算（％表記時に小数点第二位を四捨五入）"""
     try:
         wholesale_numeric = float(wholesale_price.replace(',', ''))
         if wholesale_numeric > 0:
-            return Decimal(str(round(kenren_price / wholesale_numeric, 6)))
+            # 粗利率を計算（倍率）
+            margin_rate = kenren_price / wholesale_numeric
+            # ％表記に変換して小数点第二位を四捨五入
+            percentage = margin_rate * 100
+            rounded_percentage = round(percentage, 1)  # 小数点第一位まで
+            # 倍率に戻す
+            rounded_rate = rounded_percentage / 100
+            return Decimal(str(rounded_rate))
     except (ValueError, AttributeError, ZeroDivisionError):
         pass
     return None
@@ -952,17 +891,9 @@ def get_margin_from_table(product, period_year):
         return None
 
 def get_margin_from_history(product, period_year, wholesale_price):
-    """過去履歴から粗利率を推定"""
+    """過去履歴から粗利率を推定（前年度の最終県連価格÷前年度の最終仕切価格）"""
     from dashboard.products_master.models import PriceHistory
     if not product:
-        return None
-    
-    try:
-        wholesale_numeric = float(wholesale_price.replace(',', ''))
-    except (ValueError, AttributeError):
-        return None
-    
-    if wholesale_numeric <= 0:
         return None
     
     past_history = PriceHistory.objects.filter(
@@ -975,6 +906,7 @@ def get_margin_from_history(product, period_year, wholesale_price):
         return None
     
     try:
+        # 前年度の最終県連価格を取得
         if past_history.kenren_price:
             past_kenren_price = float(str(past_history.kenren_price).replace(',', ''))
         else:
@@ -984,8 +916,21 @@ def get_margin_from_history(product, period_year, wholesale_price):
             else:
                 return None
         
-        calculated_rate = past_kenren_price / wholesale_numeric
-        return Decimal(str(round(calculated_rate, 6)))
+        # 前年度の最終仕切価格を取得
+        past_wholesale_price = float(str(past_history.wholesale_price).replace(',', '')) if past_history.wholesale_price != '都度見積' else None
+        
+        if not past_wholesale_price or past_wholesale_price <= 0:
+            return None
+        
+        # 前年度の最終県連価格÷前年度の最終仕切価格で粗利率を算出
+        calculated_rate = past_kenren_price / past_wholesale_price
+        
+        # ％表記で小数点第二位を四捨五入
+        percentage = calculated_rate * 100
+        rounded_percentage = round(percentage, 1)
+        rounded_rate = rounded_percentage / 100
+        
+        return Decimal(str(rounded_rate))
     except (ValueError, TypeError, ZeroDivisionError):
         return None
 
@@ -1047,13 +992,19 @@ def approval_list(request):
 def approval_detail(request, pk):
     """申請詳細画面"""
     approval = get_object_or_404(ProductApproval, pk=pk)
+    print(f"=== approval_detail: pk={pk}, status='{approval.status}' ===")
+    
+    # 再申請待ちの場合はPOSTリクエストで更新処理
+    if request.method == 'POST' and approval.status == '再申請待ち':
+        return _update_reapplication(request, approval)
+    
     price_histories = approval.price_histories.filter(is_active=True).order_by('-effective_year_month')
     
     # 元データとの差分を計算
     original_product = None
     if approval.product_number > 0:
         try:
-            original_product = Product.objects.get(product_number=approval.product_number)
+            original_product = Product.objects.get(pk=approval.product_number)
         except Product.DoesNotExist:
             pass
     
@@ -1103,12 +1054,21 @@ def approval_detail(request, pk):
                 'revision_reason': True,
             }
     
+    # 再申請待ちの場合は編集可能モード
+    is_editable = (approval.status == '再申請待ち')
+    print(f"is_editable: {is_editable}")
+    
+    # 価格履歴の編集可能性をデバッグ出力
+    for history in price_histories:
+        print(f"History {history.pk}: is_editable={history.is_editable()}")
+    
     context = {
         'current_user': get_current_user(),
         'approval': approval,
         'price_histories': price_histories,
         'diff_flags': diff_flags,
         'is_new_product': not bool(original_product),
+        'is_editable': is_editable,
         'breadcrumbs': get_breadcrumbs('approval_detail', product_name=approval.product_name)
     }
     return render(request, 'products_master/approval_detail.html', context)
@@ -1117,7 +1077,7 @@ def _process_approval(approval):
     """承認処理の共通ロジック"""
     if approval.product_number > 0:
         # 既存商品の更新
-        product = Product.objects.get(product_number=approval.product_number)
+        product = Product.objects.get(pk=approval.product_number)
         
         # 削除申請の場合は論理削除
         if approval.status == '削除申請':
@@ -1139,6 +1099,10 @@ def _process_approval(approval):
         product.status = ''
         product.approver = get_current_user()
         product.save()
+        
+        # キーワードを再生成
+        from dashboard.products_master.product_services import update_product_keywords
+        update_product_keywords(product)
         
         # 価格履歴を更新し、新規粗利率をテーブルに登録
         from dashboard.products_master.models import ProductGrossMarginRate
@@ -1199,7 +1163,8 @@ def _process_approval(approval):
                     margin_rate_obj.gross_margin_rate = approval_history.gross_margin_rate
                     margin_rate_obj.save()
     else:
-        # 新規商品の作成
+        # 新規商品の作成（product_numberを明示的に設定）
+        # 新規商品の作成（pkは自動採番）
         product = Product.objects.create(
             product_code=approval.product_code,
             livestock_type=approval.livestock_type,
@@ -1214,6 +1179,10 @@ def _process_approval(approval):
             status='',
             approver=get_current_user()
         )
+        
+        # キーワードを再生成
+        from dashboard.products_master.product_services import update_product_keywords
+        update_product_keywords(product)
         
         # 価格履歴を作成し、新規粗利率をテーブルに登録
         from dashboard.products_master.models import ProductGrossMarginRate
@@ -1230,16 +1199,16 @@ def _process_approval(approval):
                     revision_amount=approval_history.revision_amount,
                     revision_reason=approval_history.revision_reason,
                 )
-            
-            # 粗利率テーブルの更新（未登録または既存が0.0の場合、または申請が0.0の場合）
-            margin_rate_obj, created = ProductGrossMarginRate.objects.get_or_create(
-                product=product,
-                period_year=approval_history.period_year,
-                defaults={'gross_margin_rate': approval_history.gross_margin_rate}
-            )
-            if not created and (margin_rate_obj.gross_margin_rate == Decimal('0.0') or approval_history.gross_margin_rate == Decimal('0.0')):
-                margin_rate_obj.gross_margin_rate = approval_history.gross_margin_rate
-                margin_rate_obj.save()
+                
+                # 粗利率テーブルの更新（価格履歴が作成された場合のみ）
+                margin_rate_obj, created = ProductGrossMarginRate.objects.get_or_create(
+                    product=product,
+                    period_year=approval_history.period_year,
+                    defaults={'gross_margin_rate': approval_history.gross_margin_rate}
+                )
+                if not created and (margin_rate_obj.gross_margin_rate == Decimal('0.0') or approval_history.gross_margin_rate == Decimal('0.0')):
+                    margin_rate_obj.gross_margin_rate = approval_history.gross_margin_rate
+                    margin_rate_obj.save()
     
     # 承認テーブルから削除
     approval.delete()
@@ -1260,7 +1229,25 @@ def approve_application(request, pk):
         return HttpResponse('<script>alert("エラー発生");</script>', status=500)
 
 def reject_application(request, pk):
-    """申請を却下"""
+    """申請を却下（再申請待ちに変更）"""
+    if request.method != 'POST':
+        return HttpResponse('Invalid method', status=405)
+    
+    try:
+        approval = get_object_or_404(ProductApproval, pk=pk)
+        
+        # 申請種別を「再申請待ち」に変更
+        approval.status = '再申請待ち'
+        approval.save()
+        
+        # 申請却下時は商品マスタのステータスはそのまま（申請中を維持）
+        
+        return HttpResponse('<script>alert("申請を却下しました。再申請待ちに変更されました。");location.href="/products/approvals/";</script>')
+    except Exception as e:
+        return HttpResponse('<script>alert("エラー発生");</script>', status=500)
+
+def cancel_application(request, pk):
+    """申請を取消（完全削除）"""
     if request.method != 'POST':
         return HttpResponse('Invalid method', status=405)
     
@@ -1270,36 +1257,280 @@ def reject_application(request, pk):
         # 既存商品の場合はステータスをクリア
         if approval.product_number > 0:
             try:
-                product = Product.objects.get(product_number=approval.product_number)
+                product = Product.objects.get(pk=approval.product_number)
                 product.status = ''
                 product.save()
             except Product.DoesNotExist:
                 pass
         
         approval.delete()
-        return HttpResponse('<script>alert("却下完了");location.href="/products/approvals/";</script>')
+        return HttpResponse('<script>alert("申請取消完了");location.href="/products/approvals/";</script>')
     except Exception as e:
         return HttpResponse('<script>alert("エラー発生");</script>', status=500)
 
 
 
+def validate_form_data(request, product=None):
+    """共通フォームバリデーション"""
+    # 商品情報の取得
+    product_data = {
+        'product_code': request.POST.get('product_code', '') or '',
+        'livestock_type': request.POST.get('livestock_type', '') or '',
+        'category': request.POST.get('category', '') or '',
+        'manufacturer': request.POST.get('manufacturer', '') or '',
+        'product_name': request.POST.get('product_name', '') or '',
+        'model_number': request.POST.get('model_number', '') or '',
+        'specification': request.POST.get('specification', '') or '',
+        'shipping_unit': request.POST.get('shipping_unit', '') or '',
+        'shipping_fee': request.POST.get('shipping_fee', '') or '',
+        'remarks': request.POST.get('remarks', '') or ''
+    }
+    
+    # 新規価格履歴の取得
+    new_histories = []
+    for key, value in request.POST.items():
+        if key.startswith('new_effective_year_month_') and value.strip():
+            index = key.split('_')[-1]
+            effective_year_month = value.strip()
+            wholesale_price = request.POST.get(f'new_wholesale_price_{index}', '').strip()
+            kenren_price = request.POST.get(f'new_kenren_price_{index}', '').strip()
+            revision_reason = request.POST.get(f'new_revision_reason_{index}', '').strip()
+            
+            new_histories.append({
+                'effective_year_month': effective_year_month,
+                'wholesale_price': wholesale_price,
+                'kenren_price': kenren_price,
+                'revision_reason': revision_reason
+            })
+    
+    # バリデーション実行
+    errors = []
+    
+    # 商品名は必須
+    if not product_data['product_name']:
+        errors.append('商品名は必須です')
+    
+    # 新規価格履歴のバリデーション
+    validated_dates = []
+    for history in new_histories:
+        try:
+            formatted_date = validate_date_format(history['effective_year_month'])
+            check_business_rules(formatted_date, product, validated_dates)
+            validated_dates.append(formatted_date)
+            
+            # 粗利率算定バリデーション
+            if '/' in history['effective_year_month']:
+                year, month = map(int, history['effective_year_month'].split('/'))
+                period_year = year if month >= 4 else year - 1
+                print(f"Validating gross margin for {period_year}, wholesale_price: {history['wholesale_price']}")
+                determine_gross_margin_rate(product, period_year, history['wholesale_price'] or '都度見積', request)
+                print(f"Gross margin validation passed for {period_year}")
+        except ValueError as e:
+            print(f"History validation error for {history.get('effective_year_month', 'unknown')}: {str(e)}")
+            errors.append(str(e))
+    
+    if errors:
+        error_msg = '; '.join(errors)
+        print(f"Final validation errors: {error_msg}")
+        raise ValueError(error_msg)
+    
+    return product_data, new_histories
+
+def _update_reapplication(request, approval):
+    """再申請待ちデータの更新処理"""
+    print(f"=== _update_reapplication called ===")
+    print(f"POST keys: {list(request.POST.keys())}")
+    
+    try:
+        # 申請処理か保存処理か判定
+        if 'submit_approval' in request.POST:
+            print("Processing reapplication submission...")
+            
+            try:
+                # バリデーション実行
+                product_obj = Product.objects.get(pk=approval.product_number) if approval.product_number > 0 else None
+                product_data, new_histories = validate_form_data(request, product_obj)
+                
+                # 商品情報を更新
+                for field, value in product_data.items():
+                    setattr(approval, field, value)
+                
+                # 新規履歴を追加
+                existing_approval_dates = list(approval.price_histories.values_list('effective_year_month', flat=True))
+                for history in new_histories:
+                    year, month = map(int, history['effective_year_month'].split('/'))
+                    period_year = year if month >= 4 else year - 1
+                    effective_year_month = f"{year:04d}/{month:02d}"
+                    
+                    check_business_rules(effective_year_month, product_obj, existing_approval_dates)
+                    existing_approval_dates.append(effective_year_month)
+                    
+                    gross_margin_rate = determine_gross_margin_rate(product_obj, period_year, history['wholesale_price'] or '都度見積', request)
+                    
+                    PriceHistoryApproval.objects.create(
+                        product=approval,
+                        period_year=period_year,
+                        effective_year_month=effective_year_month,
+                        gross_margin_rate=gross_margin_rate,
+                        wholesale_price=history['wholesale_price'] or '都度見積',
+                        kenren_price=history['kenren_price'] if history['kenren_price'] else None,
+                        revision_reason=history['revision_reason'],
+                        applicant=get_current_user()
+                    )
+                
+                # ステータスを申請中に変更
+                approval.status = ''
+                approval.save()
+                
+                return HttpResponse('<script>alert("再申請完了");location.href="/products/approvals/";</script>')
+            except ValueError as e:
+                return HttpResponse(f'<script>alert("{str(e)}");history.back();</script>', status=400)
+        else:
+            print("Processing save operation...")
+            
+            # 共通バリデーションを使用
+            try:
+                print(f"Getting product with pk={approval.product_number}")
+                product_obj = Product.objects.get(pk=approval.product_number) if approval.product_number > 0 else None
+                print(f"Product found: {product_obj}")
+                product_data, new_histories = validate_form_data(request, product_obj)
+                print(f"Validation passed: {len(new_histories)} new histories")
+            except ValueError as e:
+                print(f"Validation error in save: {str(e)}")
+                return JsonResponse({'success': False, 'message': str(e)})
+            except Product.DoesNotExist:
+                print(f"Product not found: pk={approval.product_number}")
+                return JsonResponse({'success': False, 'message': '商品が見つかりません'})
+            except Exception as e:
+                print(f"Unexpected error in save validation: {str(e)}")
+                import traceback
+                print(f"Traceback: {traceback.format_exc()}")
+                return JsonResponse({'success': False, 'message': f'エラーが発生しました: {str(e)}'})
+            
+            # 商品情報の更新
+            print("Updating product data...")
+            for field, value in product_data.items():
+                setattr(approval, field, value)
+            
+            approval.save()
+            print("Product data updated successfully")
+            
+            # 価格履歴の更新処理
+            for key, value in request.POST.items():
+                if key.startswith('edit_') and value.strip():
+                    parts = key.split('_')
+                    if len(parts) >= 3:
+                        field = '_'.join(parts[1:-1])
+                        history_id = parts[-1]
+                        
+                        try:
+                            history = approval.price_histories.get(pk=history_id)
+                            if field == 'kenren_price':
+                                history.kenren_price = value.strip()
+                                history.save()
+                                print(f"Updated price history {history_id}: {field} = {value.strip()}")
+                        except Exception as e:
+                            print(f"Error updating price history {history_id}: {e}")
+            
+            # 削除フラグの処理
+            for key, value in request.POST.items():
+                if key.startswith('delete_') and value == 'true':
+                    history_id = key.split('_')[1]
+                    try:
+                        history = approval.price_histories.get(pk=history_id)
+                        history.is_delete_request = True
+                        history.save()
+                        print(f"Marked price history {history_id} for deletion")
+                    except Exception as e:
+                        print(f"Error marking price history {history_id} for deletion: {e}")
+            
+            # 既存の申請履歴との重複チェック用のリストを準備
+            
+            # 新規価格履歴の追加処理
+            existing_approval_dates = list(approval.price_histories.values_list('effective_year_month', flat=True))
+            
+            try:
+                for history in new_histories:
+                    year, month = map(int, history['effective_year_month'].split('/'))
+                    period_year = year if month >= 4 else year - 1
+                    effective_year_month = f"{year:04d}/{month:02d}"
+                    
+                    # ビジネスルールチェック（重複防止）
+                    try:
+                        product_obj = Product.objects.get(pk=approval.product_number) if approval.product_number > 0 else None
+                    except Product.DoesNotExist:
+                        product_obj = None
+                    check_business_rules(effective_year_month, product_obj, existing_approval_dates)
+                    existing_approval_dates.append(effective_year_month)
+                    
+                    # 粗利率を算定（再申請時は申請データから取得）
+                    try:
+                        gross_margin_rate = determine_gross_margin_rate(
+                            product_obj,
+                            period_year,
+                            history['wholesale_price'] or '都度見積',
+                            request
+                        )
+                    except ValueError:
+                        # 商品が存在しない場合は申請データから取得
+                        existing_history = approval.price_histories.filter(is_active=True).first()
+                        if existing_history:
+                            gross_margin_rate = existing_history.gross_margin_rate
+                        else:
+                            gross_margin_rate = Decimal('1.1')  # デフォルト値
+                    
+                    PriceHistoryApproval.objects.create(
+                        product=approval,
+                        period_year=period_year,
+                        effective_year_month=effective_year_month,
+                        gross_margin_rate=gross_margin_rate,
+                        wholesale_price=history['wholesale_price'] or '都度見積',
+                        kenren_price=history['kenren_price'] if history['kenren_price'] else None,
+                        revision_reason=history['revision_reason'],
+                        applicant=get_current_user()
+                    )
+                    print(f"Added new price history: {effective_year_month}")
+            except ValueError as e:
+                return JsonResponse({'success': False, 'message': str(e)})
+            
+            print("Save completed successfully")
+            response = JsonResponse({'success': True, 'message': '保存完了'})
+            print(f"Returning response: {response}")
+            return response
+    except ValueError as e:
+        return JsonResponse({'success': False, 'message': str(e)})
+    except Exception as e:
+        import traceback
+        print(f"ERROR: {traceback.format_exc()}")
+        return JsonResponse({'success': False, 'message': f'システムエラーが発生しました: {str(e)}'})
+
 def bulk_approve(request):
-    """一括承認"""
+    """選択式一括承認"""
     if request.method != 'POST':
         return HttpResponse('Invalid method', status=405)
     
     try:
-        approvals = ProductApproval.objects.filter(is_active=True)
+        approval_ids = request.POST.getlist('approval_ids')
+        if not approval_ids:
+            return HttpResponse('<script>alert("承認する項目が選択されていません");</script>', status=400)
+        
         approved_count = 0
+        error_count = 0
         
-        for approval in approvals:
+        for approval_id in approval_ids:
             try:
-                _process_approval(approval)  # 共通処理を使用
+                approval = ProductApproval.objects.get(pk=approval_id, is_active=True)
+                _process_approval(approval)
                 approved_count += 1
+            except ProductApproval.DoesNotExist:
+                error_count += 1
             except Exception:
-                continue
+                error_count += 1
         
-        return HttpResponse(f'<script>alert("{approved_count}件を一括承認しました");location.reload();</script>')
+        if error_count > 0:
+            return HttpResponse(f'<script>alert("{approved_count}件を承認しました。{error_count}件はエラーでした。");location.reload();</script>')
+        else:
+            return HttpResponse(f'<script>alert("{approved_count}件を一括承認しました");location.reload();</script>')
         
     except Exception:
         return HttpResponse('<script>alert("エラー発生");</script>', status=500)

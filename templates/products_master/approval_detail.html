@@ -20,10 +20,21 @@
                         <h5 class="mb-0">申請内容</h5>
                     </div>
                     <div class="card-body">
-                        <product-basic-info-component 
-                            product-data='{{ approval|approval_to_json }}'
-                            editable="false">
-                        </product-basic-info-component>
+                        {% if is_editable %}
+                            <form id="productForm" method="POST">
+                                {% csrf_token %}
+                                <product-basic-info-component 
+                                    product-data='{{ approval|approval_to_json }}'
+                                    form-data='{{ approval|approval_to_json }}'
+                                    editable="true">
+                                </product-basic-info-component>
+                            </form>
+                        {% else %}
+                            <product-basic-info-component 
+                                product-data='{{ approval|approval_to_json }}'
+                                editable="false">
+                            </product-basic-info-component>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -60,22 +71,7 @@
         <!-- 価格履歴 -->
         <div class="row mt-4">
             <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">申請価格履歴</h5>
-                        {% if not is_new_product %}
-                            <small class="text-muted">赤太字は元データからの変更箇所</small>
-                        {% endif %}
-                    </div>
-                    <div class="card-body">
-                        <price-history-component 
-                            histories='{{ price_histories|approval_histories_to_json }}'
-                            mode="approval"
-                            show-diff="true"
-                            editable="false">
-                        </price-history-component>
-                    </div>
-                </div>
+                {% include 'components/price_history_section.html' with section_title="申請価格履歴" show_diff_note=not_is_new_product show_add_button=is_editable histories_json=price_histories|approval_histories_to_json mode=is_editable|yesno:"edit,approval" show_diff=True editable=is_editable %}
             </div>
         </div>
     </div>
@@ -83,11 +79,14 @@
     <!-- ボトムアクションバー -->
     {% include 'components/bottom_action_bar.html' with action_type='approval_detail' %}
 
-    <!-- 承認・却下フォーム -->
+    <!-- 承認・却下・取消フォーム -->
     <form id="approveForm" method="POST" action="{% url 'products_master:approve_application' approval.pk %}" style="display: none;">
         {% csrf_token %}
     </form>
     <form id="rejectForm" method="POST" action="{% url 'products_master:reject_application' approval.pk %}" style="display: none;">
+        {% csrf_token %}
+    </form>
+    <form id="cancelForm" method="POST" action="{% url 'products_master:cancel_application' approval.pk %}" style="display: none;">
         {% csrf_token %}
     </form>
 
@@ -99,11 +98,60 @@
         }
     }
     
-    // 却下処理
+    // 申請却下処理
     window.rejectApplication = function() {
-        if (confirm('この申請を却下しますか？')) {
+        if (confirm('この申請を却下しますか？（再申請待ちに変更）')) {
             document.getElementById('rejectForm').submit();
         }
+    }
+    
+    // 申請取消処理
+    window.cancelApplication = function() {
+        if (confirm('この申請を取消しますか？')) {
+            document.getElementById('cancelForm').submit();
+        }
+    }
+    
+    // 保存処理
+    window.handleSave = function(event) {
+        event.preventDefault();
+        const form = document.getElementById('productForm');
+        const formData = new FormData(form);
+        
+        fetch(form.action || window.location.href, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                // Web Componentのデータを更新
+                const component = document.querySelector('product-basic-info-component');
+                if (component) {
+                    const currentFormData = {};
+                    const inputs = form.querySelectorAll('input, textarea');
+                    inputs.forEach(input => {
+                        if (input.name) {
+                            currentFormData[input.name] = input.value;
+                        }
+                    });
+                    component.setAttribute('product-data', JSON.stringify(currentFormData));
+                    component.setAttribute('form-data', JSON.stringify(currentFormData));
+                }
+            } else {
+                alert('エラー: ' + (data.message || '保存に失敗しました'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('エラーが発生しました');
+        });
+        
+        return false;
     }
     </script>
 

@@ -1,7 +1,9 @@
 from django.shortcuts import render
 from django.core.paginator import Paginator
 from django.db.models import Q
+from django.http import JsonResponse
 from dashboard.products_master.models import Product
+from dashboard.products_master.product_services import regenerate_all_product_keywords
 from digital_pricelist_system.utils import get_current_user
 from digital_pricelist_system.breadcrumbs import get_breadcrumbs
 
@@ -18,7 +20,7 @@ def product_list(request):
             Q(product_code__icontains=search_query)
         )
     
-    products = products.order_by('product_number')
+    products = products.order_by('pk')
     
     # ページネーション
     paginator = Paginator(products, 20)  # 20件ずつ表示
@@ -32,3 +34,21 @@ def product_list(request):
         'breadcrumbs': get_breadcrumbs('product_list')
     }
     return render(request, 'products_master/product_list.html', context)
+
+def regenerate_keywords_batch(request):
+    """キーワード一括再生成実行"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST method required'}, status=405)
+    
+    try:
+        result = regenerate_all_product_keywords()
+        return JsonResponse({
+            'success': True,
+            'message': f"キーワード再生成完了: {result['processed_count']}/{result['total_count']}件",
+            'result': result
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'エラーが発生しました: {str(e)}'
+        }, status=500)

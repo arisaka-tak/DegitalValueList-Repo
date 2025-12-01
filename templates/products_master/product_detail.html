@@ -87,20 +87,7 @@
         <!-- 価格履歴 -->
         <div class="row mt-4">
             <div class="col-12">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">価格改定履歴</h5>
-                        <div>
-                            <button type="button" onclick="addPriceRow()" class="btn btn-sm btn-outline-primary">
-                                新規追加
-                            </button>
-                            <span id="loading" class="htmx-indicator spinner-border spinner-border-sm ms-2" role="status"></span>
-                        </div>
-                    </div>
-                    <div class="card-body" id="price-history-container">
-                        <price-history-component histories='{{ price_histories_json|default:"[]" }}'></price-history-component>
-                    </div>
-                </div>
+                {% include 'components/price_history_section.html' with section_title="価格改定履歴" show_diff_note=False show_add_button=True histories_json=price_histories_json|default:"[]" mode="edit" show_diff=False editable=True %}
             </div>
         </div>
                         </form>

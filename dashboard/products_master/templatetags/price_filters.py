@@ -87,7 +87,7 @@ def approval_histories_to_json(price_histories):
                 'revision_reason': history.revision_reason or '',
                 'is_delete_request': getattr(history, 'is_delete_request', False),
                 'diff_flags': getattr(history, 'diff_flags', {}),
-                'is_editable': False  # 承認モードでは編集不可
+                'is_editable': history.is_editable()  # 実際の編集可能性を使用
             })
         return json.dumps(data)
     except:
