@@ -22,6 +22,9 @@ class Product(models.Model):
     shipping_fee = models.CharField('送料', max_length=100, blank=True, null=True)
     remarks = models.TextField('備考', blank=True, null=True)
     
+    # 表示順序用フィールド
+    sort_num = models.IntegerField('表示順序', default=0, help_text='畜種・分類・メーカー内での連番')
+    
     # 検索用キーワード
     bigram_keywords = models.TextField('2-gramキーワード', blank=True, null=True, help_text='JSON形式の2-gramキーワードリスト')
     
