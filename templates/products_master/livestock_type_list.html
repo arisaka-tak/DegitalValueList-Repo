@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block title %}畜種マスタ - デジタル価格表システム{% endblock %}
+
+{% block breadcrumb %}
+    {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
+{% endblock %}
+
+{% block content %}
+    {% include 'components/page_header.html' with page_title="畜種マスタ" page_subtitle="畜種の管理" %}
+    
+    <div class="container main-content">
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">畜種一覧</h5>
+                        <a href="{% url 'products_master:livestock_type_create' %}" class="btn btn-primary">
+                            <i class="bi bi-plus-circle"></i> 新規作成
+                        </a>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>表示順</th>
+                                        <th>畜種名</th>
+                                        <th>作成日時</th>
+                                        <th>更新日時</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for livestock_type in livestock_types %}
+                                    <tr>
+                                        <td>{{ livestock_type.sort_order }}</td>
+                                        <td>{{ livestock_type.name }}</td>
+                                        <td>{{ livestock_type.created_at|date:"Y/m/d H:i" }}</td>
+                                        <td>{{ livestock_type.updated_at|date:"Y/m/d H:i" }}</td>
+                                        <td>
+                                            <a href="{% url 'products_master:livestock_type_edit' livestock_type.pk %}" class="btn btn-sm btn-outline-primary">編集</a>
+                                            <form method="post" action="{% url 'products_master:livestock_type_delete' livestock_type.pk %}" class="d-inline" onsubmit="return confirm('削除しますか？')">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">削除</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted">データがありません</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

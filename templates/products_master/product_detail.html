@@ -40,6 +40,8 @@
                             <product-basic-info-component 
                                 product-data='{{ product_json|default:"{}" }}'
                                 form-data='{{ form_data_json|default:"{}" }}'
+                                livestock-types='{{ livestock_types_json|default:"[]" }}'
+                                categories='{{ categories_json|default:"[]" }}'
                                 editable="true"
                                 is-new="{{ is_new|yesno:'true,false' }}"
                                 diff-flags='{{ diff_flags_json|default:"{}" }}'
@@ -101,6 +103,9 @@
     
     <!-- 保存確認モーダル -->
     <div id="save-preview-modal"></div>
+    
+    <!-- メーカー選択モーダル -->
+    {% include 'components/manufacturer_modal.html' %}
 
     <style>
     .htmx-indicator {

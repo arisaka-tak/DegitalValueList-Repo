@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block title %}分類マスタ - デジタル価格表システム{% endblock %}
+
+{% block breadcrumb %}
+    {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
+{% endblock %}
+
+{% block content %}
+    {% include 'components/page_header.html' with page_title="分類マスタ" page_subtitle="分類の管理" %}
+    
+    <div class="container main-content">
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">分類一覧</h5>
+                        <a href="{% url 'products_master:category_create' %}" class="btn btn-primary">
+                            <i class="bi bi-plus-circle"></i> 新規作成
+                        </a>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>表示順</th>
+                                        <th>分類名</th>
+                                        <th>作成日時</th>
+                                        <th>更新日時</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for category in categories %}
+                                    <tr>
+                                        <td>{{ category.sort_order }}</td>
+                                        <td>{{ category.name }}</td>
+                                        <td>{{ category.created_at|date:"Y/m/d H:i" }}</td>
+                                        <td>{{ category.updated_at|date:"Y/m/d H:i" }}</td>
+                                        <td>
+                                            <a href="{% url 'products_master:category_edit' category.pk %}" class="btn btn-sm btn-outline-primary">編集</a>
+                                            <form method="post" action="{% url 'products_master:category_delete' category.pk %}" class="d-inline" onsubmit="return confirm('削除しますか？')">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">削除</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted">データがありません</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

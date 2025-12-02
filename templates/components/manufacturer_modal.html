@@ -1,0 +1,83 @@
+<!-- メーカー選択モーダル -->
+<div class="modal fade" id="manufacturerModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">メーカー選択</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <input type="text" class="form-control" id="manufacturerSearch" placeholder="メーカー名で検索...">
+        </div>
+        <div id="manufacturerList" style="max-height: 400px; overflow-y: auto;">
+          <!-- メーカーリストがここに表示される -->
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let manufacturers = [];
+    
+    // モーダルが開かれた時にメーカーリストを読み込み
+    document.getElementById('manufacturerModal').addEventListener('show.bs.modal', function() {
+        if (manufacturers.length === 0) {
+            loadManufacturers();
+        }
+    });
+    
+    // 検索機能
+    document.getElementById('manufacturerSearch').addEventListener('input', function() {
+        const query = this.value.toLowerCase();
+        filterManufacturers(query);
+    });
+    
+    function loadManufacturers() {
+        fetch('/products/api/manufacturers/')
+            .then(response => response.json())
+            .then(data => {
+                manufacturers = data;
+                displayManufacturers(manufacturers);
+            })
+            .catch(error => {
+                console.error('Error loading manufacturers:', error);
+                document.getElementById('manufacturerList').innerHTML = 
+                    '<div class="alert alert-danger">メーカーリストの読み込みに失敗しました</div>';
+            });
+    }
+    
+    function filterManufacturers(query) {
+        if (!query) {
+            displayManufacturers(manufacturers);
+            return;
+        }
+        
+        const filtered = manufacturers.filter(m => 
+            m.name.toLowerCase().includes(query)
+        );
+        displayManufacturers(filtered);
+    }
+    
+    function displayManufacturers(list) {
+        const container = document.getElementById('manufacturerList');
+        
+        if (list.length === 0) {
+            container.innerHTML = '<div class="text-muted text-center py-3">該当するメーカーが見つかりません</div>';
+            return;
+        }
+        
+        const html = list.map(manufacturer => `
+            <div class="list-group-item list-group-item-action" 
+                 style="cursor: pointer;" 
+                 onclick="selectManufacturer(${manufacturer.id}, '${manufacturer.name.replace(/'/g, "\\'")}')">
+                ${manufacturer.name}
+            </div>
+        `).join('');
+        
+        container.innerHTML = `<div class="list-group">${html}</div>`;
+    }
+});
+</script>

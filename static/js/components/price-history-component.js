@@ -23,6 +23,7 @@ class PriceHistoryComponent extends HTMLElement {
                             <th>適用年月</th>
                             <th>仕切価格</th>
                             <th>県連価格</th>
+                            <th>参考小売価格</th>
                             <th>粗利率</th>
                             ${!isApprovalMode ? '<th>改定額</th>' : ''}
                             <th>改定理由</th>
@@ -62,6 +63,7 @@ class PriceHistoryComponent extends HTMLElement {
                     <td>${history.effective_year_month}</td>
                     <td class="${this.getCellClass(history, 'wholesale_price', isDiffRow)}" ${this.getCellAttributes(history, 'wholesale_price')}>${this.formatPrice(history.wholesale_price)}</td>
                     <td class="kenren-price-cell ${this.getCellClass(history, 'kenren_price', isDiffRow)}" ${this.getCellAttributes(history, 'kenren_price')} style="${this.getKenrenPriceStyle(history)}">${this.formatPrice(this.getKenrenPriceDisplay(history))}</td>
+                    <td class="${this.getCellClass(history, 'retail_price', isDiffRow)}" ${this.getCellAttributes(history, 'retail_price')}>${this.formatPrice(history.retail_price)}</td>
                     <td>${this.getGrossMarginDisplay(history)}</td>
                     ${!isApprovalMode ? `<td>${history.revision_amount !== null && history.revision_amount !== undefined ? history.revision_amount : '自動算出'}</td>` : ''}
                     <td class="${this.getCellClass(history, 'revision_reason', isDiffRow)}" ${this.getCellAttributes(history, 'revision_reason')}>${history.revision_reason || (isDiffRow ? '' : '-')}</td>
@@ -114,6 +116,7 @@ class PriceHistoryComponent extends HTMLElement {
             <td><input type="text" class="form-control form-control-sm" name="new_effective_year_month_${this.rowIndex}" form="productForm" placeholder="YYYY/MM" required></td>
             <td><input type="text" class="form-control form-control-sm" name="new_wholesale_price_${this.rowIndex}" form="productForm" placeholder="仕切価格"></td>
             <td><input type="text" class="form-control form-control-sm" name="new_kenren_price_${this.rowIndex}" form="productForm" placeholder="県連価格"></td>
+            <td><input type="text" class="form-control form-control-sm" name="new_retail_price_${this.rowIndex}" form="productForm" placeholder="参考小売価格"></td>
             <td class="text-muted">自動算出</td>
             <td class="text-muted">自動算出</td>
             <td><input type="text" class="form-control form-control-sm" name="new_revision_reason_${this.rowIndex}" form="productForm" placeholder="改定理由"></td>
@@ -207,7 +210,7 @@ class PriceHistoryComponent extends HTMLElement {
             
             // 価格フィールドの場合はカンマ区切りでフォーマット
             let displayValue = newValue || originalValue;
-            if ((field === 'wholesale_price' || field === 'kenren_price') && newValue) {
+            if ((field === 'wholesale_price' || field === 'kenren_price' || field === 'retail_price') && newValue) {
                 displayValue = this.formatPrice(newValue);
             }
             

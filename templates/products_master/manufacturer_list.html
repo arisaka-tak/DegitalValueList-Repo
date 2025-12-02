@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+
+{% block title %}メーカーマスタ - デジタル価格表システム{% endblock %}
+
+{% block breadcrumb %}
+    {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
+{% endblock %}
+
+{% block content %}
+    {% include 'components/page_header.html' with page_title="メーカーマスタ" page_subtitle="メーカー情報の管理" %}
+    
+    <div class="container main-content">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">メーカー一覧</h5>
+                <a href="{% url 'products_master:manufacturer_create' %}" class="btn btn-primary">
+                    <i class="bi bi-plus-circle"></i> 新規作成
+                </a>
+            </div>
+            <div class="card-body">
+                <!-- 検索フォーム -->
+                <form method="get" class="mb-3">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="input-group">
+                                <input type="text" class="form-control" name="search" 
+                                       value="{{ search_query }}" placeholder="メーカー名で検索...">
+                                <button class="btn btn-outline-secondary" type="submit">
+                                    <i class="bi bi-search"></i> 検索
+                                </button>
+                                {% if search_query %}
+                                    <a href="{% url 'products_master:manufacturer_list' %}" class="btn btn-outline-secondary">
+                                        <i class="bi bi-x-circle"></i> クリア
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </form>
+
+                <!-- メーカーリスト -->
+                {% if manufacturers %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>メーカー名</th>
+                                    <th>作成日時</th>
+                                    <th>更新日時</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for manufacturer in manufacturers %}
+                                    <tr>
+                                        <td>{{ manufacturer.id }}</td>
+                                        <td>{{ manufacturer.name }}</td>
+                                        <td>{{ manufacturer.created_at|date:"Y/m/d H:i" }}</td>
+                                        <td>{{ manufacturer.updated_at|date:"Y/m/d H:i" }}</td>
+                                        <td>
+                                            <div class="btn-group btn-group-sm">
+                                                <a href="{% url 'products_master:manufacturer_edit' manufacturer.pk %}" 
+                                                   class="btn btn-outline-primary">
+                                                    <i class="bi bi-pencil"></i> 編集
+                                                </a>
+                                                <button type="button" class="btn btn-outline-danger" 
+                                                        onclick="confirmDelete({{ manufacturer.pk }}, '{{ manufacturer.name }}')">
+                                                    <i class="bi bi-trash"></i> 削除
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-4">
+                        <p class="text-muted">
+                            {% if search_query %}
+                                検索条件に一致するメーカーが見つかりません
+                            {% else %}
+                                メーカーが登録されていません
+                            {% endif %}
+                        </p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 削除確認フォーム -->
+    <form id="deleteForm" method="post" style="display: none;">
+        {% csrf_token %}
+    </form>
+
+    <script>
+    function confirmDelete(id, name) {
+        if (confirm(`メーカー「${name}」を削除しますか？`)) {
+            const form = document.getElementById('deleteForm');
+            form.action = `/products/masters/manufacturers/${id}/delete/`;
+            form.submit();
+        }
+    }
+    </script>
+{% endblock %}

@@ -4,6 +4,53 @@ from decimal import Decimal
 from django.utils import timezone
 from datetime import datetime
 
+class LivestockType(models.Model):
+    """畜種マスタ"""
+    name = models.CharField('畜種名', max_length=50, unique=True)
+    sort_order = models.IntegerField('表示順', default=0)
+    is_active = models.BooleanField('有効', default=True)
+    created_at = models.DateTimeField('作成日時', auto_now_add=True)
+    updated_at = models.DateTimeField('更新日時', auto_now=True)
+    
+    class Meta:
+        verbose_name = '畜種マスタ'
+        verbose_name_plural = '畜種マスタ'
+        ordering = ['sort_order', 'name']
+    
+    def __str__(self):
+        return self.name
+
+class Category(models.Model):
+    """分類マスタ"""
+    name = models.CharField('分類名', max_length=100, unique=True)
+    sort_order = models.IntegerField('表示順', default=0)
+    is_active = models.BooleanField('有効', default=True)
+    created_at = models.DateTimeField('作成日時', auto_now_add=True)
+    updated_at = models.DateTimeField('更新日時', auto_now=True)
+    
+    class Meta:
+        verbose_name = '分類マスタ'
+        verbose_name_plural = '分類マスタ'
+        ordering = ['sort_order', 'name']
+    
+    def __str__(self):
+        return self.name
+
+class Manufacturer(models.Model):
+    """メーカーマスタ"""
+    name = models.CharField('メーカー名', max_length=200, unique=True)
+    is_active = models.BooleanField('有効', default=True)
+    created_at = models.DateTimeField('作成日時', auto_now_add=True)
+    updated_at = models.DateTimeField('更新日時', auto_now=True)
+    
+    class Meta:
+        verbose_name = 'メーカーマスタ'
+        verbose_name_plural = 'メーカーマスタ'
+        ordering = ['name']
+    
+    def __str__(self):
+        return self.name
+
 class ActiveProductManager(models.Manager):
     """有効な商品のみを取得するマネージャー"""
     def get_queryset(self):
@@ -12,9 +59,9 @@ class ActiveProductManager(models.Manager):
 class Product(models.Model):
     """商品マスタ"""
     product_code = models.CharField('商品コード', max_length=50, blank=True, null=True, help_text='ユーザー管理用の商品コード')
-    livestock_type = models.CharField('畜種', max_length=50, blank=True, null=True)
-    category = models.CharField('分類', max_length=100, blank=True, null=True)
-    manufacturer = models.CharField('メーカー', max_length=100, blank=True, null=True)
+    livestock_type = models.ForeignKey(LivestockType, on_delete=models.SET_NULL, verbose_name='畜種', blank=True, null=True)
+    category = models.ForeignKey(Category, on_delete=models.SET_NULL, verbose_name='分類', blank=True, null=True)
+    manufacturer = models.ForeignKey(Manufacturer, on_delete=models.SET_NULL, verbose_name='メーカー', blank=True, null=True)
     product_name = models.CharField('商品名', max_length=200)
     model_number = models.CharField('型式', max_length=100, blank=True, null=True)
     specification = models.CharField('規格', max_length=100, blank=True, null=True)

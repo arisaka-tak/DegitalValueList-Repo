@@ -52,7 +52,7 @@
                             <tbody>
                                 {% for product in page_obj %}
                                     <tr>
-                                        <td>{{ product.product_number }}</td>
+                                        <td>{{ product.pk }}</td>
                                         <td>{{ product.product_code|default:"未設定" }}</td>
                                         <td>
                                             <a href="{% url 'products_master:product_detail' product.pk %}" class="text-decoration-none">

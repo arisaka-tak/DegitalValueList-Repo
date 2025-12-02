@@ -30,7 +30,7 @@
                             <button type="button" class="btn btn-outline-primary me-2" id="saveSortBtn" onclick="saveSortOrder()" disabled>並び順を保存</button>
                         </div>
                         <div>
-                            <button type="button" class="btn btn-success" disabled>Excel出力</button>
+                            <button type="button" class="btn btn-success" onclick="exportExcel()">Excel出力</button>
                         </div>
                     </div>
                 </form>
@@ -41,28 +41,28 @@
         <div class="card">
             <div class="card-body">
                 {% if page_obj %}
-                    <div class="table-responsive">
-                        <table class="table table-sm table-hover resizable-table" id="priceTable">
+                    <div class="table-responsive" style="overflow-x: auto; white-space: nowrap;">
+                        <table class="table table-sm table-hover resizable-table" id="priceTable" style="min-width: 1200px;">
                             <thead class="table-primary">
                                 <tr>
-                                    <th rowspan="2" class="align-middle">№</th>
-                                    <th rowspan="2" class="align-middle">操作</th>
-                                    <th rowspan="2" class="align-middle">畜種</th>
-                                    <th rowspan="2" class="align-middle">分類</th>
-                                    <th rowspan="2" class="align-middle">メーカー</th>
-                                    <th rowspan="2" class="align-middle">商品名</th>
-                                    <th rowspan="2" class="align-middle">型式</th>
-                                    <th rowspan="2" class="align-middle">規格</th>
-                                    <th rowspan="2" class="align-middle">発送単位</th>
-                                    <th colspan="2" class="text-center">価格情報</th>
-                                    <th rowspan="2" class="align-middle">改定額</th>
-                                    <th rowspan="2" class="align-middle">送料</th>
-                                    <th rowspan="2" class="align-middle">備考</th>
-                                    <th rowspan="2" class="align-middle">改定理由</th>
+                                    <th rowspan="2" class="align-middle text-center">№</th>
+                                    <th rowspan="2" class="align-middle text-center">操作</th>
+                                    <th rowspan="2" class="align-middle text-center">畜種</th>
+                                    <th rowspan="2" class="align-middle text-center">分類</th>
+                                    <th rowspan="2" class="align-middle text-center">メーカー</th>
+                                    <th rowspan="2" class="align-middle text-center">商品名</th>
+                                    <th rowspan="2" class="align-middle text-center">型式</th>
+                                    <th rowspan="2" class="align-middle text-center">規格</th>
+                                    <th rowspan="2" class="align-middle text-center">発送単位</th>
+                                    <th colspan="3" class="text-center">価格情報</th>
+                                    <th rowspan="2" class="align-middle text-center">送料</th>
+                                    <th rowspan="2" class="align-middle text-center">備考</th>
+                                    <th rowspan="2" class="align-middle text-center">改定理由</th>
                                 </tr>
                                 <tr>
-                                    <th>県連価格</th>
-                                    <th>参考小売価格</th>
+                                    <th class="text-center">県連価格</th>
+                                    <th class="text-center">改定額</th>
+                                    <th class="text-center">参考小売価格</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -73,7 +73,7 @@
                                         data-category="{{ item.product.category }}" 
                                         data-manufacturer="{{ item.product.manufacturer }}" 
                                         draggable="true">
-                                        <td>{{ forloop.counter }}</td>
+                                        <td class="text-end">{{ forloop.counter }}</td>
                                         <td class="text-center">
                                             <button class="btn btn-sm btn-outline-secondary me-1" onclick="moveUp(this)" title="上に移動">↑</button>
                                             <button class="btn btn-sm btn-outline-secondary me-1" onclick="moveDown(this)" title="下に移動">↓</button>
@@ -109,37 +109,31 @@
                                                 <span class="text-muted">価格未設定</span>
                                             {% endif %}
                                         </td>
-                                        <td>
+                                        <td class="text-end">
                                             {% if item.has_price %}
-                                                {{ item.price_history.retail_price|default:"-" }}
+                                                {{ item.price_history.get_revision_amount|floatformat:0 }}
                                             {% else %}
                                                 <span class="text-muted">-</span>
                                             {% endif %}
                                         </td>
                                         <td class="text-end">
                                             {% if item.has_price %}
-                                                {{ item.price_history.revision_amount|floatformat:0 }}
+                                                {{ item.price_history.retail_price|format_price }}
                                             {% else %}
                                                 <span class="text-muted">-</span>
                                             {% endif %}
                                         </td>
-                                        <td>{{ item.product.shipping_fee|default:"-" }}</td>
+                                        <td class="text-end">{{ item.product.shipping_fee|default:"-" }}</td>
                                         <td>
                                             {% if item.product.remarks %}
-                                                <span class="text-truncate d-inline-block" style="max-width: 100px;" 
-                                                      title="{{ item.product.remarks }}">
-                                                    {{ item.product.remarks }}
-                                                </span>
+                                                {{ item.product.remarks }}
                                             {% else %}
                                                 -
                                             {% endif %}
                                         </td>
                                         <td>
                                             {% if item.has_price and item.price_history.revision_reason %}
-                                                <span class="text-truncate d-inline-block" style="max-width: 100px;" 
-                                                      title="{{ item.price_history.revision_reason }}">
-                                                    {{ item.price_history.revision_reason }}
-                                                </span>
+                                                {{ item.price_history.revision_reason }}
                                             {% else %}
                                                 <span class="text-muted">-</span>
                                             {% endif %}
@@ -202,21 +196,37 @@
         white-space: nowrap;
     }
     
+    .resizable-table td {
+        white-space: nowrap;
+    }
+    
     /* 各列の最小幅を設定 */
-    .resizable-table th:nth-child(1) { min-width: 50px; }  /* № */
-    .resizable-table th:nth-child(2) { min-width: 60px; }  /* 畜種 */
-    .resizable-table th:nth-child(3) { min-width: 60px; }  /* 分類 */
-    .resizable-table th:nth-child(4) { min-width: 80px; }  /* メーカー */
-    .resizable-table th:nth-child(5) { min-width: 150px; } /* 商品名 */
-    .resizable-table th:nth-child(6) { min-width: 60px; }  /* 型式 */
-    .resizable-table th:nth-child(7) { min-width: 60px; }  /* 規格 */
-    .resizable-table th:nth-child(8) { min-width: 80px; }  /* 発送単位 */
-    .resizable-table th:nth-child(9) { min-width: 80px; }  /* 県連価格 */
-    .resizable-table th:nth-child(10) { min-width: 100px; } /* 参考小売価格 */
-    .resizable-table th:nth-child(11) { min-width: 70px; } /* 改定額 */
-    .resizable-table th:nth-child(12) { min-width: 60px; } /* 送料 */
-    .resizable-table th:nth-child(13) { min-width: 60px; } /* 備考 */
-    .resizable-table th:nth-child(14) { min-width: 100px; } /* 改定理由 */
+    .resizable-table th:nth-child(1) { min-width: 50px; width: 50px; }  /* № */
+    .resizable-table th:nth-child(2) { min-width: 80px; width: 80px; }  /* 操作 */
+    .resizable-table th:nth-child(3) { min-width: 60px; width: 60px; }  /* 畜種 */
+    .resizable-table th:nth-child(4) { min-width: 60px; width: 60px; }  /* 分類 */
+    .resizable-table th:nth-child(5) { min-width: 80px; width: 80px; }  /* メーカー */
+    .resizable-table th:nth-child(6) { min-width: 200px; width: 200px; } /* 商品名 */
+    .resizable-table th:nth-child(7) { min-width: 80px; width: 80px; }  /* 型式 */
+    .resizable-table th:nth-child(8) { min-width: 80px; width: 80px; }  /* 規格 */
+    .resizable-table th:nth-child(9) { min-width: 80px; width: 80px; }  /* 発送単位 */
+    .resizable-table th:nth-child(10) { min-width: 100px; width: 100px; } /* 県連価格 */
+    .resizable-table th:nth-child(11) { min-width: 120px; width: 120px; } /* 参考小売価格 */
+    .resizable-table th:nth-child(12) { min-width: 80px; width: 80px; } /* 改定額 */
+    .resizable-table th:nth-child(13) { min-width: 60px; width: 60px; } /* 送料 */
+    .resizable-table th:nth-child(14) { min-width: 100px; width: 100px; } /* 備考 */
+    .resizable-table th:nth-child(15) { min-width: 120px; width: 120px; } /* 改定理由 */
+    
+    /* テーブルの横スクロールを確実に */
+    .table-responsive {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .resizable-table {
+        width: auto;
+        min-width: 100%;
+    }
     
     .resizable-table th:hover {
         border-right: 2px solid #007bff;
@@ -567,6 +577,15 @@
             console.error('Error:', error);
             alert('リセットに失敗しました');
         });
+    }
+    
+    function exportExcel() {
+        const selectedMonth = document.getElementById('month').value;
+        let url = '{% url "products_master:export_excel" %}';
+        if (selectedMonth) {
+            url += '?month=' + encodeURIComponent(selectedMonth);
+        }
+        window.open(url, '_blank');
     }
     </script>
 {% endblock %}

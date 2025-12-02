@@ -101,6 +101,7 @@ def approval_histories_to_json(price_histories):
                 'wholesale_price': history.wholesale_price,
                 'kenren_price': history.kenren_price,
                 'kenren_price_display': kenren_price_display,
+                'retail_price': history.retail_price,
                 'gross_margin_rate': str(history.gross_margin_rate) if history.gross_margin_rate is not None else None,
                 'revision_reason': history.revision_reason or '',
                 'is_delete_request': getattr(history, 'is_delete_request', False),

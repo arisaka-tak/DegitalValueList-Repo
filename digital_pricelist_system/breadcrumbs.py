@@ -68,6 +68,41 @@ def get_breadcrumbs(page_type, **kwargs):
             {'title': 'AI価格抽出', 'url': '/products/ai-extract/'},
             {'title': '照合結果', 'url': None}
         ],
+        
+        # マスタメンテナンス
+        'livestock_type_list': [
+            {'title': '畜種マスタ', 'url': None}
+        ],
+        'livestock_type_create': [
+            {'title': '畜種マスタ', 'url': '/products/masters/livestock-types/'},
+            {'title': '新規作成', 'url': None}
+        ],
+        'livestock_type_edit': [
+            {'title': '畜種マスタ', 'url': '/products/masters/livestock-types/'},
+            {'title': kwargs.get('livestock_type_name', '編集'), 'url': None}
+        ],
+        'category_list': [
+            {'title': '分類マスタ', 'url': None}
+        ],
+        'category_create': [
+            {'title': '分類マスタ', 'url': '/products/masters/categories/'},
+            {'title': '新規作成', 'url': None}
+        ],
+        'category_edit': [
+            {'title': '分類マスタ', 'url': '/products/masters/categories/'},
+            {'title': kwargs.get('category_name', '編集'), 'url': None}
+        ],
+        'manufacturer_list': [
+            {'title': 'メーカーマスタ', 'url': None}
+        ],
+        'manufacturer_create': [
+            {'title': 'メーカーマスタ', 'url': '/products/masters/manufacturers/'},
+            {'title': '新規作成', 'url': None}
+        ],
+        'manufacturer_edit': [
+            {'title': 'メーカーマスタ', 'url': '/products/masters/manufacturers/'},
+            {'title': kwargs.get('manufacturer_name', '編集'), 'url': None}
+        ],
     }
     
     return breadcrumbs_map.get(page_type, [])

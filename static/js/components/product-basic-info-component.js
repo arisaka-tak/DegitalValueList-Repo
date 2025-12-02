@@ -14,6 +14,8 @@ class ProductBasicInfoComponent extends HTMLElement {
         const isNew = this.getAttribute('is-new') === 'true';
         const diffFlags = JSON.parse(this.getAttribute('diff-flags') || '{}');
         const errorFields = JSON.parse(this.getAttribute('error-fields') || '[]');
+        const livestockTypes = JSON.parse(this.getAttribute('livestock-types') || '[]');
+        const categories = JSON.parse(this.getAttribute('categories') || '[]');
 
         this.innerHTML = `
             <div class="row">
@@ -28,11 +30,11 @@ class ProductBasicInfoComponent extends HTMLElement {
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="id_livestock_type">畜種</label>
-                        ${this.renderField('livestock_type', productData, formData, isEditable, diffFlags, errorFields)}
+                        ${this.renderSelectField('livestock_type', productData, formData, isEditable, diffFlags, errorFields, livestockTypes)}
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="id_category">分類</label>
-                        ${this.renderField('category', productData, formData, isEditable, diffFlags, errorFields)}
+                        ${this.renderSelectField('category', productData, formData, isEditable, diffFlags, errorFields, categories)}
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="id_shipping_fee">送料</label>
@@ -46,7 +48,7 @@ class ProductBasicInfoComponent extends HTMLElement {
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="id_manufacturer">メーカー</label>
-                        ${this.renderField('manufacturer', productData, formData, isEditable, diffFlags, errorFields)}
+                        ${this.renderManufacturerField('manufacturer', productData, formData, isEditable, diffFlags, errorFields)}
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="id_model_number">型式</label>
@@ -116,11 +118,81 @@ class ProductBasicInfoComponent extends HTMLElement {
         }
     }
 
+    renderSelectField(fieldName, productData, formData, isEditable, diffFlags, errorFields, options) {
+        const value = productData[fieldName] || '';
+        const formValue = formData[fieldName] !== undefined ? formData[fieldName] : value;
+        const isDiff = diffFlags[fieldName] || false;
+        const hasError = errorFields.includes(fieldName);
+        
+        if (isEditable) {
+            const errorClass = hasError ? ' is-invalid' : '';
+            let optionsHtml = '<option value="">選択してください</option>';
+            
+            options.forEach(option => {
+                const selected = formValue == option.id ? ' selected' : '';
+                optionsHtml += `<option value="${option.id}"${selected}>${this.escapeHtml(option.name)}</option>`;
+            });
+            
+            return `<select class="form-select${errorClass}" id="id_${fieldName}" name="${fieldName}">${optionsHtml}</select>`;
+        } else {
+            const diffClass = isDiff ? ' text-danger fw-bold' : '';
+            const displayValue = value || '-';
+            return `<div class="form-control-plaintext${diffClass}">${this.escapeHtml(displayValue)}</div>`;
+        }
+    }
+
+    renderManufacturerField(fieldName, productData, formData, isEditable, diffFlags, errorFields) {
+        const value = productData[fieldName] || '';
+        const formValue = formData[fieldName] !== undefined ? formData[fieldName] : value;
+        const isDiff = diffFlags[fieldName] || false;
+        const hasError = errorFields.includes(fieldName);
+        
+        if (isEditable) {
+            const errorClass = hasError ? ' is-invalid' : '';
+            return `
+                <div class="input-group">
+                    <input type="text" class="form-control${errorClass}" id="id_${fieldName}_display" readonly placeholder="メーカーを選択してください">
+                    <input type="hidden" id="id_${fieldName}" name="${fieldName}" value="${this.escapeHtml(formValue)}">
+                    <button type="button" class="btn btn-outline-secondary" onclick="openManufacturerModal()">選択</button>
+                </div>
+            `;
+        } else {
+            const diffClass = isDiff ? ' text-danger fw-bold' : '';
+            const displayValue = value || '-';
+            return `<div class="form-control-plaintext${diffClass}">${this.escapeHtml(displayValue)}</div>`;
+        }
+    }
+
     escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
     }
+
+    // メーカー選択後のコールバック
+    setManufacturer(id, name) {
+        const hiddenInput = document.getElementById('id_manufacturer');
+        const displayInput = document.getElementById('id_manufacturer_display');
+        if (hiddenInput && displayInput) {
+            hiddenInput.value = id;
+            displayInput.value = name;
+        }
+    }
 }
 
 customElements.define('product-basic-info-component', ProductBasicInfoComponent);
+
+// グローバル関数
+function openManufacturerModal() {
+    const modal = new bootstrap.Modal(document.getElementById('manufacturerModal'));
+    modal.show();
+}
+
+function selectManufacturer(id, name) {
+    const component = document.querySelector('product-basic-info-component');
+    if (component) {
+        component.setManufacturer(id, name);
+    }
+    const modal = bootstrap.Modal.getInstance(document.getElementById('manufacturerModal'));
+    modal.hide();
+}

@@ -3,7 +3,7 @@ from django.shortcuts import render, get_object_or_404
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.template.loader import render_to_string
-from dashboard.products_master.models import Product, PriceHistory, ProductApproval, PriceHistoryApproval
+from dashboard.products_master.models import Product, PriceHistory, ProductApproval, PriceHistoryApproval, LivestockType, Category, Manufacturer
 from django.db.models import Q, Max
 from django.db import connection
 from decimal import Decimal
@@ -29,6 +29,7 @@ def product_detail(request, pk):
             'wholesale_price': history.wholesale_price,
             'kenren_price': history.kenren_price,  # 元のkenren_priceフィールド
             'kenren_price_display': history.get_kenren_price_display(),
+            'retail_price': history.retail_price,
             'gross_margin_rate': str(history.gross_margin_rate) if history.gross_margin_rate is not None else None,
             'revision_amount': history.get_revision_amount(),
             'revision_reason': history.revision_reason or '',
@@ -37,13 +38,17 @@ def product_detail(request, pk):
         for history in price_histories
     ])
     
+    # マスタデータを取得
+    livestock_types = list(LivestockType.objects.filter(is_active=True).values('id', 'name'))
+    categories = list(Category.objects.filter(is_active=True).values('id', 'name'))
+    
     # 商品情報用JSONデータを準備
     product_json = json.dumps({
         'product_number': product.pk if product else None,
         'product_code': product.product_code if product else '',
-        'livestock_type': product.livestock_type if product else '',
-        'category': product.category if product else '',
-        'manufacturer': product.manufacturer if product else '',
+        'livestock_type': product.livestock_type.id if product and product.livestock_type else '',
+        'category': product.category.id if product and product.category else '',
+        'manufacturer': product.manufacturer.id if product and product.manufacturer else '',
         'product_name': product.product_name if product else '',
         'model_number': product.model_number if product else '',
         'specification': product.specification if product else '',
@@ -66,6 +71,10 @@ def product_detail(request, pk):
         'remarks': form.initial.get('remarks', ''),
     })
     
+    # マスタデータ用JSON
+    livestock_types_json = json.dumps(livestock_types)
+    categories_json = json.dumps(categories)
+    
     context = {
         'current_user': get_current_user(),
         'product': product,
@@ -74,6 +83,8 @@ def product_detail(request, pk):
         'price_histories_json': price_histories_json,
         'product_json': product_json,
         'form_data_json': form_data_json,
+        'livestock_types_json': livestock_types_json,
+        'categories_json': categories_json,
         'diff_flags_json': '{}',  # 新規作成時は差分なし
         'is_new': not bool(product),
         'breadcrumbs': get_breadcrumbs('product_detail', product_name=product.product_name if product else '新規作成')
@@ -210,6 +221,10 @@ def product_detail_new(request):
         else:
             form = ProductForm()
     
+    # マスタデータを取得
+    livestock_types = list(LivestockType.objects.filter(is_active=True).values('id', 'name'))
+    categories = list(Category.objects.filter(is_active=True).values('id', 'name'))
+    
     # 新規作成用JSONデータを準備
     if copy_from_id:
         try:
@@ -217,9 +232,9 @@ def product_detail_new(request):
             product_json = json.dumps({
                 'product_number': None,
                 'product_code': original_product.product_code or '',
-                'livestock_type': original_product.livestock_type or '',
-                'category': original_product.category or '',
-                'manufacturer': original_product.manufacturer or '',
+                'livestock_type': original_product.livestock_type.id if original_product.livestock_type else '',
+                'category': original_product.category.id if original_product.category else '',
+                'manufacturer': original_product.manufacturer.id if original_product.manufacturer else '',
                 'product_name': original_product.product_name or '',
                 'model_number': original_product.model_number or '',
                 'specification': original_product.specification or '',
@@ -256,6 +271,10 @@ def product_detail_new(request):
             'remarks': '',
         })
     
+    # マスタデータ用JSON
+    livestock_types_json = json.dumps(livestock_types)
+    categories_json = json.dumps(categories)
+    
     form_data_json = json.dumps({
         'product_code': form.initial.get('product_code', ''),
         'livestock_type': form.initial.get('livestock_type', ''),
@@ -277,6 +296,8 @@ def product_detail_new(request):
         'price_histories_json': '[]',  # 空のJSON配列
         'product_json': product_json,
         'form_data_json': form_data_json,
+        'livestock_types_json': livestock_types_json,
+        'categories_json': categories_json,
         'diff_flags_json': '{}',
         'is_new': True,  # 新規作成フラグ
         'breadcrumbs': get_breadcrumbs('product_new')
@@ -612,6 +633,7 @@ def submit_approval_core(request, pk=None, is_reapplication=False):
         for history in product.price_histories.filter(is_active=True):
             wholesale_price = request.POST.get(f'edit_wholesale_price_{history.pk}', '').strip()
             kenren_price = request.POST.get(f'edit_kenren_price_{history.pk}', '').strip()
+            retail_price = request.POST.get(f'edit_retail_price_{history.pk}', '').strip()
             revision_reason = request.POST.get(f'edit_revision_reason_{history.pk}', '').strip()
             delete_flag = request.POST.get(f'delete_{history.pk}', 'false')
             
@@ -622,7 +644,7 @@ def submit_approval_core(request, pk=None, is_reapplication=False):
                 gross_margin_rate=history.gross_margin_rate,
                 wholesale_price=wholesale_price if wholesale_price else history.wholesale_price,
                 kenren_price=kenren_price if kenren_price else history.kenren_price,
-                retail_price=history.retail_price,
+                retail_price=retail_price if retail_price else history.retail_price,
                 revision_amount=0,
                 revision_reason=revision_reason if revision_reason else history.revision_reason,
                 is_delete_request=(delete_flag == 'true'),
@@ -651,6 +673,7 @@ def submit_approval_core(request, pk=None, is_reapplication=False):
             gross_margin_rate=gross_margin_rate,
             wholesale_price=history['wholesale_price'] or '都度見積',
             kenren_price=history['kenren_price'] if history['kenren_price'] else None,
+            retail_price=history['retail_price'] if history['retail_price'] else None,
             revision_amount=0,
             revision_reason=history['revision_reason'],
             applicant=get_current_user()
@@ -772,9 +795,9 @@ def _return_form_with_error(request, product, form, error_message):
         product_json = json.dumps({
             'product_number': product.pk,
             'product_code': product.product_code or '',
-            'livestock_type': product.livestock_type or '',
-            'category': product.category or '',
-            'manufacturer': product.manufacturer or '',
+            'livestock_type': product.livestock_type.id if product.livestock_type else '',
+            'category': product.category.id if product.category else '',
+            'manufacturer': product.manufacturer.id if product.manufacturer else '',
             'product_name': product.product_name or '',
             'model_number': product.model_number or '',
             'specification': product.specification or '',
@@ -951,36 +974,47 @@ def get_margin_from_history(product, period_year, wholesale_price):
         return None
 
 def determine_gross_margin_rate(product, period_year, wholesale_price, request=None):
-    """粗利率を決定（シンプル版）"""
+    """粗利率を決定（新ロジック）"""
     # 1. 県連価格が手入力されているかチェック
     kenren_text, kenren_numeric = get_kenren_price_input(request, wholesale_price)
     
-    if kenren_text is not None:
-        if kenren_numeric is not None:
-            # 数字の場合は粗利率を計算
-            margin_rate = calculate_margin_from_prices(kenren_numeric, wholesale_price)
-            if margin_rate is not None:
-                return margin_rate
-        # 数字でない場合はデフォルト
-        return Decimal('0.0')
+    if kenren_text is not None and kenren_numeric is not None:
+        # 県連価格が入力された場合、粗利率を計算して更新
+        margin_rate = calculate_margin_from_prices(kenren_numeric, wholesale_price)
+        if margin_rate is not None:
+            # 粗利率テーブルを更新
+            if product:
+                from dashboard.products_master.models import ProductGrossMarginRate
+                ProductGrossMarginRate.objects.update_or_create(
+                    product=product,
+                    period_year=period_year,
+                    defaults={'gross_margin_rate': margin_rate}
+                )
+            return margin_rate
     
-    # 2. 粗利率テーブルから取得
+    # 2. 粗利率テーブルから取得（最新の粗利率を継続使用）
     margin_rate = get_margin_from_table(product, period_year)
-    if margin_rate is not None:
+    if margin_rate is not None and margin_rate != Decimal('0.0'):
         return margin_rate
     
-    # 3. 過去履歴から推定
-    margin_rate = get_margin_from_history(product, period_year, wholesale_price)
-    if margin_rate is not None:
-        return margin_rate
+    # 3. 過去の粗利率を継続使用（最新の粗利率を取得）
+    if product:
+        from dashboard.products_master.models import ProductGrossMarginRate
+        latest_margin = ProductGrossMarginRate.objects.filter(
+            product=product,
+            period_year__lte=period_year,
+            gross_margin_rate__gt=Decimal('0.0')
+        ).order_by('-period_year').first()
+        
+        if latest_margin:
+            return latest_margin.gross_margin_rate
     
-    # 4. どこからも取得できない場合はエラー
+    # 4. 初回登録時はデフォルト値
     try:
         float(wholesale_price.replace(',', ''))
+        return Decimal('0.0')  # デフォルト粗利率
     except (ValueError, AttributeError):
         raise ValueError('仕切価格が数字でない場合、県連価格は手入力してください。')
-    
-    raise ValueError(f'{period_year}年度の粗利率が未設定です。仕切価格・県連価格を手入力してください。')
 
 def approval_list(request):
     """申請一覧画面"""
@@ -1053,6 +1087,7 @@ def approval_detail(request, pk):
                 history.diff_flags = {
                     'wholesale_price': history.wholesale_price != original_history.wholesale_price,
                     'kenren_price': history.kenren_price != original_history.kenren_price,
+                    'retail_price': history.retail_price != original_history.retail_price,
                     'revision_reason': history.revision_reason != original_history.revision_reason,
                 }
             else:
@@ -1060,6 +1095,7 @@ def approval_detail(request, pk):
                 history.diff_flags = {
                     'wholesale_price': True,
                     'kenren_price': True,
+                    'retail_price': True,
                     'revision_reason': True,
                 }
         else:
@@ -1067,6 +1103,7 @@ def approval_detail(request, pk):
             history.diff_flags = {
                 'wholesale_price': True,
                 'kenren_price': True,
+                'retail_price': True,
                 'revision_reason': True,
             }
     
@@ -1091,6 +1128,8 @@ def approval_detail(request, pk):
 
 def _process_approval(approval):
     """承認処理の共通ロジック"""
+    print(f"Processing approval: ID={approval.pk}, product_number={approval.product_number}, product_name={approval.product_name}")
+    
     if approval.product_number > 0:
         # 既存商品の更新
         product = Product.objects.get(pk=approval.product_number)
@@ -1103,9 +1142,34 @@ def _process_approval(approval):
         
         # 商品情報を更新
         product.product_code = approval.product_code
-        product.livestock_type = approval.livestock_type
-        product.category = approval.category
-        product.manufacturer = approval.manufacturer
+        
+        # 畜種と分類を外部キーオブジェクトに変換
+        if approval.livestock_type:
+            try:
+                livestock_type_id = str(approval.livestock_type).strip("'\"")
+                product.livestock_type = LivestockType.objects.get(id=livestock_type_id)
+            except (LivestockType.DoesNotExist, ValueError):
+                product.livestock_type = None
+        else:
+            product.livestock_type = None
+            
+        if approval.category:
+            try:
+                category_id = str(approval.category).strip("'\"")
+                product.category = Category.objects.get(id=category_id)
+            except (Category.DoesNotExist, ValueError):
+                product.category = None
+        else:
+            product.category = None
+            
+        if approval.manufacturer:
+            try:
+                manufacturer_id = str(approval.manufacturer).strip("'\"")
+                product.manufacturer = Manufacturer.objects.get(id=manufacturer_id)
+            except (Manufacturer.DoesNotExist, ValueError):
+                product.manufacturer = None
+        else:
+            product.manufacturer = None
         product.product_name = approval.product_name
         product.model_number = approval.model_number
         product.specification = approval.specification
@@ -1181,11 +1245,37 @@ def _process_approval(approval):
     else:
         # 新規商品の作成（product_numberを明示的に設定）
         # 新規商品の作成（pkは自動採番）
+        
+        # 畜種と分類を外部キーオブジェクトに変換
+        livestock_type_obj = None
+        if approval.livestock_type:
+            try:
+                livestock_type_id = str(approval.livestock_type).strip("'\"")
+                livestock_type_obj = LivestockType.objects.get(id=livestock_type_id)
+            except (LivestockType.DoesNotExist, ValueError):
+                pass
+        
+        category_obj = None
+        if approval.category:
+            try:
+                category_id = str(approval.category).strip("'\"")
+                category_obj = Category.objects.get(id=category_id)
+            except (Category.DoesNotExist, ValueError):
+                pass
+        
+        manufacturer_obj = None
+        if approval.manufacturer:
+            try:
+                manufacturer_id = str(approval.manufacturer).strip("'\"")
+                manufacturer_obj = Manufacturer.objects.get(id=manufacturer_id)
+            except (Manufacturer.DoesNotExist, ValueError):
+                pass
+        
         product = Product.objects.create(
             product_code=approval.product_code,
-            livestock_type=approval.livestock_type,
-            category=approval.category,
-            manufacturer=approval.manufacturer,
+            livestock_type=livestock_type_obj,
+            category=category_obj,
+            manufacturer=manufacturer_obj,
             product_name=approval.product_name,
             model_number=approval.model_number,
             specification=approval.specification,
@@ -1320,12 +1410,14 @@ def validate_form_data(request, product=None):
             effective_year_month = value.strip()
             wholesale_price = request.POST.get(f'new_wholesale_price_{index}', '').strip()
             kenren_price = request.POST.get(f'new_kenren_price_{index}', '').strip()
+            retail_price = request.POST.get(f'new_retail_price_{index}', '').strip()
             revision_reason = request.POST.get(f'new_revision_reason_{index}', '').strip()
             
             new_histories.append({
                 'effective_year_month': effective_year_month,
                 'wholesale_price': wholesale_price,
                 'kenren_price': kenren_price,
+                'retail_price': retail_price,
                 'revision_reason': revision_reason
             })
     
@@ -1550,22 +1642,41 @@ def bulk_approve(request):
         
         approved_count = 0
         error_count = 0
+        error_messages = []
         
         for approval_id in approval_ids:
             try:
                 approval = ProductApproval.objects.get(pk=approval_id, is_active=True)
                 _process_approval(approval)
                 approved_count += 1
+                print(f"Successfully approved: {approval_id}")
             except ProductApproval.DoesNotExist:
                 error_count += 1
-            except Exception:
+                error_msg = f"ID {approval_id}: 申請が見つかりません"
+                error_messages.append(error_msg)
+                print(f"Error: {error_msg}")
+            except Exception as e:
                 error_count += 1
+                error_msg = f"ID {approval_id}: {str(e)}"
+                error_messages.append(error_msg)
+                print(f"Error: {error_msg}")
+                import traceback
+                print(f"Traceback: {traceback.format_exc()}")
         
         if error_count > 0:
-            return HttpResponse(f'<script>alert("{approved_count}件を承認しました。{error_count}件はエラーでした。");location.reload();</script>')
+            # エラー詳細をコンソールに出力
+            print(f"Bulk approval errors ({error_count} errors):")
+            for error_msg in error_messages:
+                print(f"  - {error_msg}")
+            return HttpResponse(f'<script>alert("{approved_count}件を承認しました。{error_count}件はエラーでした。\n\nエラー詳細はコンソールを確認してください。");location.href="/products/approvals/";</script>')
         else:
-            return HttpResponse(f'<script>alert("{approved_count}件を一括承認しました");location.reload();</script>')
+            return HttpResponse(f'<script>alert("{approved_count}件を一括承認しました");location.href="/products/approvals/";</script>')
         
     except Exception:
         return HttpResponse('<script>alert("エラー発生");</script>', status=500)
+
+def api_manufacturers(request):
+    """メーカーリストAPI"""
+    manufacturers = list(Manufacturer.objects.filter(is_active=True).values('id', 'name'))
+    return JsonResponse(manufacturers, safe=False)
 

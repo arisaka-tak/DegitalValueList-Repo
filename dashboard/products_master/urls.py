@@ -6,6 +6,7 @@ from .integrated_pricelist import integrated_pricelist_views as pricelist_views
 from .ai_price_extract import ai_price_extract_views as ai_views
 from .ai_price_extract import ai_history_views as ai_history_views
 from .product_delete import product_delete_views as delete_views
+from . import master_views
 
 app_name = 'products_master'
 
@@ -39,6 +40,7 @@ urlpatterns = [
     path('integrated-pricelist/', pricelist_views.integrated_pricelist, name='integrated_pricelist'),
     path('integrated-pricelist/update-sort/', pricelist_views.update_sort_order, name='update_sort_order'),
     path('integrated-pricelist/reset-sort/', pricelist_views.reset_sort_order, name='reset_sort_order'),
+    path('integrated-pricelist/export-excel/', pricelist_views.export_excel, name='export_excel'),
     
     # AI価格抽出
     path('ai-extract/', ai_history_views.ai_extract_history, name='ai_extract'),
@@ -53,4 +55,21 @@ urlpatterns = [
     
     # 商品削除
     path('products/<int:pk>/delete/', delete_views.product_delete, name='product_delete'),
+    
+    # マスタメンテナンス
+    path('masters/livestock-types/', master_views.livestock_type_list, name='livestock_type_list'),
+    path('masters/livestock-types/create/', master_views.livestock_type_create, name='livestock_type_create'),
+    path('masters/livestock-types/<int:pk>/edit/', master_views.livestock_type_edit, name='livestock_type_edit'),
+    path('masters/livestock-types/<int:pk>/delete/', master_views.livestock_type_delete, name='livestock_type_delete'),
+    path('masters/categories/', master_views.category_list, name='category_list'),
+    path('masters/categories/create/', master_views.category_create, name='category_create'),
+    path('masters/categories/<int:pk>/edit/', master_views.category_edit, name='category_edit'),
+    path('masters/categories/<int:pk>/delete/', master_views.category_delete, name='category_delete'),
+    path('masters/manufacturers/', master_views.manufacturer_list, name='manufacturer_list'),
+    path('masters/manufacturers/create/', master_views.manufacturer_create, name='manufacturer_create'),
+    path('masters/manufacturers/<int:pk>/edit/', master_views.manufacturer_edit, name='manufacturer_edit'),
+    path('masters/manufacturers/<int:pk>/delete/', master_views.manufacturer_delete, name='manufacturer_delete'),
+    
+    # API
+    path('api/manufacturers/', detail_views.api_manufacturers, name='api_manufacturers'),
 ]
