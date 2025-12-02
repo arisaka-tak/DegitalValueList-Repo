@@ -26,7 +26,7 @@ class ProductBasicInfoComponent extends HTMLElement {
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="id_product_name">商品名</label>
-                        ${this.renderField('product_name', productData, formData, isEditable, diffFlags, errorFields)}
+                        ${this.renderTextareaField('product_name', productData, formData, isEditable, diffFlags, errorFields, true)}
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="id_livestock_type">畜種</label>
@@ -38,7 +38,7 @@ class ProductBasicInfoComponent extends HTMLElement {
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="id_shipping_fee">送料</label>
-                        ${this.renderField('shipping_fee', productData, formData, isEditable, diffFlags, errorFields)}
+                        ${this.renderTextareaField('shipping_fee', productData, formData, isEditable, diffFlags, errorFields)}
                     </div>
                 </div>
                 <div class="col-md-6">
@@ -56,7 +56,7 @@ class ProductBasicInfoComponent extends HTMLElement {
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="id_specification">規格</label>
-                        ${this.renderField('specification', productData, formData, isEditable, diffFlags, errorFields)}
+                        ${this.renderTextareaField('specification', productData, formData, isEditable, diffFlags, errorFields)}
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="id_shipping_unit">発送単位</label>
@@ -101,7 +101,7 @@ class ProductBasicInfoComponent extends HTMLElement {
         }
     }
 
-    renderTextareaField(fieldName, productData, formData, isEditable, diffFlags, errorFields) {
+    renderTextareaField(fieldName, productData, formData, isEditable, diffFlags, errorFields, isRequired = false) {
         const value = productData[fieldName] || '';
         // フォームデータがある場合はそれを優先、なければ商品データを使用
         const formValue = formData[fieldName] !== undefined ? formData[fieldName] : value;
@@ -110,11 +110,12 @@ class ProductBasicInfoComponent extends HTMLElement {
         
         if (isEditable) {
             const errorClass = hasError ? ' is-invalid' : '';
-            return `<textarea class="form-control${errorClass}" id="id_${fieldName}" name="${fieldName}" rows="3">${this.escapeHtml(formValue)}</textarea>`;
+            const requiredStyle = isRequired ? ' style="border: 2px solid #0d6efd;"' : '';
+            return `<textarea class="form-control${errorClass}" id="id_${fieldName}" name="${fieldName}" rows="3"${requiredStyle}>${this.escapeHtml(formValue)}</textarea>`;
         } else {
             const diffClass = isDiff ? ' text-danger fw-bold' : '';
             const displayValue = value || '-';
-            return `<div class="form-control-plaintext${diffClass}">${this.escapeHtml(displayValue)}</div>`;
+            return `<div class="form-control-plaintext${diffClass}">${this.escapeHtml(displayValue).replace(/\n/g, '<br>')}</div>`;
         }
     }
 

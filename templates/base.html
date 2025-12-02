@@ -61,6 +61,26 @@
                             </li>
                         </ul>
                     </li>
+                    <li class="nav-item mb-2">
+                        <h6 class="text-muted mb-2 mt-3">データ管理</h6>
+                        <ul class="nav flex-column ms-3">
+                            <li class="nav-item mb-1">
+                                <a class="nav-link d-flex align-items-center" href="{% url 'system_admin:export_csv' %}">
+                                    <span class="me-2">📤</span> データエクスポート
+                                </a>
+                            </li>
+                            <li class="nav-item mb-1">
+                                <a class="nav-link d-flex align-items-center" href="{% url 'system_admin:import_csv' %}">
+                                    <span class="me-2">📥</span> データインポート
+                                </a>
+                            </li>
+                            <li class="nav-item mb-1">
+                                <a class="nav-link d-flex align-items-center text-danger" href="{% url 'system_admin:clear_data' %}">
+                                    <span class="me-2">🗑️</span> データクリア
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
                 </ul>
             </div>
         </nav>

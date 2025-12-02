@@ -40,6 +40,7 @@ urlpatterns = [
     path('integrated-pricelist/update-sort/', pricelist_views.update_sort_order, name='update_sort_order'),
     path('integrated-pricelist/reset-sort/', pricelist_views.reset_sort_order, name='reset_sort_order'),
     path('integrated-pricelist/export-excel/', pricelist_views.export_excel, name='export_excel'),
+    path('integrated-pricelist/cross-page-move/', pricelist_views.cross_page_move, name='cross_page_move'),
     
     # AI価格抽出
     path('ai-extract/', ai_history_views.ai_extract_history, name='ai_extract'),
@@ -48,6 +49,7 @@ urlpatterns = [
     path('ai-extract/pdf-process/', ai_views.ai_extract_pdf_process, name='ai_extract_pdf_process'),
     path('ai-extract/pdf-api/', ai_views.ai_extract_pdf_api, name='ai_extract_pdf_api'),
     path('ai-extract/rematch/', ai_views.ai_extract_rematch, name='ai_extract_rematch'),
+    path('ai-extract/get-detail/', ai_views.ai_extract_get_detail, name='ai_extract_get_detail'),
     path('ai-extract/update-detail/', ai_views.ai_extract_update_detail, name='ai_extract_update_detail'),
     path('ai-extract/history/<int:pk>/', ai_history_views.ai_extract_history_detail, name='ai_extract_history_detail'),
     path('ai-extract/history/<int:pk>/delete/', ai_history_views.ai_extract_history_delete, name='ai_extract_history_delete'),

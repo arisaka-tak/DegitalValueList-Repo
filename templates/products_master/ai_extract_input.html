@@ -124,7 +124,7 @@
                                 <button type="button" class="btn btn-outline-info btn-sm" onclick="loadSampleData()">
                                     サンプルデータを読み込み
                                 </button>
-                                <small class="text-muted ms-2">3件のサンプル商品データを入力フォームに読み込みます</small>
+                                <small class="text-muted ms-2">表記揺れありのサンプルデータ（全角・半角混在、スペース、略記等）でAI照合性能をテストできます</small>
                             </div>
                         </div>
                     </div>
@@ -219,34 +219,34 @@
         document.getElementById('productsContainer').innerHTML = '';
         productCount = 0;
         
-        // サンプルデータ（実際の商品データベース）
+        // サンプルデータ（表記揺れありでAI照合テスト用）
         const samples = [
             {
-                product_name: '牛用配合飼料',
-                model_number: 'CF-100',
-                manufacturer: 'メーカーA',
-                specification: '20kg袋',
-                current_price: 4000,
-                new_price: 4200,
-                revision_reason: '原材料価格上昇による価格改定'
+                product_name: 'エコクーラー装置',  // 「装置」追加
+                model_number: 'EC－１',  // 全角ハイフン、全角数字
+                manufacturer: 'カワバタ産業株式会社',  // 正式社名
+                specification: '制御盤付き',  // 「き」追加
+                current_price: 420000,
+                new_price: 435000,
+                revision_reason: '原材料費高騰による価格改定'
             },
             {
-                product_name: '豚用配合飼料',
-                model_number: 'PF-200',
-                manufacturer: 'メーカーB',
-                specification: '25kg袋',
-                current_price: 3500,
-                new_price: 3700,
-                revision_reason: '運送コスト上昇による価格調整'
+                product_name: 'ボルナド ファン',  // スペース追加
+                model_number: '740-HD',  // ハイフン追加
+                manufacturer: 'カワバタ産業',
+                specification: '単相１００Ｖ',  // 全角数字
+                current_price: 85000,
+                new_price: 89000,
+                revision_reason: '電子部品価格上昇'
             },
             {
-                product_name: '鶏用配合飼料',
-                model_number: 'BF-150',
-                manufacturer: 'メーカーC',
-                specification: '15kg袋',
-                current_price: 2800,
-                new_price: 3000,
-                revision_reason: '品質改善による価格改定'
+                product_name: 'ボルナドファンユニット',  // 「ユニット」追加
+                model_number: '712型',  // 「型」追加
+                manufacturer: 'カワバタ産業（株）',  // 略記表記
+                specification: '三相２００V',  // 漢数字、全角
+                current_price: 120000,
+                new_price: 125000,
+                revision_reason: 'モーター部品コスト増'
             }
         ];
         

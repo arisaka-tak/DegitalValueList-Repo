@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+
+{% block title %}インポートプレビュー - デジタル価格表システム{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>インポートプレビュー</h2>
+    
+    <div class="alert alert-info">
+        <strong>確認:</strong> 以下の内容でインポートします。問題がなければ「実行」ボタンをクリックしてください。
+    </div>
+    
+    <div class="mb-3">
+        <strong>インポート予定件数:</strong> {{ preview_data|length }}商品
+    </div>
+    
+    {% for item in preview_data %}
+    <div class="card mb-3">
+        <div class="card-header">
+            <h6 class="mb-0">行{{ item.row_num }}: {{ item.product.product_name }}</h6>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>商品情報</h6>
+                    <table class="table table-sm">
+                        <tr><td>商品コード</td><td>{{ item.product.product_code|default:"（空）" }}</td></tr>
+                        <tr><td>畜種</td><td>{{ item.product.livestock_type }}</td></tr>
+                        <tr><td>カテゴリ</td><td>{{ item.product.category }}</td></tr>
+                        <tr><td>メーカー</td><td>{{ item.product.manufacturer }}</td></tr>
+                        <tr><td>商品名</td><td>{{ item.product.product_name }}</td></tr>
+                        <tr><td>型式</td><td>{{ item.product.model_number|default:"" }}</td></tr>
+                        <tr><td>規格</td><td>{{ item.product.specification|default:"" }}</td></tr>
+                        <tr><td>発送単位</td><td>{{ item.product.shipping_unit|default:"" }}</td></tr>
+                        <tr><td>送料</td><td>{{ item.product.shipping_fee|default:"" }}</td></tr>
+                        <tr><td>備考</td><td>{{ item.product.remarks|default:"" }}</td></tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <h6>価格履歴（{{ item.histories|length }}件）</h6>
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>適用年月</th>
+                                <th>仕切価格</th>
+                                <th>県連価格</th>
+                                <th>参考小売価格</th>
+                                <th>改定理由</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for history in item.histories %}
+                            <tr>
+                                <td>{{ history.effective_year_month }}</td>
+                                <td>{{ history.wholesale_price|floatformat:0 }}</td>
+                                <td>{{ history.kenren_price|floatformat:0 }}</td>
+                                <td>{{ history.retail_price|floatformat:0|default:"" }}</td>
+                                <td>{{ history.revision_reason|default:"" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    
+    <div class="d-flex gap-2 mt-4">
+        <form method="post">
+            {% csrf_token %}
+            <button type="submit" name="execute" class="btn btn-success">
+                <i class="bi bi-check-circle"></i> 実行
+            </button>
+        </form>
+        <a href="{% url 'system_admin:import_csv' %}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> 戻る
+        </a>
+    </div>
+</div>
+{% endblock %}

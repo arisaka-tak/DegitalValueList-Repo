@@ -109,14 +109,32 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
     ai_model_bigrams = get_bigrams(normalize_text(ai_model_number))
     ai_keyword_list = ai_product_bigrams | ai_spec_bigrams | ai_model_bigrams
     
-    # 全商品を対象とした照合
-    products = Product.objects.all()
+    # AI側の正規化処理をデバッグ出力
+    if debug:
+        print(f"\n=== AI側データ正規化 ===")
+        print(f"AI生データ: 商品名='{ai_product_name}', 型式='{ai_model_number}', 規格='{ai_specification}'")
+        print(f"AI正規化後: 商品名='{normalize_text(ai_product_name)}', 型式='{normalize_text(ai_model_number)}', 規格='{normalize_text(ai_specification)}'")
+        print(f"AIキーワード: {list(ai_keyword_list)}")
+    
+    # 空のキーワードリストの場合は早期リターン
+    if not ai_keyword_list:
+        if debug:
+            print("AIキーワードリストが空のためスキップ")
+        return []
+    
+    # 全商品を対象とした照合（関連データも一括取得）
+    products = Product.objects.select_related('manufacturer', 'livestock_type', 'category').all()
     if debug:
         print(f"全商品対象: {products.count()}件")
     
     candidates = []
     debug_info = []
     processed_count = 0
+    first_product_checked = False
+    
+    # 早期終了用の闾値設定
+    max_candidates = 10  # 上位10件で打ち切り
+    high_score_threshold = 95  # 95点以上なら早期終了
     
     for product in products:
         # マスター側のキーワードリストAを作成（常に動的生成）
@@ -167,7 +185,7 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
         ai_manufacturer = extracted_data.get('manufacturer', '')
         if ai_manufacturer and product.manufacturer:
             ai_manufacturer_bigrams = get_bigrams(normalize_text(ai_manufacturer))
-            master_manufacturer_bigrams = get_bigrams(normalize_text(product.manufacturer))
+            master_manufacturer_bigrams = get_bigrams(normalize_text(str(product.manufacturer)))
             if ai_manufacturer_bigrams:
                 manufacturer_matched = len(ai_manufacturer_bigrams & master_manufacturer_bigrams)
                 manufacturer_match_ratio = manufacturer_matched / len(ai_manufacturer_bigrams)
@@ -178,6 +196,22 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
         # 最終スコア = 基本加点 - 余剰減点 + ボーナス
         max_score = base_score - penalty + bonus_score
         best_match_field = '2-gramキーワードリスト'
+        
+        # 1件目のデータ（エコクーラー）のみデバッグ出力
+        if not first_product_checked and 'エコクーラー' in product.product_name:
+            print(f"\n=== 1件目デバッグ: {product.product_name} ===")
+            print(f"  マスター生データ: 商品名='{product.product_name}', 型式='{product.model_number}', 規格='{product.specification}'")
+            print(f"  マスター正規化後: 商品名='{normalize_text(product.product_name)}', 型式='{normalize_text(product.model_number or '')}', 規格='{normalize_text(product.specification or '')}'")
+            print(f"  最終スコア: {max_score}点")
+            print(f"  内訳: ベース{base_score} - 減点{penalty} + ボーナス{bonus_score} = {max_score}")
+            print(f"  基本一致率: {match_ratio:.2%} ({matched_keywords}/{total_ai_keywords})")
+            print(f"  商品名ボーナス: {product_bonus_ratio:.1%} → {'+15点' if product_bonus_ratio >= 0.7 else '0点'}")
+            print(f"  型式ボーナス: {model_bonus_ratio:.1%} → {'+15点' if model_bonus_ratio >= 0.7 else '0点'}")
+            print(f"  メーカーボーナス: → {'+5点' if manufacturer_bonus > 0 else '0点'}")
+            print(f"  AIキーワード: {list(ai_keyword_list)}")
+            print(f"  マスターキーワード: {list(master_keyword_list)}")
+            print(f"  一致キーワード: {list(ai_keyword_list & master_keyword_list)}")
+            first_product_checked = True
         
         # デバッグ情報収集
         if debug:
@@ -210,14 +244,21 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
                 'score': min(max_score, 100),  # 100%上限
                 'matched_field': best_match_field,
                 'display_info': f"{product.product_name} | {product.model_number or '-'} | {product.specification or '-'}",
-                'manufacturer': product.manufacturer or '-',
-
+                'manufacturer': str(product.manufacturer) if product.manufacturer else '-',
             })
+            
+            # 早期終了条件チェック
+            if max_score >= high_score_threshold or len(candidates) >= max_candidates:
+                if debug:
+                    print(f"早期終了: スコア{max_score}点 または 候補数{len(candidates)}件で打ち切り")
+                break
+        
+        processed_count += 1
     
     # デバッグ情報出力
     if debug:
         print(f"\n=== 照合結果: {extracted_data.get('product_name', 'Unknown')} ===")
-        print(f"AI入力: 商品名='{ai_product_name}', 型式='{ai_model_number}', 規格='{ai_specification}', メーカー='{extracted_data.get('manufacturer', '')}'") 
+        print(f"AI入力: 商品名='{ai_product_name}', 型式='{ai_model_number}', 規格='{ai_specification}', メーカー='{extracted_data.get('manufacturer', '')}'")
         print(f"AI正規化後キーワード: {list(ai_keyword_list)}")
         print(f"照合対象商品数: {len(debug_info)}件")
         print(f"\n--- 上位5件の照合詳細 ---")
@@ -232,8 +273,11 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
             print(f"  マスターキーワード: {info['master_keywords'][:15]}{'...' if len(info['master_keywords']) > 15 else ''}")
         print(f"\n結果: {len(candidates)}件が閾値{threshold}点以上でマッチ")
     
-    # スコア順でソート
-    return sorted(candidates, key=lambda x: x['score'], reverse=True)[:10]
+    # スコア順でソート（既に上位のみの場合はソート不要）
+    if len(candidates) > max_candidates:
+        return sorted(candidates, key=lambda x: x['score'], reverse=True)[:max_candidates]
+    else:
+        return sorted(candidates, key=lambda x: x['score'], reverse=True)
 
 
 def process_extraction_results(json_data):
@@ -267,8 +311,8 @@ def process_extraction_results(json_data):
             })
             continue
         
-        # 商品照合実行（デバッグ有効）
-        candidates = find_similar_products(product_data, debug=True)
+        # 商品照合実行（デバッグ有効で正規化確認）
+        candidates = find_similar_products(product_data, threshold=50, debug=True)
         
         results.append({
             'index': i,

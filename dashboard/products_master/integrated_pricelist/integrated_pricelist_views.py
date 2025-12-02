@@ -64,34 +64,57 @@ def integrated_pricelist(request):
         is_active=True
     ).values_list('effective_year_month', flat=True).distinct().order_by('-effective_year_month')
     
-    # sort_numが未設定の商品に初期値を設定
-    _initialize_sort_numbers()
+    # sort_numが未設定の商品に初期値を設定（条件付き）
+    from django.db.models import Q
+    if Product.objects.filter(Q(sort_num=0) | Q(sort_num__isnull=True), is_active=True).exists():
+        _initialize_sort_numbers()
     
-    # 全ての有効な商品を取得
-    all_products = Product.objects.filter(is_active=True).order_by(
-        'livestock_type', 'category', 'manufacturer', 'sort_num', 'product_name'
-    )
+    # 全ての有効な商品を取得（関連データも一括取得）
+    all_products = Product.objects.filter(is_active=True).select_related(
+        'livestock_type', 'category', 'manufacturer'
+    ).order_by('livestock_type', 'category', 'manufacturer', 'sort_num', 'product_name')
     
-    # 各商品に対して価格履歴を取得またはNoneを設定
+    # 商品IDリストを取得
+    product_ids = list(all_products.values_list('id', flat=True))
+    
+    # 価格履歴を一括取得してマッピング
+    price_histories = {}
+    if selected_month:
+        # サブクエリで各商品の最新価格履歴IDを取得
+        from django.db.models import OuterRef, Subquery
+        latest_histories = PriceHistory.objects.filter(
+            product=OuterRef('product'),
+            is_active=True,
+            effective_year_month__lte=selected_month
+        ).order_by('-effective_year_month').values('id')[:1]
+        
+        histories = PriceHistory.objects.filter(
+            id__in=Subquery(latest_histories),
+            product_id__in=product_ids
+        ).select_related('product')
+    else:
+        # 最新の価格履歴を取得
+        from django.db.models import OuterRef, Subquery
+        latest_histories = PriceHistory.objects.filter(
+            product=OuterRef('product'),
+            is_active=True
+        ).order_by('-effective_year_month').values('id')[:1]
+        
+        histories = PriceHistory.objects.filter(
+            id__in=Subquery(latest_histories),
+            product_id__in=product_ids
+        ).select_related('product')
+    
+    # 商品IDをキーとした価格履歴マップを作成
+    for history in histories:
+        price_histories[history.product_id] = history
+    
+    # 商品データを構築
     product_data = []
     previous_group = None
     
     for product in all_products:
-        price_history = None
-        
-        if selected_month:
-            # 指定年月以下で最新の価格履歴を取得
-            price_history = PriceHistory.objects.filter(
-                product=product,
-                is_active=True,
-                effective_year_month__lte=selected_month
-            ).order_by('-effective_year_month').first()
-        else:
-            # 最新の価格履歴を取得
-            price_history = PriceHistory.objects.filter(
-                product=product,
-                is_active=True
-            ).order_by('-effective_year_month').first()
+        price_history = price_histories.get(product.id)
         
         # グループの境界を判定
         current_group = (product.livestock_type, product.category, product.manufacturer)
@@ -158,31 +181,51 @@ def export_excel(request):
     
     _initialize_sort_numbers()
     
-    all_products = Product.objects.filter(is_active=True).order_by(
-        'livestock_type', 'category', 'manufacturer', 'sort_num', 'product_name'
-    )
+    # 商品と価格履歴を一括取得（N+1問題を解決）
+    all_products = Product.objects.filter(is_active=True).select_related(
+        'livestock_type', 'category', 'manufacturer'
+    ).order_by('livestock_type', 'category', 'manufacturer', 'sort_num', 'product_name')
     
+    product_ids = list(all_products.values_list('id', flat=True))
+    
+    # 価格履歴を一括取得
+    if selected_month:
+        from django.db.models import OuterRef, Subquery
+        latest_histories = PriceHistory.objects.filter(
+            product=OuterRef('product'),
+            is_active=True,
+            effective_year_month__lte=selected_month
+        ).order_by('-effective_year_month').values('id')[:1]
+        
+        histories = PriceHistory.objects.filter(
+            id__in=Subquery(latest_histories),
+            product_id__in=product_ids
+        )
+    else:
+        from django.db.models import OuterRef, Subquery
+        latest_histories = PriceHistory.objects.filter(
+            product=OuterRef('product'),
+            is_active=True
+        ).order_by('-effective_year_month').values('id')[:1]
+        
+        histories = PriceHistory.objects.filter(
+            id__in=Subquery(latest_histories),
+            product_id__in=product_ids
+        )
+    
+    # 価格履歴マップを作成
+    price_histories = {h.product_id: h for h in histories}
+    
+    # 価格ありの商品のみフィルタ
     product_data = []
     for product in all_products:
-        price_history = None
-        
-        if selected_month:
-            price_history = PriceHistory.objects.filter(
-                product=product,
-                is_active=True,
-                effective_year_month__lte=selected_month
-            ).order_by('-effective_year_month').first()
-        else:
-            price_history = PriceHistory.objects.filter(
-                product=product,
-                is_active=True
-            ).order_by('-effective_year_month').first()
-        
-        product_data.append({
-            'product': product,
-            'price_history': price_history,
-            'has_price': price_history is not None
-        })
+        price_history = price_histories.get(product.id)
+        if price_history:  # 価格なしの商品はExcelに出さない
+            product_data.append({
+                'product': product,
+                'price_history': price_history,
+                'has_price': True
+            })
     
     # テンプレートファイルを読み込み
     import os
@@ -240,8 +283,7 @@ def export_excel(request):
         has_price = item['has_price']
         
         # 価格なしの商品はExcelに出���しない
-        if not has_price:
-            continue
+        # 既に価格ありの商品のみフィルタ済み
         
         excel_row_num += 1
         
@@ -278,36 +320,53 @@ def export_excel(request):
             revision_amount = 0
         
         data = [
-            excel_row_num - 1, product.livestock_type or '', product.category or '', product.manufacturer or '',
+            excel_row_num - 1, str(product.livestock_type or ''), str(product.category or ''), str(product.manufacturer or ''),
             product.product_name or '', product.model_number or '', product.specification or '',
             product.shipping_unit or '', kenren_price, revision_amount, retail_price,
             product.shipping_fee or '', product.remarks or '',
             price_history.revision_reason if price_history.revision_reason else ''
         ]
         
-        # テンプレート行を複製して書式を保持
-        if row_num > template_row:
-            ws.insert_rows(row_num)
-            # 行の高さをコピー
-            ws.row_dimensions[row_num].height = ws.row_dimensions[template_row].height
-            for col in range(1, 15):
-                template_cell = ws.cell(row=template_row, column=col)
-                new_cell = ws.cell(row=row_num, column=col)
-                if template_cell.has_style:
-                    new_cell.font = template_cell.font.copy()
-                    new_cell.border = template_cell.border.copy()
-                    new_cell.fill = template_cell.fill.copy()
-                    new_cell.number_format = template_cell.number_format
-                    new_cell.protection = template_cell.protection.copy()
-                    new_cell.alignment = template_cell.alignment.copy()
-        
+        # データを書き込み（スタイルは最後に一括設定）
         for col, value in enumerate(data, 1):
-            cell = ws.cell(row=row_num, column=col, value=value)
-            # 奇数行をグレーに設定
-            if excel_row_num % 2 == 1:
-                cell.fill = PatternFill(start_color='F2F2F2', end_color='F2F2F2', fill_type='solid')
+            ws.cell(row=row_num, column=col, value=value)
         
         row_num += 1
+    
+    # テンプレート行（4行目）の書式をコピー
+    if row_num > 4:
+        template_styles = []
+        for col in range(1, 15):
+            template_cell = ws.cell(row=4, column=col)
+            template_styles.append({
+                'font': template_cell.font.copy() if template_cell.font else None,
+                'border': template_cell.border.copy() if template_cell.border else None,
+                'fill': template_cell.fill.copy() if template_cell.fill else None,
+                'alignment': template_cell.alignment.copy() if template_cell.alignment else None,
+                'number_format': template_cell.number_format
+            })
+        
+        # データ行にスタイルを適用
+        gray_fill = PatternFill(start_color='F2F2F2', end_color='F2F2F2', fill_type='solid')
+        
+        for row in range(5, row_num):
+            is_gray_row = (row - 4) % 2 == 1  # 奇数行をグレーに
+            
+            for col in range(1, 15):
+                cell = ws.cell(row=row, column=col)
+                style = template_styles[col-1]
+                if style['font']:
+                    cell.font = style['font']
+                if style['border']:
+                    cell.border = style['border']
+                if is_gray_row:
+                    cell.fill = gray_fill
+                elif style['fill']:
+                    cell.fill = style['fill']
+                if style['alignment']:
+                    cell.alignment = style['alignment']
+                if style['number_format']:
+                    cell.number_format = style['number_format']
     
     if selected_month:
         filename = f'デジタル価格表_{selected_month.replace("/", "")}.xlsx'
@@ -340,5 +399,81 @@ def reset_sort_order(request):
         
         return JsonResponse({'success': True, 'message': 'ソート順序をリセットしました'})
         
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': f'エラー: {str(e)}'})
+
+def cross_page_move(request):
+    """ページ境界移動API"""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'POSTメソッドが必要です'})
+    
+    try:
+        import json
+        from django.db import transaction
+        from django.urls import reverse
+        
+        data = json.loads(request.body)
+        product_id = data.get('product_id')
+        direction = data.get('direction')  # 'prev' or 'next'
+        current_page = data.get('current_page', 1)
+        
+        if not product_id or direction not in ['prev', 'next']:
+            return JsonResponse({'success': False, 'message': 'パラメータが不正です'})
+        
+        # 対象商品を取得
+        target_product = Product.objects.get(pk=product_id, is_active=True)
+        
+        # 同じグループの商品を取得
+        group_products = Product.objects.filter(
+            livestock_type=target_product.livestock_type,
+            category=target_product.category,
+            manufacturer=target_product.manufacturer,
+            is_active=True
+        ).order_by('sort_num', 'product_name')
+        
+        products_list = list(group_products)
+        target_index = next((i for i, p in enumerate(products_list) if p.id == product_id), None)
+        
+        if target_index is None:
+            return JsonResponse({'success': False, 'message': '商品が見つかりません'})
+        
+        # 移動先を決定
+        if direction == 'prev':
+            # 前ページの末尾へ（一つ前の商品と入れ替え）
+            if target_index == 0:
+                return JsonResponse({'success': False, 'message': 'これ以上上に移動できません'})
+            swap_index = target_index - 1
+        else:  # next
+            # 次ページの先頭へ（一つ後の商品と入れ替え）
+            if target_index >= len(products_list) - 1:
+                return JsonResponse({'success': False, 'message': 'これ以上下に移動できません'})
+            swap_index = target_index + 1
+        
+        # 商品を入れ替え
+        with transaction.atomic():
+            products_list[target_index], products_list[swap_index] = products_list[swap_index], products_list[target_index]
+            
+            # sort_numを更新
+            for i, product in enumerate(products_list, 1):
+                product.sort_num = i
+                product.save(update_fields=['sort_num'])
+        
+        # リダイレクトURLを構築
+        redirect_page = current_page
+        if direction == 'prev' and current_page > 1:
+            redirect_page = current_page - 1
+        elif direction == 'next':
+            redirect_page = current_page + 1
+        
+        redirect_url = reverse('products_master:integrated_pricelist') + f'?page={redirect_page}'
+        
+        return JsonResponse({
+            'success': True, 
+            'message': '商品を移動しました',
+            'redirect_url': redirect_url
+        })
+        
+    except Product.DoesNotExist:
+        return JsonResponse({'success': False, 'message': '商品が見つかりません'})
     except Exception as e:
         return JsonResponse({'success': False, 'message': f'エラー: {str(e)}'})

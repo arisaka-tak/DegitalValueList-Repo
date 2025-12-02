@@ -22,4 +22,5 @@ urlpatterns = [
     path('', views.dashboard, name='dashboard'),
     path('admin/', admin.site.urls),
     path('products/', include('dashboard.products_master.urls')),
+    path('system/', include('system_admin.urls')),
 ]

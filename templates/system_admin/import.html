@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+
+{% block title %}データインポート - デジタル価格表システム{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>データインポート</h2>
+    
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+    
+    <div class="row mt-4">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">データインポート</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="csv_file" class="form-label">ファイル</label>
+                            <input type="file" class="form-control" id="csv_file" name="csv_file" accept=".csv,.xlsx,.xls" required>
+                            <div class="form-text">商品マスタ+価格履歴のCSVまたはExcelファイルを選択してください</div>
+                        </div>
+                        
+                        <button type="submit" name="preview" class="btn btn-primary">
+                            <i class="bi bi-eye"></i> プレビュー
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">ファイルフォーマット</h6>
+                </div>
+                <div class="card-body">
+                    <small>
+                        <strong>商品マスタ部（1-10列）:</strong><br>
+                        商品コード,畜種,カテゴリ,メーカー,商品名,型式,規格,発送単位,送料,備考<br><br>
+                        
+                        <strong>価格履歴部（11列目以降、5列セット）:</strong><br>
+                        適用年月,仕切価格,県連価格,参考小売価格,改定理由<br><br>
+                        
+                        <strong>例:</strong><br>
+                        ,豚,飼料,メーカーA,商品A,,,,,備考,2024/04,1000,1100,1200,新規
+                    </small>
+                </div>
+            </div>
+            
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="mb-0">注意事項</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="small">
+                        <li>商品コードは空でも可（後でメンテナンス）</li>
+                        <li>畜種・カテゴリ・メーカーは必須</li>
+                        <li>存在しないマスタは自動作成されます</li>
+                        <li>価格履歴は1商品につき複数設定可能</li>
+                        <li>粗利率は県連価格÷仕切価格で自動計算</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

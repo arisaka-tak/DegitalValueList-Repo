@@ -563,6 +563,37 @@ def ai_extract_pdf_api(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+def ai_extract_get_detail(request):
+    """明細データを取得"""
+    try:
+        data = json.loads(request.body)
+        transaction_pk = data.get('transaction_pk')
+        sequence = data.get('sequence')
+        
+        if not transaction_pk or not sequence:
+            return JsonResponse({'error': 'パラメータが不正です'}, status=400)
+        
+        detail = AIExtractTransactionDetail.objects.get(
+            transaction__pk=transaction_pk,
+            sequence=int(sequence)
+        )
+        
+        return JsonResponse({
+            'extracted_product_name': detail.extracted_product_name or '',
+            'extracted_model_number': detail.extracted_model_number or '',
+            'extracted_specification': detail.extracted_specification or '',
+            'extracted_manufacturer': detail.extracted_manufacturer or '',
+            'extracted_price': detail.extracted_price or '',
+            'extracted_revision_reason': detail.extracted_revision_reason or ''
+        })
+        
+    except AIExtractTransactionDetail.DoesNotExist:
+        return JsonResponse({'error': '明細データが見つかりません'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': f'処理エラー: {str(e)}'}, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
 def ai_extract_update_detail(request):
     """AI抽出履歴の明細データを更新"""
     try:

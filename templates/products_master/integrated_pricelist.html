@@ -41,7 +41,7 @@
         <div class="card">
             <div class="card-body">
                 {% if page_obj %}
-                    <div class="table-responsive" style="overflow-x: auto; white-space: nowrap;">
+                    <div class="table-responsive" style="overflow-x: scroll; white-space: nowrap; height: 70vh;">
                         <table class="table table-sm table-hover resizable-table" id="priceTable" style="min-width: 1200px;">
                             <thead class="table-primary">
                                 <tr>
@@ -77,6 +77,11 @@
                                         <td class="text-center">
                                             <button class="btn btn-sm btn-outline-secondary me-1" onclick="moveUp(this)" title="上に移動">↑</button>
                                             <button class="btn btn-sm btn-outline-secondary me-1" onclick="moveDown(this)" title="下に移動">↓</button>
+                                            {% if forloop.first %}
+                                                <button class="btn btn-sm btn-outline-info me-1" onclick="moveToPrevPage(this)" title="前ページ末尾へ">⤴</button>
+                                            {% elif forloop.last %}
+                                                <button class="btn btn-sm btn-outline-info me-1" onclick="moveToNextPage(this)" title="次ページ先頭へ">⤵</button>
+                                            {% endif %}
                                             <span class="drag-handle" title="ドラッグで移動">⋮⋮</span>
                                         </td>
                                         <td>{{ item.product.livestock_type }}</td>
@@ -123,7 +128,7 @@
                                                 <span class="text-muted">-</span>
                                             {% endif %}
                                         </td>
-                                        <td class="text-end">{{ item.product.shipping_fee|default:"-" }}</td>
+                                        <td class="text-start">{{ item.product.shipping_fee|default:"-" }}</td>
                                         <td>
                                             {% if item.product.remarks %}
                                                 {{ item.product.remarks }}
@@ -148,27 +153,77 @@
                     {% if page_obj.has_other_pages %}
                         <nav aria-label="デジタル価格表ページネーション" class="mt-4">
                             <ul class="pagination justify-content-center">
+                                <!-- 最初へ -->
                                 {% if page_obj.has_previous %}
                                     <li class="page-item">
-                                        <a class="page-link" href="?page=1{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">最初</a>
-                                    </li>
-                                    <li class="page-item">
-                                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">前へ</a>
+                                        <a class="page-link" href="?page=1{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">&laquo;</a>
                                     </li>
                                 {% endif %}
-
-                                <li class="page-item active">
-                                    <span class="page-link">
-                                        {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}
-                                    </span>
-                                </li>
-
+                                
+                                <!-- 前へ -->
+                                {% if page_obj.has_previous %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">&lsaquo;</a>
+                                    </li>
+                                {% endif %}
+                                
+                                <!-- ページ番号 -->
+                                {% with page_obj.paginator.num_pages as total_pages %}
+                                {% with page_obj.number as current_page %}
+                                    
+                                    <!-- 最初の方のページ -->
+                                    {% if current_page > 4 %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page=1{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">1</a>
+                                        </li>
+                                        {% if current_page > 5 %}
+                                            <li class="page-item disabled">
+                                                <span class="page-link">...</span>
+                                            </li>
+                                        {% endif %}
+                                    {% endif %}
+                                    
+                                    <!-- 現在ページ周辺 -->
+                                    {% for page_num in page_obj.paginator.page_range %}
+                                        {% if page_num >= current_page|add:"-2" and page_num <= current_page|add:"2" %}
+                                            {% if page_num == current_page %}
+                                                <li class="page-item active">
+                                                    <span class="page-link">{{ page_num }}</span>
+                                                </li>
+                                            {% else %}
+                                                <li class="page-item">
+                                                    <a class="page-link" href="?page={{ page_num }}{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">{{ page_num }}</a>
+                                                </li>
+                                            {% endif %}
+                                        {% endif %}
+                                    {% endfor %}
+                                    
+                                    <!-- 最後の方のページ -->
+                                    {% if current_page < total_pages|add:"-3" %}
+                                        {% if current_page < total_pages|add:"-4" %}
+                                            <li class="page-item disabled">
+                                                <span class="page-link">...</span>
+                                            </li>
+                                        {% endif %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page={{ total_pages }}{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">{{ total_pages }}</a>
+                                        </li>
+                                    {% endif %}
+                                    
+                                {% endwith %}
+                                {% endwith %}
+                                
+                                <!-- 次へ -->
                                 {% if page_obj.has_next %}
                                     <li class="page-item">
-                                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">次へ</a>
+                                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">&rsaquo;</a>
                                     </li>
+                                {% endif %}
+                                
+                                <!-- 最後へ -->
+                                {% if page_obj.has_next %}
                                     <li class="page-item">
-                                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">最後</a>
+                                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">&raquo;</a>
                                     </li>
                                 {% endif %}
                             </ul>
@@ -180,7 +235,7 @@
                         <h5 class="text-muted">価格データがありません</h5>
                         <p class="text-muted">商品と価格履歴を登録してください。</p>
                         <div class="d-flex gap-2 justify-content-center">
-                            <a href="{% url 'products_master:product_create' %}" class="btn btn-primary">商品登録</a>
+                            <a href="{% url 'products_master:product_new' %}" class="btn btn-primary">商品登録</a>
                             <a href="{% url 'products_master:product_list' %}" class="btn btn-outline-primary">商品一覧</a>
                         </div>
                     </div>
@@ -189,15 +244,18 @@
         </div>
     </div>
 
+
+
     <style>
     .resizable-table th {
         position: relative;
-        border-right: 1px solid #dee2e6;
+        border-right: 1px solid #e0e0e0;
         white-space: nowrap;
     }
     
     .resizable-table td {
         white-space: nowrap;
+        border-right: 1px solid #e0e0e0;
     }
     
     /* 各列の最小幅を設定 */
@@ -219,8 +277,28 @@
     
     /* テーブルの横スクロールを確実に */
     .table-responsive {
-        overflow-x: auto !important;
+        overflow-x: scroll !important;
+        overflow-y: auto !important;
         -webkit-overflow-scrolling: touch;
+        position: sticky;
+        top: 0;
+    }
+    
+    .table-responsive::-webkit-scrollbar {
+        height: 12px;
+    }
+    
+    .table-responsive::-webkit-scrollbar-track {
+        background: #f1f1f1;
+    }
+    
+    .table-responsive::-webkit-scrollbar-thumb {
+        background: #888;
+        border-radius: 6px;
+    }
+    
+    .table-responsive::-webkit-scrollbar-thumb:hover {
+        background: #555;
     }
     
     .resizable-table {
@@ -586,6 +664,56 @@
             url += '?month=' + encodeURIComponent(selectedMonth);
         }
         window.open(url, '_blank');
+    }
+    
+    function moveToPrevPage(button) {
+        const row = button.closest('tr');
+        const productId = row.dataset.productId;
+        
+        if (!confirm('前ページの末尾へ移動しますか？')) return;
+        
+        crossPageMove(productId, 'prev');
+    }
+    
+    function moveToNextPage(button) {
+        const row = button.closest('tr');
+        const productId = row.dataset.productId;
+        
+        if (!confirm('次ページの先頭へ移動しますか？')) return;
+        
+        crossPageMove(productId, 'next');
+    }
+    
+    function crossPageMove(productId, direction) {
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                         document.querySelector('meta[name=csrf-token]')?.getAttribute('content') ||
+                         '{{ csrf_token }}';
+        
+        fetch('{% url "products_master:cross_page_move" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({
+                product_id: parseInt(productId),
+                direction: direction,
+                current_page: {{ page_obj.number }}
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('商品を移動しました');
+                window.location.href = data.redirect_url;
+            } else {
+                alert('エラー: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('移動に失敗しました');
+        });
     }
     </script>
 {% endblock %}

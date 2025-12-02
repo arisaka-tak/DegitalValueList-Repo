@@ -1,0 +1,79 @@
+{
+  "products": [
+    {
+      "product_name": "エコクーラー",
+      "model_number": "EC-1",
+      "specification": "制御盤付",
+      "manufacturer": "カワバタ産業",
+      "shipping_unit": "1台",
+      "shipping_fee": "別途",
+      "remarks": "環境対応型冷却装置",
+      "new_price": "435000",
+      "wholesale_price": "420000",
+      "kenren_price": "466580",
+      "retail_price": "オープン",
+      "effective_year_month": "2025/04",
+      "revision_reason": "原材料費高騰による価格改定"
+    },
+    {
+      "product_name": "ボルナドファン",
+      "model_number": "740HD",
+      "specification": "単相100V",
+      "manufacturer": "カワバタ産業",
+      "shipping_unit": "1台",
+      "shipping_fee": "別途",
+      "remarks": "高性能循環ファン",
+      "new_price": "89000",
+      "wholesale_price": "85000",
+      "kenren_price": "94350",
+      "retail_price": "105000",
+      "effective_year_month": "2025/04",
+      "revision_reason": "電子部品価格上昇"
+    },
+    {
+      "product_name": "ボルナドファン",
+      "model_number": "712",
+      "specification": "3相200V",
+      "manufacturer": "カワバタ産業",
+      "shipping_unit": "1台",
+      "shipping_fee": "別途",
+      "remarks": "業務用大型ファン",
+      "new_price": "125000",
+      "wholesale_price": "120000",
+      "kenren_price": "133200",
+      "retail_price": "148000",
+      "effective_year_month": "2025/04",
+      "revision_reason": "モーター部品コスト増"
+    },
+    {
+      "product_name": "自動給餌器",
+      "model_number": "AF-500",
+      "specification": "ステンレス製",
+      "manufacturer": "リサール酵産",
+      "shipping_unit": "1台",
+      "shipping_fee": "別途",
+      "remarks": "耐久性重視設計",
+      "new_price": "280000",
+      "wholesale_price": "270000",
+      "kenren_price": "299700",
+      "retail_price": "都度見積",
+      "effective_year_month": "2025/04",
+      "revision_reason": "ステンレス材料費上昇"
+    },
+    {
+      "product_name": "温度計",
+      "model_number": "TH-100",
+      "specification": "デジタル表示",
+      "manufacturer": "佐藤計量器製作所",
+      "shipping_unit": "1個",
+      "shipping_fee": "込み",
+      "remarks": "高精度測定",
+      "new_price": "15800",
+      "wholesale_price": "15000",
+      "kenren_price": "16650",
+      "retail_price": "18500",
+      "effective_year_month": "2025/04",
+      "revision_reason": "センサー部品価格改定"
+    }
+  ]
+}

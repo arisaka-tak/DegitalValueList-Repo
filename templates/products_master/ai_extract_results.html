@@ -272,13 +272,13 @@
                                                         <span class="text-muted">ロック済</span>
                                                     {% else %}
                                                         <div class="btn-group-vertical" role="group">
-                                                            <button type="button" class="btn btn-outline-primary btn-sm px-2 py-1" onclick="toggleEdit('{{ result.index }}')" title="編集">
+                                                            <button type="button" class="btn btn-outline-primary btn-sm px-2 py-1" onclick="toggleEdit({{ result.index }})" title="編集">
                                                                 ✏️
                                                             </button>
-                                                            <button type="button" class="btn btn-outline-success btn-sm px-2 py-1" onclick="reMatch('{{ result.index }}')" title="再照合">
+                                                            <button type="button" class="btn btn-outline-success btn-sm px-2 py-1" onclick="reMatch({{ result.index }})" title="再照合">
                                                                 🔄
                                                             </button>
-                                                            <button type="button" class="btn btn-outline-warning btn-sm px-2 py-1" onclick="skipProduct('{{ result.index }}')" title="スキップ">
+                                                            <button type="button" class="btn btn-outline-warning btn-sm px-2 py-1" onclick="skipProduct({{ result.index }})" title="スキップ">
                                                                 ⏭️
                                                             </button>
                                                         </div>
@@ -287,13 +287,13 @@
                                             {% endfor %}
                                         {% else %}
                                             <div class="btn-group-vertical" role="group">
-                                                <button type="button" class="btn btn-outline-primary btn-sm px-2 py-1" onclick="toggleEdit('{{ result.index }}')" title="編集">
+                                                <button type="button" class="btn btn-outline-primary btn-sm px-2 py-1" onclick="toggleEdit({{ result.index }})" title="編集">
                                                     ✏️
                                                 </button>
-                                                <button type="button" class="btn btn-outline-success btn-sm px-2 py-1" onclick="reMatch('{{ result.index }}')" title="再照合">
+                                                <button type="button" class="btn btn-outline-success btn-sm px-2 py-1" onclick="reMatch({{ result.index }})" title="再照合">
                                                     🔄
                                                 </button>
-                                                <button type="button" class="btn btn-outline-warning btn-sm px-2 py-1" onclick="skipProduct('{{ result.index }}')" title="スキップ">
+                                                <button type="button" class="btn btn-outline-warning btn-sm px-2 py-1" onclick="skipProduct({{ result.index }})" title="スキップ">
                                                     ⏭️
                                                 </button>
                                             </div>
@@ -316,6 +316,8 @@
     </div>
     
     <script>
+    document.addEventListener('DOMContentLoaded', function() {
+    
     // 商品詳細カード表示切り替え
     function showProductDetail(index, productId) {
         const card = document.getElementById(`product_detail_${index}`);
@@ -341,22 +343,18 @@
     }
     
     // 候補データをJavaScriptで使用できるように保存
-    window.candidatesData = {
-        {% for result in results.results %}
-        {{ result.index }}: {{ result.candidates|safe }},
-        {% endfor %}
-    };
+    window.candidatesData = {};
     
     // 編集モード切り替え
     function toggleEdit(index) {
         const display = document.getElementById(`display_${index}`);
         const edit = document.getElementById(`edit_${index}`);
-        const btn = event.target;
+        const btn = document.querySelector(`button[onclick="toggleEdit(${index})"]`);
         
-        if (edit.style.display === 'none') {
+        if (edit.style.display === 'none' || edit.style.display === '') {
             display.style.display = 'none';
             edit.style.display = 'block';
-            btn.textContent = '💾';
+            btn.innerHTML = '💾';
             btn.title = '保存';
         } else {
             // 編集内容を表示部分に反映
@@ -367,11 +365,11 @@
             
             display.style.display = 'block';
             edit.style.display = 'none';
-            btn.textContent = '✏️';
+            btn.innerHTML = '✏️';
             btn.title = '編集';
             
             // 保存後に自動で再照合実行
-            reMatch(index);
+            setTimeout(() => reMatch(index), 100);
         }
     }
     
@@ -395,23 +393,91 @@
 
     // 再照合処理
     function reMatch(index) {
-        const btn = event.target;
-        const originalText = btn.textContent;
-        btn.disabled = true;
-        btn.textContent = '⏳';
+        const btn = document.querySelector(`button[onclick="reMatch(${index})"]`);
+        const originalText = btn ? btn.innerHTML : '🔄';
         
-        const extractedData = {
-            product_name: document.getElementById(`product_name_${index}`).value,
-            model_number: document.getElementById(`model_number_${index}`).value,
-            manufacturer: document.getElementById(`manufacturer_${index}`).value,
-            specification: document.getElementById(`specification_${index}`).value
-        };
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '⏳';
+        }
         
-        Object.keys(extractedData).forEach(key => {
-            if (extractedData[key] === '') extractedData[key] = null;
+        // データベースから最新データを取得してから再照合を実行
+        {% if is_history_view and transaction %}
+        const transactionPk = {{ transaction.pk }};
+        const sequence = index + 1;
+        
+        // データベースから最新データを取得
+        fetch('/products/ai-extract/get-detail/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                transaction_pk: transactionPk,
+                sequence: sequence
+            })
+        })
+        .then(response => response.json())
+        .then(detailData => {
+            const extractedData = {
+                product_name: detailData.extracted_product_name || null,
+                model_number: detailData.extracted_model_number || null,
+                manufacturer: detailData.extracted_manufacturer || null,
+                specification: detailData.extracted_specification || null
+            };
+            
+            // 再照合を実行
+            performRematch(index, extractedData, btn, originalText);
+        })
+        .catch(error => {
+            console.error('データ取得エラー:', error);
+            // フォールバック: 編集モードからデータを取得
+            const extractedData = getExtractedDataFromForm(index);
+            performRematch(index, extractedData, btn, originalText);
         });
+        {% else %}
+        // 編集モードからデータを取得
+        const extractedData = getExtractedDataFromForm(index);
+        performRematch(index, extractedData, btn, originalText);
+        {% endif %}
+    }
+    
+    // フォームからデータを取得するヘルパー関数
+    function getExtractedDataFromForm(index) {
+        const productNameEl = document.getElementById(`product_name_${index}`);
+        const modelNumberEl = document.getElementById(`model_number_${index}`);
+        const manufacturerEl = document.getElementById(`manufacturer_${index}`);
+        const specificationEl = document.getElementById(`specification_${index}`);
         
-        fetch('{% url "products_master:ai_extract_rematch" %}', {
+        if (productNameEl && productNameEl.offsetParent !== null) {
+            // 編集モードが表示中
+            return {
+                product_name: productNameEl.value || null,
+                model_number: modelNumberEl ? modelNumberEl.value || null : null,
+                manufacturer: manufacturerEl ? manufacturerEl.value || null : null,
+                specification: specificationEl ? specificationEl.value || null : null
+            };
+        } else {
+            // 表示モードからデータを抽出（フォールバック）
+            const displayEl = document.getElementById(`display_${index}`);
+            if (displayEl) {
+                const text = displayEl.textContent || '';
+                return {
+                    product_name: text.split('\n')[0] || null,
+                    model_number: null,
+                    manufacturer: null,
+                    specification: null
+                };
+            } else {
+                return { product_name: null, model_number: null, manufacturer: null, specification: null };
+            }
+        }
+    }
+    
+    // 再照合を実行するヘルパー関数
+    function performRematch(index, extractedData, btn, originalText) {
+        fetch('/products/ai-extract/rematch/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -432,33 +498,37 @@
         })
         .catch(error => alert('通信エラー: ' + error.message))
         .finally(() => {
-            btn.disabled = false;
-            btn.textContent = originalText;
-        });
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        })
     }
     
     // スキップ処理
     function skipProduct(index) {
-        const select = document.querySelector(`select[name="product_match_${index}"]`);
-        const priceInput = document.querySelector(`input[name="new_price_${index}"]`);
-        
-        if (select) {
-            select.value = '';
-            select.style.backgroundColor = '#fff3cd';
-        }
-        if (priceInput) {
-            priceInput.value = '';
-            priceInput.style.backgroundColor = '#fff3cd';
-        }
-        
-        const container = document.getElementById(`match_results_${index}`);
-        if (container) {
-            const skipMsg = container.querySelector('.skip-message');
-            if (!skipMsg) {
-                const msgDiv = document.createElement('div');
-                msgDiv.className = 'small text-warning mt-1 skip-message';
-                msgDiv.textContent = 'スキップ設定済み';
-                container.appendChild(msgDiv);
+        if (confirm('この商品をスキップしますか？')) {
+            const select = document.querySelector(`select[name="product_match_${index}"]`);
+            const priceInput = document.querySelector(`input[name="new_price_${index}"]`);
+            
+            if (select) {
+                select.value = '';
+                select.style.backgroundColor = '#fff3cd';
+            }
+            if (priceInput) {
+                priceInput.value = '';
+                priceInput.style.backgroundColor = '#fff3cd';
+            }
+            
+            const container = document.getElementById(`match_results_${index}`);
+            if (container) {
+                const skipMsg = container.querySelector('.skip-message');
+                if (!skipMsg) {
+                    const msgDiv = document.createElement('div');
+                    msgDiv.className = 'small text-warning mt-1 skip-message';
+                    msgDiv.textContent = 'スキップ設定済み';
+                    container.appendChild(msgDiv);
+                }
             }
         }
     }
@@ -852,6 +922,42 @@
         return Promise.resolve();
         {% endif %}
     }
+    
+    // 関数をグローバルスコープに公開
+    window.toggleEdit = toggleEdit;
+    window.reMatch = reMatch;
+    window.skipProduct = skipProduct;
+    window.showProductDetail = showProductDetail;
+    window.saveAllBeforeSubmit = saveAllBeforeSubmit;
+    
+    
+    // 候補データを個別に設定
+    {% for result in results.results %}
+    {% if result.candidates %}
+    window.candidatesData[{{ result.index }}] = [
+        {% for candidate in result.candidates %}
+        {
+            product: {
+                pk: {{ candidate.product.pk }},
+                product_name: "{{ candidate.product.product_name|escapejs }}",
+                model_number: "{{ candidate.product.model_number|default:'-'|escapejs }}",
+                specification: "{{ candidate.product.specification|default:'-'|escapejs }}",
+                manufacturer: "{{ candidate.product.manufacturer|default:'-'|escapejs }}",
+                current_wholesale_price: "{{ candidate.product.current_wholesale_price|default:'-'|escapejs }}"
+            },
+            score: {{ candidate.score }},
+            matched_field: "{{ candidate.matched_field|escapejs }}",
+            display_info: "{{ candidate.display_info|escapejs }}",
+            manufacturer: "{{ candidate.manufacturer|escapejs }}"
+        }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+    ];
+    {% else %}
+    window.candidatesData[{{ result.index }}] = [];
+    {% endif %}
+    {% endfor %}
+    
+    }); // DOMContentLoaded終了
     
     // 全明細の編集内容を保存してから申請処理を実行
     function saveAllBeforeSubmit() {
