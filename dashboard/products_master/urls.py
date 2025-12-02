@@ -24,8 +24,7 @@ urlpatterns = [
     path('calc-kenren-price/<int:pk>/', detail_views.calc_kenren_price, name='calc_kenren_price'),
     path('products/<int:pk>/preview-save/', detail_views.preview_save, name='preview_save'),
     path('new/preview-save/', detail_views.preview_save, name='preview_save_new'),
-    path('products/<int:pk>/submit-approval/', detail_views.submit_approval, name='submit_approval'),
-    path('new/submit-approval/', detail_views.submit_approval, name='submit_approval_new'),
+
     
     # 承認ワークフロー
     path('approvals/', detail_views.approval_list, name='approval_list'),
@@ -72,4 +71,5 @@ urlpatterns = [
     
     # API
     path('api/manufacturers/', detail_views.api_manufacturers, name='api_manufacturers'),
+    path('api/gross-margins/<int:pk>/', detail_views.api_gross_margins, name='api_gross_margins'),
 ]

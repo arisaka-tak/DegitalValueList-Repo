@@ -12,7 +12,6 @@
                         {% endif %}
                         <button type="submit" 
                                 form="productForm"
-                                formaction="{% if product %}{% url 'products_master:submit_approval' product.pk %}{% else %}{% url 'products_master:submit_approval_new' %}{% endif %}"
                                 formmethod="post"
                                 class="btn btn-success btn-sm"
                                 onclick="return submitApplication(this)">申請</button>

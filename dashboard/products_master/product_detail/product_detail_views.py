@@ -15,6 +15,11 @@ from django.views.decorators.csrf import csrf_exempt
 def product_detail(request, pk):
     """商品詳細画面"""
     print(f"=== product_detail called: method={request.method}, pk={pk} ===")
+    
+    # POSTリクエストの場合は申請処理
+    if request.method == 'POST':
+        return submit_approval(request, pk)
+    
     product = get_object_or_404(Product, pk=pk)
     price_histories = product.price_histories.filter(is_active=True).order_by('-effective_year_month')
     
@@ -142,12 +147,13 @@ def save_product_and_histories(request, product=None):
                     year, month = map(int, effective_year_month.split('/'))
                     period_year = year if month >= 4 else year - 1
                     
+                    gross_margin_rate = determine_gross_margin_rate(product, period_year, wholesale_price or '\u90fd\u5ea6\u898b\u7a4d', request)
                     PriceHistory.objects.create(
                         product=product,
                         period_year=period_year,
                         effective_year_month=effective_year_month,
                         wholesale_price=wholesale_price or '\u90fd\u5ea6\u898b\u7a4d',
-                        gross_margin_rate=1.1,
+                        gross_margin_rate=gross_margin_rate,
                         revision_amount=0
                     )
         
@@ -383,6 +389,7 @@ def price_history_create(request, product_pk):
             year, month = map(int, effective_year_month.split('/'))
             period_year = year if month >= 4 else year - 1
             
+            gross_margin_rate = determine_gross_margin_rate(product, period_year, wholesale_price, request)
             price_history = PriceHistory.objects.create(
                 product=product,
                 period_year=period_year,
@@ -390,7 +397,7 @@ def price_history_create(request, product_pk):
                 wholesale_price=wholesale_price,
                 kenren_price=kenren_price if kenren_price else None,
                 revision_reason=revision_reason if revision_reason else None,
-                gross_margin_rate=1.1,
+                gross_margin_rate=gross_margin_rate,
                 revision_amount=0
             )
             return HttpResponse('Created successfully')
@@ -974,35 +981,39 @@ def get_margin_from_history(product, period_year, wholesale_price):
         return None
 
 def determine_gross_margin_rate(product, period_year, wholesale_price, request=None):
-    """粗利率を決定（新ロジック）"""
+    """粗利率を決定し、必要に応じて粗利率テーブルを更新"""
     # 1. 県連価格が手入力されているかチェック
     kenren_text, kenren_numeric = get_kenren_price_input(request, wholesale_price)
     
     if kenren_text is not None and kenren_numeric is not None:
-        # 県連価格が入力された場合、粗利率を計算して更新
-        margin_rate = calculate_margin_from_prices(kenren_numeric, wholesale_price)
-        if margin_rate is not None:
-            # 粗利率テーブルを更新
-            if product:
-                from dashboard.products_master.models import ProductGrossMarginRate
-                ProductGrossMarginRate.objects.update_or_create(
-                    product=product,
-                    period_year=period_year,
-                    defaults={'gross_margin_rate': margin_rate}
-                )
-            return margin_rate
+        # 仕切価格と県連価格が両方入力された場合、粗利率を計算して粗利率テーブルを更新
+        try:
+            wholesale_numeric = float(wholesale_price.replace(',', ''))
+            if wholesale_numeric > 0:
+                margin_rate = calculate_margin_from_prices(kenren_numeric, wholesale_price)
+                if margin_rate is not None and product:
+                    # 粗利率テーブルを更新（最新の粗利率として記録）
+                    from dashboard.products_master.models import ProductGrossMarginRate
+                    ProductGrossMarginRate.objects.update_or_create(
+                        product=product,
+                        period_year=period_year,
+                        defaults={'gross_margin_rate': margin_rate}
+                    )
+                return margin_rate
+        except (ValueError, AttributeError):
+            pass
     
-    # 2. 粗利率テーブルから取得（最新の粗利率を継続使用）
+    # 2. 粗利率テーブルから最新の粗利率を取得
     margin_rate = get_margin_from_table(product, period_year)
     if margin_rate is not None and margin_rate != Decimal('0.0'):
         return margin_rate
     
-    # 3. 過去の粗利率を継続使用（最新の粗利率を取得）
+    # 3. 過去年度の粗利率を継続使用
     if product:
         from dashboard.products_master.models import ProductGrossMarginRate
         latest_margin = ProductGrossMarginRate.objects.filter(
             product=product,
-            period_year__lte=period_year,
+            period_year__lt=period_year,
             gross_margin_rate__gt=Decimal('0.0')
         ).order_by('-period_year').first()
         
@@ -1010,11 +1021,7 @@ def determine_gross_margin_rate(product, period_year, wholesale_price, request=N
             return latest_margin.gross_margin_rate
     
     # 4. 初回登録時はデフォルト値
-    try:
-        float(wholesale_price.replace(',', ''))
-        return Decimal('0.0')  # デフォルト粗利率
-    except (ValueError, AttributeError):
-        raise ValueError('仕切価格が数字でない場合、県連価格は手入力してください。')
+    return Decimal('1.1')
 
 def approval_list(request):
     """申請一覧画面"""
@@ -1233,15 +1240,21 @@ def _process_approval(approval):
                     history.revision_reason = approval_history.revision_reason
                     history.save()
                 
-                # 粗利率テーブルの更新（未登録または既存が0.0の場合、または申請が0.0の場合）
-                margin_rate_obj, created = ProductGrossMarginRate.objects.get_or_create(
-                    product=product,
-                    period_year=approval_history.period_year,
-                    defaults={'gross_margin_rate': approval_history.gross_margin_rate}
-                )
-                if not created and (margin_rate_obj.gross_margin_rate == Decimal('0.0') or approval_history.gross_margin_rate == Decimal('0.0')):
-                    margin_rate_obj.gross_margin_rate = approval_history.gross_margin_rate
-                    margin_rate_obj.save()
+                # 仕切価格と県連価格が両方ある場合のみ粗利率テーブルを更新
+                if (approval_history.wholesale_price and approval_history.wholesale_price != '都度見積' and 
+                    approval_history.kenren_price):
+                    try:
+                        wholesale_num = float(approval_history.wholesale_price.replace(',', ''))
+                        kenren_num = float(approval_history.kenren_price.replace(',', ''))
+                        if wholesale_num > 0:
+                            calculated_rate = kenren_num / wholesale_num
+                            ProductGrossMarginRate.objects.update_or_create(
+                                product=product,
+                                period_year=approval_history.period_year,
+                                defaults={'gross_margin_rate': Decimal(str(calculated_rate))}
+                            )
+                    except (ValueError, ZeroDivisionError):
+                        pass
     else:
         # 新規商品の作成（product_numberを明示的に設定）
         # 新規商品の作成（pkは自動採番）
@@ -1306,15 +1319,21 @@ def _process_approval(approval):
                     revision_reason=approval_history.revision_reason,
                 )
                 
-                # 粗利率テーブルの更新（価格履歴が作成された場合のみ）
-                margin_rate_obj, created = ProductGrossMarginRate.objects.get_or_create(
-                    product=product,
-                    period_year=approval_history.period_year,
-                    defaults={'gross_margin_rate': approval_history.gross_margin_rate}
-                )
-                if not created and (margin_rate_obj.gross_margin_rate == Decimal('0.0') or approval_history.gross_margin_rate == Decimal('0.0')):
-                    margin_rate_obj.gross_margin_rate = approval_history.gross_margin_rate
-                    margin_rate_obj.save()
+                # 仕切価格と県連価格が両方ある場合のみ粗利率テーブルを更新
+                if (approval_history.wholesale_price and approval_history.wholesale_price != '都度見積' and 
+                    approval_history.kenren_price):
+                    try:
+                        wholesale_num = float(approval_history.wholesale_price.replace(',', ''))
+                        kenren_num = float(approval_history.kenren_price.replace(',', ''))
+                        if wholesale_num > 0:
+                            calculated_rate = kenren_num / wholesale_num
+                            ProductGrossMarginRate.objects.update_or_create(
+                                product=product,
+                                period_year=approval_history.period_year,
+                                defaults={'gross_margin_rate': Decimal(str(calculated_rate))}
+                            )
+                    except (ValueError, ZeroDivisionError):
+                        pass
     
     # 承認テーブルから削除
     approval.delete()
@@ -1679,4 +1698,40 @@ def api_manufacturers(request):
     """メーカーリストAPI"""
     manufacturers = list(Manufacturer.objects.filter(is_active=True).values('id', 'name'))
     return JsonResponse(manufacturers, safe=False)
+
+def api_gross_margins(request, pk):
+    """粗利率管理API"""
+    product = get_object_or_404(Product, pk=pk)
+    
+    if request.method == 'GET':
+        from dashboard.products_master.models import ProductGrossMarginRate
+        margins = list(ProductGrossMarginRate.objects.filter(
+            product=product
+        ).values('period_year', 'gross_margin_rate', 'calculation_note').order_by('-period_year'))
+        return JsonResponse(margins, safe=False)
+    
+    elif request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            margins_data = data.get('margins', [])
+            
+            from dashboard.products_master.models import ProductGrossMarginRate
+            
+            # 既存の粗利率を削除
+            ProductGrossMarginRate.objects.filter(product=product).delete()
+            
+            # 新しい粗利率を保存
+            for margin_data in margins_data:
+                ProductGrossMarginRate.objects.create(
+                    product=product,
+                    period_year=margin_data['period_year'],
+                    gross_margin_rate=Decimal(str(margin_data['gross_margin_rate'])),
+                    calculation_note='手動設定'
+                )
+            
+            return JsonResponse({'success': True})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)})
+    
+    return JsonResponse({'success': False, 'error': 'Invalid method'})
 

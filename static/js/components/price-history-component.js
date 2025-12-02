@@ -24,7 +24,7 @@ class PriceHistoryComponent extends HTMLElement {
                             <th>仕切価格</th>
                             <th>県連価格</th>
                             <th>参考小売価格</th>
-                            <th>粗利率</th>
+                            <th class="text-nowrap">粗利率<button type="button" class="btn btn-sm btn-link p-0 text-primary ms-1" data-bs-toggle="modal" data-bs-target="#grossMarginModal" title="粗利率管理">⚙️</button></th>
                             ${!isApprovalMode ? '<th>改定額</th>' : ''}
                             <th>改定理由</th>
                             ${!isApprovalMode ? '<th>操作</th>' : ''}
@@ -101,6 +101,29 @@ class PriceHistoryComponent extends HTMLElement {
                 this.startInlineEdit(e.target);
             }
         });
+        
+        // 日付入力のイベント処理
+        this.addEventListener('blur', (e) => {
+            console.log('Blur event:', e.target.className, e.target.dataset.rowIndex);
+            if (e.target.classList.contains('date-input')) {
+                const rowIndex = e.target.dataset.rowIndex;
+                console.log('Date input blur, rowIndex:', rowIndex);
+                if (rowIndex) {
+                    this.updatePeriodAndMargin(parseInt(rowIndex));
+                }
+            }
+        }, true);
+        
+        this.addEventListener('change', (e) => {
+            console.log('Change event:', e.target.className, e.target.dataset.rowIndex);
+            if (e.target.classList.contains('date-input')) {
+                const rowIndex = e.target.dataset.rowIndex;
+                console.log('Date input change, rowIndex:', rowIndex);
+                if (rowIndex) {
+                    this.updatePeriodAndMargin(parseInt(rowIndex));
+                }
+            }
+        });
     }
 
     // 新規行追加機能
@@ -112,17 +135,20 @@ class PriceHistoryComponent extends HTMLElement {
         newRow.className = 'table-warning';
         newRow.setAttribute('data-id', 'new');
         newRow.innerHTML = `
-            <td class="text-muted">自動算出</td>
-            <td><input type="text" class="form-control form-control-sm" name="new_effective_year_month_${this.rowIndex}" form="productForm" placeholder="YYYY/MM" required></td>
+            <td class="text-muted period-year-${this.rowIndex}">自動算出</td>
+            <td><input type="text" class="form-control form-control-sm date-input" name="new_effective_year_month_${this.rowIndex}" form="productForm" placeholder="YYYY/MM" required data-row-index="${this.rowIndex}"></td>
             <td><input type="text" class="form-control form-control-sm" name="new_wholesale_price_${this.rowIndex}" form="productForm" placeholder="仕切価格"></td>
             <td><input type="text" class="form-control form-control-sm" name="new_kenren_price_${this.rowIndex}" form="productForm" placeholder="県連価格"></td>
             <td><input type="text" class="form-control form-control-sm" name="new_retail_price_${this.rowIndex}" form="productForm" placeholder="参考小売価格"></td>
-            <td class="text-muted">自動算出</td>
+            <td class="text-muted gross-margin-${this.rowIndex}">自動算定</td>
             <td class="text-muted">自動算出</td>
             <td><input type="text" class="form-control form-control-sm" name="new_revision_reason_${this.rowIndex}" form="productForm" placeholder="改定理由"></td>
             <td><button type="button" class="btn btn-sm btn-outline-secondary" data-action="remove-new-row">取消</button></td>
         `;
         tbody.insertBefore(newRow, tbody.firstChild);
+        
+        // イベントは委譲で処理するため、ここでは追加しない
+        
         this.rowIndex++;
     }
 
@@ -379,6 +405,79 @@ class PriceHistoryComponent extends HTMLElement {
         } catch (e) {
             return value || '-';
         }
+    }
+    
+    // 年度算出と粗利率更新
+    updatePeriodAndMargin(rowIndex) {
+        console.log('updatePeriodAndMargin called with rowIndex:', rowIndex);
+        const dateInput = this.querySelector(`input[name="new_effective_year_month_${rowIndex}"]`);
+        const periodCell = this.querySelector(`.period-year-${rowIndex}`);
+        const marginCell = this.querySelector(`.gross-margin-${rowIndex}`);
+        
+        console.log('Elements found:', {
+            dateInput: !!dateInput,
+            periodCell: !!periodCell,
+            marginCell: !!marginCell,
+            dateValue: dateInput?.value
+        });
+        
+        if (!dateInput || !periodCell || !marginCell) return;
+        
+        const dateValue = dateInput.value.trim();
+        if (!dateValue.match(/^\d{4}\/\d{1,2}$/)) {
+            console.log('Date format invalid:', dateValue);
+            periodCell.textContent = '自動算出';
+            marginCell.textContent = '自動算定';
+            return;
+        }
+        
+        try {
+            const [year, month] = dateValue.split('/').map(Number);
+            const periodYear = month >= 4 ? year : year - 1;
+            
+            console.log('Calculated period year:', periodYear);
+            periodCell.textContent = `${periodYear}年度`;
+            
+            // 粗利率を取得
+            this.fetchGrossMargin(periodYear, marginCell);
+        } catch (e) {
+            console.log('Error in updatePeriodAndMargin:', e);
+            periodCell.textContent = '自動算出';
+            marginCell.textContent = '自動算定';
+        }
+    }
+    
+    // 粗利率を取得（APIから取得）
+    fetchGrossMargin(periodYear, marginCell) {
+        const pathParts = window.location.pathname.split('/').filter(p => p);
+        // products/products/59/ または products/products/59/submit-approval/ から59を取得
+        let productId = null;
+        for (let i = 0; i < pathParts.length; i++) {
+            if (pathParts[i] === 'products' && pathParts[i+1] === 'products' && pathParts[i+2]) {
+                productId = pathParts[i+2];
+                break;
+            }
+        }
+        
+        fetch(`/products/api/gross-margins/${productId}/`)
+            .then(response => response.json())
+            .then(margins => {
+                // n年度以下で最新の粗利率を取得
+                const applicableMargin = margins
+                    .filter(m => m.period_year <= periodYear)
+                    .sort((a, b) => b.period_year - a.period_year)[0];
+                
+                if (applicableMargin) {
+                    const profitRate = (applicableMargin.gross_margin_rate - 1) * 100;
+                    marginCell.textContent = profitRate.toFixed(1) + '%';
+                } else {
+                    marginCell.textContent = '0.0%'; // デフォルト
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching gross margin:', error);
+                marginCell.textContent = '0.0%'; // エラー時のデフォルト
+            });
     }
     
     // 外部から呼び出し可能なメソッド（既存のJavaScriptとの互換性）

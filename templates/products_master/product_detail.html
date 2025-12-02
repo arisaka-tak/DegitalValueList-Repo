@@ -106,6 +106,9 @@
     
     <!-- メーカー選択モーダル -->
     {% include 'components/manufacturer_modal.html' %}
+    
+    <!-- 粗利率管理モーダル -->
+    {% include 'components/gross_margin_modal.html' %}
 
     <style>
     .htmx-indicator {
@@ -137,13 +140,20 @@
     
     // 申請ボタン処理
     window.submitApplication = function(button) {
-        // 確認アラート
-        if (!confirm('この内容で申請しますか？')) {
+        // ダブルクリック防止
+        if (button.disabled) return false;
+        
+        // 1. エラーチェックを先に実行
+        const errors = validateForm();
+        if (errors.length > 0) {
+            alert('エラーがあります：\n' + errors.join('\n'));
             return false;
         }
         
-        // ダブルクリック防止
-        if (button.disabled) return false;
+        // 2. エラーがない場合のみ確認アラート
+        if (!confirm('この内容で申請しますか？')) {
+            return false;
+        }
         
         button.disabled = true;
         button.textContent = '処理中...';
@@ -153,37 +163,173 @@
         
         // ページ内のすべての入力要素をフォームに追加
         const allInputs = document.querySelectorAll('input, textarea, select');
-        console.log('Found inputs:', allInputs.length);
         
         allInputs.forEach(input => {
-            console.log(`Input: name="${input.name}", value="${input.value}", type="${input.type}"`);
             if (input.name && !form.querySelector(`[name="${input.name}"]`)) {
                 const hiddenInput = document.createElement('input');
                 hiddenInput.type = 'hidden';
                 hiddenInput.name = input.name;
                 hiddenInput.value = input.value;
                 form.appendChild(hiddenInput);
-                console.log(`Added hidden input: ${input.name} = ${input.value}`);
-            } else if (input.name) {
-                console.log(`Skipped (already exists): ${input.name}`);
-            } else {
-                console.log(`Skipped (no name): ${input.type}`);
             }
         });
         
-        // フォームの内容を確認
-        const formData = new FormData(form);
-        console.log('Final form data:');
-        for (let [key, value] of formData.entries()) {
-            console.log(`  ${key}: ${value}`);
-        }
-        
-        // フォームをPOSTで送信
+        // フォームをPOSTで送信（actionは現在のページ）
         form.method = 'post';
-        form.action = button.getAttribute('formaction');
         form.submit();
         
         return false;
+    }
+    
+    // フォームバリデーション関数
+    function validateForm() {
+        const errors = [];
+        
+        // 商品名のチェック
+        const productName = document.querySelector('input[name="product_name"]')?.value?.trim();
+        if (!productName) {
+            errors.push('商品名は必須です');
+        }
+        
+        // 商品コードのチェック
+        const productCode = document.querySelector('input[name="product_code"]')?.value?.trim();
+        if (productCode && (!/^\d{9}$/.test(productCode))) {
+            errors.push('商品コードは9桁の数字で入力してください');
+        }
+        
+        // 新規価格履歴のチェック
+        const newDateInputs = document.querySelectorAll('input[name^="new_effective_year_month_"]');
+        newDateInputs.forEach(input => {
+            const value = input.value.trim();
+            if (value && !/^\d{4}\/\d{1,2}$/.test(value)) {
+                errors.push(`適用年月はYYYY/MM形式で入力してください: ${value}`);
+            }
+        });
+        
+        return errors;
+    }
+    
+    // 価格フィールドのカンマ区切り整形と粗利率更新
+    document.addEventListener('blur', function(e) {
+        if (e.target.name && (e.target.name.includes('wholesale_price') || 
+                              e.target.name.includes('kenren_price') || 
+                              e.target.name.includes('retail_price'))) {
+            const value = e.target.value.trim();
+            if (value && value !== '都度見積' && value !== 'オープン' && !isNaN(value.replace(/,/g, ''))) {
+                const numValue = parseFloat(value.replace(/,/g, ''));
+                e.target.value = numValue.toLocaleString();
+            }
+            
+            // 仕切価格または県連価格の変更時に自動算出を更新
+            if (e.target.name.includes('wholesale_price') || e.target.name.includes('kenren_price')) {
+                updateKenrenPriceDisplay(e.target);
+                if (e.target.name.includes('kenren_price')) {
+                    updateGrossMargin(e.target);
+                }
+            }
+        }
+    }, true);
+    
+    // 粗利率更新関数
+    function updateGrossMargin(kenrenInput) {
+        const kenrenValue = kenrenInput.value.trim();
+        if (!kenrenValue || kenrenValue === '都度見積' || isNaN(kenrenValue.replace(/,/g, ''))) {
+            return;
+        }
+        
+        // 同じ行の仕切価格を取得
+        const row = kenrenInput.closest('tr');
+        if (!row) return;
+        
+        let wholesaleInput;
+        if (kenrenInput.name.startsWith('new_')) {
+            // 新規行の場合
+            const index = kenrenInput.name.split('_').pop();
+            wholesaleInput = row.querySelector(`input[name="new_wholesale_price_${index}"]`);
+        } else {
+            // 既存行の場合
+            const historyId = kenrenInput.name.split('_').pop();
+            wholesaleInput = row.querySelector(`input[name="edit_wholesale_price_${historyId}"]`);
+        }
+        
+        if (!wholesaleInput) return;
+        
+        const wholesaleValue = wholesaleInput.value.trim();
+        if (!wholesaleValue || wholesaleValue === '都度見積' || isNaN(wholesaleValue.replace(/,/g, ''))) {
+            return;
+        }
+        
+        // 粗利率を計算
+        const kenrenNum = parseFloat(kenrenValue.replace(/,/g, ''));
+        const wholesaleNum = parseFloat(wholesaleValue.replace(/,/g, ''));
+        
+        if (wholesaleNum > 0) {
+            const marginRate = kenrenNum / wholesaleNum;
+            const profitRate = (marginRate - 1) * 100;
+            
+            // 粗利率セルを更新
+            const marginCell = row.querySelector('td:nth-child(6)');
+            if (marginCell) {
+                marginCell.textContent = profitRate.toFixed(1) + '%';
+                marginCell.style.color = 'blue';
+                marginCell.style.fontWeight = 'bold';
+            }
+        }
+    }
+    
+    // 県連価格の自動算出表示を更新
+    function updateKenrenPriceDisplay(changedInput) {
+        const row = changedInput.closest('tr');
+        if (!row) return;
+        
+        let wholesaleInput, kenrenInput;
+        
+        if (changedInput.name.startsWith('new_')) {
+            // 新規行の場合
+            const index = changedInput.name.split('_').pop();
+            wholesaleInput = row.querySelector(`input[name="new_wholesale_price_${index}"]`);
+            kenrenInput = row.querySelector(`input[name="new_kenren_price_${index}"]`);
+        } else {
+            // 既存行の場合
+            const historyId = changedInput.name.split('_').pop();
+            wholesaleInput = row.querySelector(`input[name="edit_wholesale_price_${historyId}"]`);
+            kenrenInput = row.querySelector(`input[name="edit_kenren_price_${historyId}"]`);
+        }
+        
+        if (!wholesaleInput || !kenrenInput) return;
+        
+        const wholesaleValue = wholesaleInput.value.trim();
+        const kenrenValue = kenrenInput.value.trim();
+        const marginCell = row.querySelector('td:nth-child(6)');
+        const marginText = marginCell?.textContent.trim();
+        
+        // 県連価格が空で仕切価格と粗利率がある場合、プレースホルダーとして表示
+        if (!kenrenValue && wholesaleValue && wholesaleValue !== '都度見積' && 
+            marginText && marginText !== '自動算定' && marginText.includes('%')) {
+            
+            try {
+                const wholesaleNum = parseFloat(wholesaleValue.replace(/,/g, ''));
+                const marginPercent = parseFloat(marginText.replace('%', ''));
+                const marginRate = (marginPercent / 100) + 1;
+                const calculatedKenren = Math.floor(wholesaleNum * marginRate);
+                
+                // プレースホルダーとして表示
+                kenrenInput.placeholder = calculatedKenren.toLocaleString();
+                kenrenInput.style.color = 'green';
+                kenrenInput.style.fontWeight = 'bold';
+                
+            } catch (e) {
+                // エラー時はクリア
+                kenrenInput.placeholder = '';
+                kenrenInput.style.color = '';
+                kenrenInput.style.fontWeight = '';
+            }
+        } else {
+            // 通常表示に戻す
+            kenrenInput.placeholder = '県連価格';
+            kenrenInput.style.color = '';
+            kenrenInput.style.fontWeight = '';
+        }
     }
     </script>
     
