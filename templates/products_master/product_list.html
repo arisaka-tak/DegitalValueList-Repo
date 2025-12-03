@@ -63,11 +63,11 @@
                                         <td>{{ product.category|default:"-" }}</td>
                                         <td>{{ product.manufacturer|default:"-" }}</td>
                                         <td>{{ product.shipping_unit|default:"-" }}</td>
-                                        <td>
+                                        <td style="white-space: nowrap; min-width: 200px;">
                                             <div class="btn-group btn-group-sm">
                                                 <a href="{% url 'products_master:product_detail' product.pk %}" class="btn btn-outline-primary">詳細</a>
                                                 <a href="{% url 'products_master:product_copy' product.pk %}" class="btn btn-outline-success">コピー</a>
-                                                <a href="{% url 'products_master:product_delete' product.pk %}" class="btn btn-outline-danger">削除申請</a>
+                                                <a href="{% url 'products_master:product_delete' product.pk %}" class="btn btn-outline-danger">削除</a>
                                             </div>
                                         </td>
                                         <td>

@@ -5,7 +5,7 @@ from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.db import transaction
-from dashboard.products_master.models import Product, PriceHistory, LivestockType, Category, Manufacturer, ProductGrossMarginRate
+from dashboard.products_master.models import Product, PriceHistory, LivestockType, Category, Manufacturer, ProductGrossMarginRate, ProductApproval, PriceHistoryApproval
 from datetime import datetime
 try:
     import openpyxl
@@ -461,3 +461,28 @@ def clear_data(request):
             return render(request, 'system_admin/clear_data.html')
     
     return render(request, 'system_admin/clear_data.html')
+
+def status_reset(request):
+    """ステータス強制リセット機能（全ての申請中商品を強制リセット）"""
+    if request.method == 'POST':
+        try:
+            with transaction.atomic():
+                # ステータスが設定されている全ての商品をリセット
+                reset_count = Product.objects.exclude(status='').exclude(status__isnull=True).update(status='')
+                
+                if reset_count > 0:
+                    messages.success(request, f'{reset_count}件の商品のステータスをリセットしました。')
+                else:
+                    messages.info(request, 'リセット対象の商品はありませんでした。')
+                
+                return redirect('system_admin:status_reset')
+                
+        except Exception as e:
+            messages.error(request, f'ステータスリセット中にエラーが発生しました: {str(e)}')
+    
+    # リセット対象の商品を表示
+    status_products = Product.objects.exclude(status='').exclude(status__isnull=True)
+    
+    return render(request, 'system_admin/status_reset.html', {
+        'status_products': status_products
+    })

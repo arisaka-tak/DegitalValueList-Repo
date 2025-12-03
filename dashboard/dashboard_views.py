@@ -7,3 +7,7 @@ def dashboard(request):
         'current_user': get_current_user(),
     }
     return render(request, 'dashboard.html', context)
+
+def sidebar(request):
+    """サイドバー表示"""
+    return render(request, 'sidebar.html')

@@ -20,24 +20,24 @@
         </div>
     </nav>
     
-    <div class="d-flex">
+    <div style="display: flex;">
         <!-- サイドナビゲーション -->
-        <nav class="sidebar bg-light border-end" style="width: 250px; min-height: calc(100vh - 56px);">
+        <nav style="width: 250px; min-height: calc(100vh - 56px); background-color: #f8f9fa; border-right: 1px solid #dee2e6; flex-shrink: 0;">
             <div class="p-3">
                 <h6 class="text-muted mb-3">メニュー</h6>
                 <ul class="nav flex-column">
                     <li class="nav-item mb-2">
-                        <a class="nav-link d-flex align-items-center" href="{% url 'products_master:product_list' %}">
+                        <a class="nav-link d-flex align-items-center" href="/products/">
                             <span class="me-2">📦</span> 商品マスタ管理
                         </a>
                     </li>
                     <li class="nav-item mb-2">
-                        <a class="nav-link d-flex align-items-center" href="{% url 'products_master:approval_list' %}">
+                        <a class="nav-link d-flex align-items-center" href="/products/approvals/">
                             <span class="me-2">📝</span> 承認ワークフロー
                         </a>
                     </li>
                     <li class="nav-item mb-2">
-                        <a class="nav-link d-flex align-items-center" href="{% url 'products_master:integrated_pricelist' %}">
+                        <a class="nav-link d-flex align-items-center" href="/products/integrated-pricelist/">
                             <span class="me-2">📊</span> デジタル価格表
                         </a>
                     </li>
@@ -45,17 +45,17 @@
                         <h6 class="text-muted mb-2 mt-3">システム管理</h6>
                         <ul class="nav flex-column ms-3">
                             <li class="nav-item mb-1">
-                                <a class="nav-link d-flex align-items-center" href="{% url 'products_master:livestock_type_list' %}">
+                                <a class="nav-link d-flex align-items-center" href="/products/masters/livestock-types/">
                                     <span class="me-2">🐄</span> 畜種マスタ
                                 </a>
                             </li>
                             <li class="nav-item mb-1">
-                                <a class="nav-link d-flex align-items-center" href="{% url 'products_master:category_list' %}">
+                                <a class="nav-link d-flex align-items-center" href="/products/masters/categories/">
                                     <span class="me-2">📂</span> 分類マスタ
                                 </a>
                             </li>
                             <li class="nav-item mb-1">
-                                <a class="nav-link d-flex align-items-center" href="{% url 'products_master:manufacturer_list' %}">
+                                <a class="nav-link d-flex align-items-center" href="/products/masters/manufacturers/">
                                     <span class="me-2">🏢</span> メーカーマスタ
                                 </a>
                             </li>
@@ -65,17 +65,22 @@
                         <h6 class="text-muted mb-2 mt-3">データ管理</h6>
                         <ul class="nav flex-column ms-3">
                             <li class="nav-item mb-1">
-                                <a class="nav-link d-flex align-items-center" href="{% url 'system_admin:export_csv' %}">
+                                <a class="nav-link d-flex align-items-center" href="/system/export/">
                                     <span class="me-2">📤</span> データエクスポート
                                 </a>
                             </li>
                             <li class="nav-item mb-1">
-                                <a class="nav-link d-flex align-items-center" href="{% url 'system_admin:import_csv' %}">
+                                <a class="nav-link d-flex align-items-center" href="/system/import/">
                                     <span class="me-2">📥</span> データインポート
                                 </a>
                             </li>
                             <li class="nav-item mb-1">
-                                <a class="nav-link d-flex align-items-center text-danger" href="{% url 'system_admin:clear_data' %}">
+                                <a class="nav-link d-flex align-items-center text-warning" href="/system/status-reset/">
+                                    <span class="me-2">♾️</span> ステータスリセット
+                                </a>
+                            </li>
+                            <li class="nav-item mb-1">
+                                <a class="nav-link d-flex align-items-center text-danger" href="/system/clear/">
                                     <span class="me-2">🗑️</span> データクリア
                                 </a>
                             </li>
@@ -86,10 +91,10 @@
         </nav>
         
         <!-- メインコンテンツ -->
-        <div class="flex-grow-1">
+        <div style="width: calc(100vw - 250px); overflow-x: auto;">
             {% block breadcrumb %}{% endblock %}
             
-            <div class="container-fluid p-4">
+            <div class="p-4">
                 {% block content %}
                 {% endblock %}
             </div>

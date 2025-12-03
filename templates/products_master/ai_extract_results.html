@@ -157,7 +157,7 @@
                                                             <span class="text-muted">{{ detail.selected_candidate_text|default:'スキップ' }}</span>
                                                             <input type="hidden" name="product_match_{{ result.index }}" value="{{ detail.matched_product.pk|default:'' }}">
                                                         {% else %}
-                                                            {% if result.status == 'success' %}
+                                                            {% if result.candidates %}
                                                                 <select class="form-select form-select-sm" name="product_match_{{ result.index }}" onchange="showProductDetail({{ result.index }}, this.value)">
                                                                     <option value="">-- 選択 --</option>
                                                                     {% for candidate in result.candidates %}
@@ -167,7 +167,7 @@
                                                                     {% endfor %}
                                                                     <option value="">スキップ</option>
                                                                 </select>
-                                                                <div class="small text-success mt-1">{{ result.candidates|length }}件の候補</div>
+                                                                <div class="small {% if result.status == 'success' %}text-success{% else %}text-warning{% endif %} mt-1">{{ result.candidates|length }}件の候補</div>
                                                                 <!-- 商品詳細カード -->
                                                                 <div id="product_detail_{{ result.index }}" class="card mt-2" style="{% if not detail.matched_product %}display:none;{% endif %}">
                                                                     <div class="card-body p-2">
@@ -211,11 +211,8 @@
                                                                         </div>
                                                                     </div>
                                                                 </div>
-                                                            {% elif result.status == 'no_match' %}
-                                                                <div class="small text-warning">該当商品なし</div>
-                                                                <input type="hidden" name="product_match_{{ result.index }}" value="">
                                                             {% else %}
-                                                                <div class="small text-danger">{{ result.message|truncatechars:30 }}</div>
+                                                                <div class="small text-warning">該当商品なし</div>
                                                                 <input type="hidden" name="product_match_{{ result.index }}" value="">
                                                             {% endif %}
                                                         {% endif %}
@@ -360,16 +357,22 @@
             // 編集内容を表示部分に反映
             updateDisplayFromEdit(index);
             
-            // データベースに保存
-            saveEditChanges(index);
-            
-            display.style.display = 'block';
-            edit.style.display = 'none';
-            btn.innerHTML = '✏️';
-            btn.title = '編集';
-            
-            // 保存後に自動で再照合実行
-            setTimeout(() => reMatch(index), 100);
+            // データベースに一括保存
+            saveBatchEditChanges(index)
+                .then(() => {
+                    console.log(`Debug: Batch save completed for index ${index}`);
+                    display.style.display = 'block';
+                    edit.style.display = 'none';
+                    btn.innerHTML = '✏️';
+                    btn.title = '編集';
+                    
+                    // 保存後に自動で再照合実行
+                    setTimeout(() => reMatch(index), 100);
+                })
+                .catch(error => {
+                    console.error(`Debug: Batch save failed for index ${index}:`, error);
+                    alert('保存に失敗しました: ' + error.message);
+                });
         }
     }
     
@@ -450,26 +453,61 @@
         const manufacturerEl = document.getElementById(`manufacturer_${index}`);
         const specificationEl = document.getElementById(`specification_${index}`);
         
+        console.log(`Debug: Getting data for index ${index}`);
+        console.log(`Debug: Elements found - name: ${!!productNameEl}, model: ${!!modelNumberEl}, mfg: ${!!manufacturerEl}, spec: ${!!specificationEl}`);
+        
         if (productNameEl && productNameEl.offsetParent !== null) {
             // 編集モードが表示中
-            return {
+            const data = {
                 product_name: productNameEl.value || null,
                 model_number: modelNumberEl ? modelNumberEl.value || null : null,
                 manufacturer: manufacturerEl ? manufacturerEl.value || null : null,
                 specification: specificationEl ? specificationEl.value || null : null
             };
+            console.log(`Debug: Edit mode data:`, data);
+            return data;
         } else {
-            // 表示モードからデータを抽出（フォールバック）
+            // 表示モードからデータを抽出（履歴詳細画面用）
             const displayEl = document.getElementById(`display_${index}`);
             if (displayEl) {
-                const text = displayEl.textContent || '';
-                return {
-                    product_name: text.split('\n')[0] || null,
-                    model_number: null,
-                    manufacturer: null,
-                    specification: null
+                const lines = displayEl.textContent.split('\n').map(line => line.trim()).filter(line => line);
+                const productName = lines[0] || null;
+                
+                // 型式と規格を抽出
+                let modelNumber = null;
+                let specification = null;
+                let manufacturer = null;
+                
+                if (lines.length > 1) {
+                    const detailLine = lines[1];
+                    const parts = detailLine.split('|').map(part => part.trim());
+                    
+                    for (const part of parts) {
+                        if (part.startsWith('型式:')) {
+                            modelNumber = part.replace('型式:', '').trim();
+                            if (modelNumber === '-') modelNumber = null;
+                        } else if (part.startsWith('規格:')) {
+                            specification = part.replace('規格:', '').trim();
+                            if (specification === '-') specification = null;
+                        }
+                    }
+                }
+                
+                if (lines.length > 2) {
+                    manufacturer = lines[2] || null;
+                    if (manufacturer === '-') manufacturer = null;
+                }
+                
+                const data = {
+                    product_name: productName,
+                    model_number: modelNumber,
+                    manufacturer: manufacturer,
+                    specification: specification
                 };
+                console.log(`Debug: Display mode data:`, data);
+                return data;
             } else {
+                console.log(`Debug: No display element found`);
                 return { product_name: null, model_number: null, manufacturer: null, specification: null };
             }
         }
@@ -536,7 +574,22 @@
     // 照合結果更新
     function updateMatchResults(index, result) {
         const container = document.getElementById(`match_results_${index}`);
+        const row = container.closest('tr');
         let html = '';
+        
+        // 行の背景色を更新（最高スコアで判定）
+        let maxScore = 0;
+        if (result.candidates && result.candidates.length > 0) {
+            maxScore = Math.max(...result.candidates.map(c => c.score));
+        }
+        
+        if (maxScore >= 70) {
+            row.className = 'table-success';  // 緑：70%以上
+            console.log(`Row ${index}: Changed to GREEN (max score: ${maxScore})`);
+        } else {
+            row.className = 'table-warning';   // 黄：70%未満または候補なし
+            console.log(`Row ${index}: Changed to YELLOW (max score: ${maxScore})`);
+        }
         
         if (result.status === 'success') {
             html = `
@@ -581,28 +634,137 @@
                     </div>
                 </div>
             `;
-        } else if (result.status === 'no_match') {
-            html = `
-                <div class="small text-warning">該当商品なし</div>
-                <input type="hidden" name="product_match_${index}" value="">
-                <div id="product_detail_${index}" class="card mt-2" style="display:none;"></div>
-            `;
         } else {
             html = `
-                <div class="small text-danger">${result.message || 'エラー'}</div>
+                <div class="small text-warning">該当商品なし</div>
                 <input type="hidden" name="product_match_${index}" value="">
                 <div id="product_detail_${index}" class="card mt-2" style="display:none;"></div>
             `;
         }
         
         if (container) container.innerHTML = html;
+        
+        console.log(`Updated match results for index ${index}, status: ${result.status}`);
     }
     
-    // 編集内容をデータベースに保存
+    // 編集内容をデータベースに一括保存
+    function saveBatchEditChanges(index) {
+        {% if is_history_view and transaction %}
+        const transactionPk = {{ transaction.pk }};
+        const sequence = index + 1;
+        
+        console.log(`Debug: Batch saving changes for index ${index}, sequence ${sequence}`);
+        
+        // 全フィールドの値を取得
+        const updates = [];
+        
+        // 新価格
+        const priceInput = document.querySelector(`input[name="new_price_${index}"]`);
+        if (priceInput) {
+            updates.push({
+                sequence: sequence,
+                field: 'extracted_price',
+                value: priceInput.value
+            });
+        }
+        
+        // 改定理由
+        const reasonInput = document.querySelector(`input[name="revision_reason_${index}"]`);
+        if (reasonInput) {
+            updates.push({
+                sequence: sequence,
+                field: 'extracted_revision_reason',
+                value: reasonInput.value
+            });
+        }
+        
+        // 商品選択
+        const productSelect = document.querySelector(`select[name="product_match_${index}"]`);
+        if (productSelect) {
+            updates.push({
+                sequence: sequence,
+                field: 'matched_product',
+                value: productSelect.value
+            });
+        }
+        
+        // 編集モードの入力フィールド
+        const productNameInput = document.getElementById(`product_name_${index}`);
+        if (productNameInput) {
+            updates.push({
+                sequence: sequence,
+                field: 'extracted_product_name',
+                value: productNameInput.value
+            });
+        }
+        
+        const modelNumberInput = document.getElementById(`model_number_${index}`);
+        if (modelNumberInput) {
+            updates.push({
+                sequence: sequence,
+                field: 'extracted_model_number',
+                value: modelNumberInput.value
+            });
+        }
+        
+        const specificationInput = document.getElementById(`specification_${index}`);
+        if (specificationInput) {
+            updates.push({
+                sequence: sequence,
+                field: 'extracted_specification',
+                value: specificationInput.value
+            });
+        }
+        
+        const manufacturerInput = document.getElementById(`manufacturer_${index}`);
+        if (manufacturerInput) {
+            updates.push({
+                sequence: sequence,
+                field: 'extracted_manufacturer',
+                value: manufacturerInput.value
+            });
+        }
+        
+        console.log(`Debug: Batch updates:`, updates);
+        
+        // 一括更新を実行
+        return fetch('{% url "products_master:ai_extract_update_detail" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                transaction_pk: transactionPk,
+                sequence: sequence,
+                updates: updates
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (!data.success) {
+                throw new Error(data.error || 'Unknown error');
+            }
+            console.log(`Debug: Batch save successful for index ${index}`);
+            return data;
+        });
+        {% else %}
+        return Promise.resolve();
+        {% endif %}
+    }
+    
+    // 編集内容をデータベースに保存（旧版・互換性のため保持）
     function saveEditChanges(index) {
         {% if is_history_view and transaction %}
         const transactionPk = {{ transaction.pk }};
         const sequence = index + 1;
+        
+        console.log(`Debug: Saving changes for index ${index}, sequence ${sequence}`);
         
         // 各フィールドを個別に保存
         const priceInput = document.querySelector(`input[name="new_price_${index}"]`);
@@ -614,6 +776,8 @@
         const modelNumberInput = document.getElementById(`model_number_${index}`);
         const specificationInput = document.getElementById(`specification_${index}`);
         const manufacturerInput = document.getElementById(`manufacturer_${index}`);
+        
+        console.log(`Debug: Found inputs - name: ${!!productNameInput}, model: ${!!modelNumberInput}, spec: ${!!specificationInput}, mfg: ${!!manufacturerInput}`);
         
         const savePromises = [];
         
@@ -751,12 +915,14 @@
         }
         
         // 全ての保存が完了するまで待機
-        Promise.all(savePromises)
+        return Promise.all(savePromises)
             .then(responses => {
-                console.log('保存成功');
+                console.log(`Debug: Save successful for index ${index}`);
+                return responses;
             })
             .catch(error => {
-                console.error('保存エラー:', error);
+                console.error(`Debug: Save error for index ${index}:`, error);
+                throw error;
             });
         {% endif %}
     }

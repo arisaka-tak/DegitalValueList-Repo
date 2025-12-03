@@ -12,7 +12,6 @@ app_name = 'products_master'
 
 urlpatterns = [
     path('', list_views.product_list, name='product_list'),
-    path('products/', list_views.product_list, name='product_list'),
     path('regenerate-keywords/', list_views.regenerate_keywords_batch, name='regenerate_keywords_batch'),
     path('products/<int:pk>/', detail_views.product_detail, name='product_detail'),
     path('new/', detail_views.product_detail_new, name='product_new'),

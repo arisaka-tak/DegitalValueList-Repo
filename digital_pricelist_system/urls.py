@@ -20,6 +20,7 @@ from dashboard import dashboard_views as views
 
 urlpatterns = [
     path('', views.dashboard, name='dashboard'),
+    path('sidebar/', views.sidebar, name='sidebar'),
     path('admin/', admin.site.urls),
     path('products/', include('dashboard.products_master.urls')),
     path('system/', include('system_admin.urls')),

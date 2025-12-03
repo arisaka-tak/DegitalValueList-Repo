@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+
+{% block title %}ステータスリセット - システム管理{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>ステータスリセット</h2>
+    <p class="text-muted">申請データが存在しないのにステータスが設定されている商品を修正します。</p>
+    
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+    
+    <div class="card">
+        <div class="card-header">
+            <h5>ステータス強制リセット</h5>
+        </div>
+        <div class="card-body">
+            {% if status_products %}
+                <div class="alert alert-warning">
+                    <strong>{{ status_products|length }}件</strong>の商品にステータスが設定されています。
+                </div>
+                
+                <div class="table-responsive mb-3">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>商品ID</th>
+                                <th>商品名</th>
+                                <th>現在のステータス</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for product in status_products %}
+                                <tr>
+                                    <td>{{ product.pk }}</td>
+                                    <td>{{ product.product_name }}</td>
+                                    <td><span class="badge bg-warning">{{ product.status }}</span></td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <form method="post" onsubmit="return confirm('全ての申請中商品のステータスを強制リセットします。よろしいですか？');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-exclamation-triangle"></i> 全て強制リセット
+                    </button>
+                </form>
+            {% else %}
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle"></i> ステータスが設定された商品はありません。
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="mt-3">
+        <a href="/" class="btn btn-secondary">戻る</a>
+    </div>
+</div>
+{% endblock %}

@@ -41,7 +41,7 @@ def ai_extract_process(request):
         
         # JSON解析
         json_data = json.loads(json_text)
-        print(f"Debug: Received JSON data: {json_data}")
+
         
         # 空文字をnullに正規化
         if 'products' in json_data:
@@ -376,6 +376,11 @@ def ai_extract_rematch(request):
         if index is None or not extracted_data:
             return JsonResponse({'error': 'パラメータが不正です'}, status=400)
         
+        # 空文字やNoneをnullに正規化
+        for key, value in extracted_data.items():
+            if value == "" or value is None:
+                extracted_data[key] = None
+        
         # 商品照合処理を実行
         json_data = {'products': [extracted_data]}
         results = process_extraction_results(json_data)
@@ -402,16 +407,17 @@ def ai_extract_rematch(request):
                             current_wholesale_price = current_price_history.wholesale_price or '-'
                         
                         candidate['product']['current_wholesale_price'] = current_wholesale_price
+                        # Manufacturerオブジェクトを文字列に変換
+                        if 'manufacturer' in candidate['product'] and candidate['product']['manufacturer']:
+                            candidate['product']['manufacturer'] = str(candidate['product']['manufacturer'])
                     except Product.DoesNotExist:
                         candidate['product']['current_wholesale_price'] = '-'
             
-            print(f"Debug: API returning result: {result}")
             return JsonResponse({
                 'success': True,
                 'result': result
             })
         else:
-            print(f"Debug: No results found, returning no_match")
             return JsonResponse({
                 'success': True,
                 'result': {
@@ -597,24 +603,16 @@ def ai_extract_get_detail(request):
 def ai_extract_update_detail(request):
     """AI抽出履歴の明細データを更新"""
     try:
-        print(f"Debug: Request body: {request.body}")
         data = json.loads(request.body)
-        print(f"Debug: Parsed data: {data}")
         transaction_pk = data.get('transaction_pk')
         sequence = data.get('sequence')
         field = data.get('field')
         value = data.get('value')
         
-        print(f"Debug: transaction_pk={transaction_pk}, sequence={sequence}, field={field}, value={value}")
-        
         # 一括更新か単一更新かを判定
-        if 'updates' in data:
-            print(f"Debug: Batch update mode")
-        elif not all([transaction_pk, sequence, field]):
-            print(f"Debug: Missing parameters for single update")
+        if 'updates' not in data and not all([transaction_pk, sequence, field]):
             return JsonResponse({'error': 'パラメータが不正です'}, status=400)
         elif not transaction_pk:
-            print(f"Debug: Missing transaction_pk")
             return JsonResponse({'error': 'トランザクションIDが必要です'}, status=400)
         
         # 明細データを取得
@@ -626,38 +624,55 @@ def ai_extract_update_detail(request):
         # 一括更新の場合
         if 'updates' in data:
             updates = data.get('updates', [])
+            print(f"BATCH_UPDATE: Processing {len(updates)} updates for transaction {transaction_pk}, sequence {sequence}")
+            
+            # 対象の明細データを取得
+            detail = AIExtractTransactionDetail.objects.get(
+                transaction__pk=transaction_pk,
+                sequence=int(sequence)
+            )
+            
+            # 全ての更新を一つのオブジェクトに適用
             for update in updates:
-                sequence = update.get('sequence')
                 field = update.get('field')
                 value = update.get('value')
                 
-                try:
-                    detail = AIExtractTransactionDetail.objects.get(
-                        transaction__pk=transaction_pk,
-                        sequence=sequence
-                    )
-                    
-                    if field == 'extracted_price':
-                        detail.extracted_price = str(value) if value else ''
-                    elif field == 'extracted_revision_reason':
-                        detail.extracted_revision_reason = str(value) if value else ''
-                    elif field == 'matched_product':
-                        if value:
-                            try:
-                                product = Product.objects.get(pk=value)
-                                detail.matched_product = product
-                                detail.selected_candidate_text = f"{detail.match_score or 0}% - {product.product_name}"
-                            except Product.DoesNotExist:
-                                detail.matched_product = None
-                                detail.selected_candidate_text = 'スキップ'
-                        else:
+                print(f"BATCH_UPDATE: {field} = '{value}'")
+                
+                if field == 'extracted_price':
+                    detail.extracted_price = str(value) if value else ''
+                elif field == 'extracted_revision_reason':
+                    detail.extracted_revision_reason = str(value) if value else ''
+                elif field == 'extracted_product_name':
+                    detail.extracted_product_name = str(value) if value else ''
+                elif field == 'extracted_model_number':
+                    detail.extracted_model_number = str(value) if value else ''
+                elif field == 'extracted_specification':
+                    detail.extracted_specification = str(value) if value else ''
+                elif field == 'extracted_manufacturer':
+                    detail.extracted_manufacturer = str(value) if value else ''
+                elif field == 'matched_product':
+                    if value:
+                        try:
+                            product = Product.objects.get(pk=value)
+                            detail.matched_product = product
+                            detail.selected_candidate_text = f"{detail.match_score or 0}% - {product.product_name}"
+                        except Product.DoesNotExist:
                             detail.matched_product = None
                             detail.selected_candidate_text = 'スキップ'
-                    
-                    detail.save()
-                    
-                except AIExtractTransactionDetail.DoesNotExist:
-                    continue
+                    else:
+                        detail.matched_product = None
+                        detail.selected_candidate_text = 'スキップ'
+            
+            # 一度だけ保存
+            detail.save()
+            print(f"BATCH_UPDATE: Transaction {transaction_pk}, Sequence {sequence} saved successfully")
+            
+            # データベースから再読み込みして保存確認
+            detail.refresh_from_db()
+            print(f"BATCH_VERIFY: extracted_product_name = '{detail.extracted_product_name}'")
+            print(f"BATCH_VERIFY: extracted_price = '{detail.extracted_price}'")
+            print(f"BATCH_VERIFY: extracted_revision_reason = '{detail.extracted_revision_reason}'")
         
         # 単一更新の場合（後方互換性のため保持）
         else:
@@ -665,43 +680,61 @@ def ai_extract_update_detail(request):
             value = data.get('value')
             
             if field == 'extracted_price':
+                old_value = detail.extracted_price
                 detail.extracted_price = str(value) if value else ''
+                print(f"SAVE: {field} '{old_value}' → '{detail.extracted_price}'")
             elif field == 'extracted_revision_reason':
+                old_value = detail.extracted_revision_reason
                 detail.extracted_revision_reason = str(value) if value else ''
+                print(f"SAVE: {field} '{old_value}' → '{detail.extracted_revision_reason}'")
             elif field == 'extracted_product_name':
+                old_value = detail.extracted_product_name
                 detail.extracted_product_name = str(value) if value else ''
+                print(f"SAVE: {field} '{old_value}' → '{detail.extracted_product_name}' (value='{value}')")
             elif field == 'extracted_model_number':
+                old_value = detail.extracted_model_number
                 detail.extracted_model_number = str(value) if value else ''
+                print(f"SAVE: {field} '{old_value}' → '{detail.extracted_model_number}'")
             elif field == 'extracted_specification':
+                old_value = detail.extracted_specification
                 detail.extracted_specification = str(value) if value else ''
+                print(f"SAVE: {field} '{old_value}' → '{detail.extracted_specification}'")
             elif field == 'extracted_manufacturer':
+                old_value = detail.extracted_manufacturer
                 detail.extracted_manufacturer = str(value) if value else ''
+                print(f"SAVE: {field} '{old_value}' → '{detail.extracted_manufacturer}'")
             elif field == 'matched_product':
+                old_value = detail.matched_product
                 if value:
                     try:
                         product = Product.objects.get(pk=value)
                         detail.matched_product = product
                         detail.selected_candidate_text = f"{detail.match_score or 0}% - {product.product_name}"
+                        print(f"SAVE: {field} '{old_value}' → '{product.product_name} (ID:{product.pk})'")
                     except Product.DoesNotExist:
                         detail.matched_product = None
                         detail.selected_candidate_text = 'スキップ'
+                        print(f"SAVE: {field} '{old_value}' → 'None (Product not found)'")
                 else:
                     detail.matched_product = None
                     detail.selected_candidate_text = 'スキップ'
+                    print(f"SAVE: {field} '{old_value}' → 'None (Skip)'")
             
             detail.save()
+            print(f"SAVE: Transaction {transaction_pk}, Sequence {sequence} saved successfully")
+            
+            # データベースから再読み込みして保存確認
+            detail.refresh_from_db()
+            print(f"DB_VERIFY: extracted_product_name = '{detail.extracted_product_name}'")
+            print(f"DB_VERIFY: extracted_price = '{detail.extracted_price}'")
+            print(f"DB_VERIFY: extracted_revision_reason = '{detail.extracted_revision_reason}'")
+            print(f"DB_VERIFY: field='{field}', original_value='{value}'")
         
-        print(f"Debug: Update successful")
         return JsonResponse({'success': True})
         
-    except AIExtractTransactionDetail.DoesNotExist as e:
-        print(f"Debug: Detail not found: {e}")
+    except AIExtractTransactionDetail.DoesNotExist:
         return JsonResponse({'error': '明細データが見つかりません'}, status=404)
-    except json.JSONDecodeError as e:
-        print(f"Debug: JSON decode error: {e}")
+    except json.JSONDecodeError:
         return JsonResponse({'error': 'JSONデータが不正です'}, status=400)
     except Exception as e:
-        print(f"Debug: Unexpected error: {e}")
-        import traceback
-        print(f"Debug: Traceback: {traceback.format_exc()}")
         return JsonResponse({'error': f'処理エラー: {str(e)}'}, status=500)

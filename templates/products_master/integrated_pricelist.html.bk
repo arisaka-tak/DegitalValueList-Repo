@@ -10,7 +10,7 @@
 {% block content %}
     {% include 'components/page_header.html' with page_title="デジタル価格表" page_subtitle="商品マスタと価格履歴の統合表示" %}
     
-    <div class="container" style="max-width: none; margin-left: 0; margin-right: 0; padding-left: 1rem; padding-right: 1rem;">
+    <div class="container">
         <!-- フィルター -->
         <div class="card mb-4">
             <div class="card-body">
@@ -39,11 +39,10 @@
 
         <!-- デジタル価格表 -->
         <div class="card">
-            <div class="card-body px-0">
+            <div class="card-body">
                 {% if page_obj %}
-                    <!-- ▼ この div がスクロールコンテナ -->
-                    <div class="price-table-wrapper">
-                        <table class="resizable-table" id="priceTable">
+                    <div class="table-responsive" style="overflow-x: scroll; white-space: nowrap; height: 70vh;">
+                        <table class="table table-sm table-hover resizable-table" id="priceTable" style="min-width: 1200px;">
                             <thead class="table-primary">
                                 <tr>
                                     <th rowspan="2" class="align-middle text-center">№</th>
@@ -234,7 +233,7 @@
                     <div class="text-center py-5">
                         <div class="mb-3" style="font-size: 3rem; color: #6c757d;">📊</div>
                         <h5 class="text-muted">価格データがありません</h5>
-                        <p classtext-muted">商品と価格履歴を登録してください。</p>
+                        <p class="text-muted">商品と価格履歴を登録してください。</p>
                         <div class="d-flex gap-2 justify-content-center">
                             <a href="{% url 'products_master:product_new' %}" class="btn btn-primary">商品登録</a>
                             <a href="{% url 'products_master:product_list' %}" class="btn btn-outline-primary">商品一覧</a>
@@ -245,35 +244,19 @@
         </div>
     </div>
 
+
+
     <style>
-    /* ▼ 追加：ヘッダ行を sticky にする */
-    /* ▼ テーブルコンテナ（縦横スクロール） */
-    .price-table-wrapper {
-        max-height: 85vh;
-        overflow: auto;
-        position: relative;
-    }
-
-    /* ▼ sticky ヘッダー本体 */
-    #priceTable {
-        border-collapse: collapse;
-        min-width: 1200px;
-    }
-
-    /* 既存の resizable-table の設定はそのままでOK */
     .resizable-table th {
         position: relative;
         border-right: 1px solid #e0e0e0;
         white-space: nowrap;
     }
-
+    
     .resizable-table td {
         white-space: nowrap;
         border-right: 1px solid #e0e0e0;
     }
-
-    /* ここに列幅の nth-child 系の指定はそのまま残してOK */
-
     
     /* 各列の最小幅を設定 */
     .resizable-table th:nth-child(1) { min-width: 50px; width: 50px; }  /* № */
@@ -292,10 +275,13 @@
     .resizable-table th:nth-child(14) { min-width: 100px; width: 100px; } /* 備考 */
     .resizable-table th:nth-child(15) { min-width: 120px; width: 120px; } /* 改定理由 */
     
+    /* テーブルの横スクロールを確実に */
     .table-responsive {
-        overflow-x: auto;
-        overflow-y: auto;
-        max-height: 70vh;
+        overflow-x: scroll !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch;
+        position: sticky;
+        top: 0;
     }
     
     .table-responsive::-webkit-scrollbar {
@@ -387,44 +373,17 @@
     .drop-target {
         background-color: #e3f2fd !important;
     }
-
-    /* ヘッダー固定 */
-    .price-table-wrapper #priceTable thead tr:first-child th {
-        position: sticky !important;
-        top: 0 !important;
-        z-index: 102 !important;
-        background-color: #4472C4 !important;
-        color: #fff !important;
-        vertical-align: middle !important;
-        border: 1px solid #fff !important;
-    }
-    
-    .price-table-wrapper #priceTable thead tr:nth-child(2) th {
-        position: sticky !important;
-        z-index: 101 !important;
-        background-color: #4472C4 !important;
-        color: #fff !important;
-        vertical-align: middle !important;
-        border: 1px solid #fff !important;
-    }
     </style>
     
     <script>
     let sortOrderChanged = false;
     let draggedRow = null;
     
+
+    
     document.addEventListener('DOMContentLoaded', function() {
         const table = document.getElementById('priceTable');
         if (!table) return;
-        
-        // 2段目ヘッダーのtop位置を動的に設定
-        const firstRow = table.querySelector('thead tr:first-child');
-        const firstRowHeight = firstRow.offsetHeight;
-        const borderWidth = 1; // border: 1px solid #fff
-        const secondRowHeaders = table.querySelectorAll('thead tr:nth-child(2) th');
-        secondRowHeaders.forEach(th => {
-            th.style.top = (firstRowHeight - borderWidth) + 'px';
-        });
         
         // カラムリサイズ機能
         const headers = table.querySelectorAll('thead th');
@@ -638,6 +597,8 @@
         const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
                          document.querySelector('meta[name=csrf-token]')?.getAttribute('content') ||
                          '{{ csrf_token }}';
+        
+
         
         // API呼び出し
         fetch('{% url "products_master:update_sort_order" %}', {
