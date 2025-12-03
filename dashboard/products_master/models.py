@@ -433,3 +433,18 @@ class PriceHistoryApproval(models.Model):
             return None
         except (ValueError, TypeError, AttributeError):
             return None
+class ApprovalPdf(models.Model):
+    """承認PDF管理テーブル"""
+    year_month = models.CharField('対象年月', max_length=7, help_text='YYYY/MM形式')
+    pdf_file_path = models.CharField('PDFファイルパス', max_length=500)
+    uploaded_at = models.DateTimeField('アップロード日時', auto_now_add=True)
+    uploaded_by = models.CharField('アップロード者', max_length=100, blank=True, null=True)
+    
+    class Meta:
+        verbose_name = '承認PDF'
+        verbose_name_plural = '承認PDF'
+        unique_together = ['year_month']
+        ordering = ['-year_month']
+    
+    def __str__(self):
+        return f'{self.year_month} - 承認PDF'

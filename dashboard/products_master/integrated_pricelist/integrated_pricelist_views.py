@@ -1,7 +1,9 @@
 from django.shortcuts import render
 from django.core.paginator import Paginator
 from django.http import JsonResponse, HttpResponse
-from dashboard.products_master.models import Product, PriceHistory
+from django.contrib import messages
+from django.shortcuts import redirect
+from dashboard.products_master.models import Product, PriceHistory, ApprovalPdf
 from digital_pricelist_system.utils import get_current_user
 from digital_pricelist_system.breadcrumbs import get_breadcrumbs
 from datetime import datetime, timedelta
@@ -9,6 +11,22 @@ import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
 import io
+import os
+from django.conf import settings
+
+def _check_approval_pdf(year_month):
+    """承認PDFの存在をチェック
+    
+    Args:
+        year_month (str): YYYY/MM形式の年月
+    
+    Returns:
+        bool: 承認PDFが存在するかどうか
+    """
+    if not year_month:
+        return False
+    
+    return ApprovalPdf.objects.filter(year_month=year_month).exists()
 
 def _initialize_sort_numbers(force_reset=False):
     """畜種・分類・メーカーごとにsort_numを初期化"""
@@ -368,10 +386,24 @@ def export_excel(request):
                 if style['number_format']:
                     cell.number_format = style['number_format']
     
+    # 承認状態をチェック
+    is_approved = _check_approval_pdf(selected_month)
+    approval_prefix = '' if is_approved else '【未承認版】'
+    
+    # 未承認版の表示（セル結合で目立たせる）
+    if not is_approved:
+        # A1:D2を結合して大きな警告を表示
+        ws.merge_cells('A1:D2')
+        warning_cell = ws['A1']
+        warning_cell.value = '【未承認版】'
+        warning_cell.font = Font(bold=True, color='FFFFFF', size=30)  # 白文字、30ポイント
+        warning_cell.fill = PatternFill(start_color='FF0000', end_color='FF0000', fill_type='solid')  # 赤背景
+        warning_cell.alignment = Alignment(horizontal='center', vertical='center')  # 中央揃え
+    
     if selected_month:
-        filename = f'デジタル価格表_{selected_month.replace("/", "")}.xlsx'
+        filename = f'{approval_prefix}デジタル価格表_{selected_month.replace("/", "")}.xlsx'
     else:
-        filename = f'デジタル価格表_{datetime.now().strftime("%Y%m%d")}.xlsx'
+        filename = f'{approval_prefix}デジタル価格表_{datetime.now().strftime("%Y%m%d")}.xlsx'
     
     output = io.BytesIO()
     wb.save(output)
@@ -477,3 +509,82 @@ def cross_page_move(request):
         return JsonResponse({'success': False, 'message': '商品が見つかりません'})
     except Exception as e:
         return JsonResponse({'success': False, 'message': f'エラー: {str(e)}'})
+def upload_approval_pdf(request):
+    """承認PDFアップロード機能"""
+    if request.method == 'POST':
+        try:
+            year_month = request.POST.get('year_month')
+            pdf_file = request.FILES.get('pdf_file')
+            
+            if not year_month or not pdf_file:
+                messages.error(request, '年月とPDFファイルを選択してください')
+                return redirect('products_master:upload_approval_pdf')
+            
+            # ファイル拡張子チェック
+            if not pdf_file.name.lower().endswith('.pdf'):
+                messages.error(request, 'PDFファイルを選択してください')
+                return redirect('products_master:upload_approval_pdf')
+            
+            # YYYY-MMをYYYY/MMに変換
+            if '-' in year_month:
+                year_month = year_month.replace('-', '/')
+            
+            # ファイル名を生成
+            approval_month = year_month.replace('/', '')
+            
+            # 保存ディレクトリを作成
+            approval_dir = os.path.join(settings.BASE_DIR, 'approvals')
+            os.makedirs(approval_dir, exist_ok=True)
+            
+            # ファイルを保存
+            file_path = os.path.join(approval_dir, f'{approval_month}_approval.pdf')
+            with open(file_path, 'wb') as f:
+                for chunk in pdf_file.chunks():
+                    f.write(chunk)
+            
+            # テーブルに記録（既存の場合は更新）
+            ApprovalPdf.objects.update_or_create(
+                year_month=year_month,
+                defaults={
+                    'pdf_file_path': file_path,
+                    'uploaded_by': get_current_user()
+                }
+            )
+            
+            messages.success(request, f'{year_month}の承認PDFをアップロードしました')
+            return redirect('products_master:upload_approval_pdf')
+            
+        except Exception as e:
+            messages.error(request, f'アップロード中にエラーが発生しました: {str(e)}')
+            return redirect('products_master:upload_approval_pdf')
+    
+    # 既存の承認PDF一覧を取得
+    approved_pdfs = ApprovalPdf.objects.all().order_by('-year_month')
+    
+    context = {
+        'current_user': get_current_user(),
+        'approved_pdfs': approved_pdfs,
+        'breadcrumbs': get_breadcrumbs('upload_approval_pdf')
+    }
+    return render(request, 'products_master/upload_approval_pdf.html', context)
+def download_approval_pdf(request, pk):
+    """承認PDFダウンロード"""
+    try:
+        approval_pdf = ApprovalPdf.objects.get(pk=pk)
+        
+        if not os.path.exists(approval_pdf.pdf_file_path):
+            messages.error(request, 'ファイルが見つかりません')
+            return redirect('products_master:upload_approval_pdf')
+        
+        with open(approval_pdf.pdf_file_path, 'rb') as f:
+            response = HttpResponse(f.read(), content_type='application/pdf')
+            filename = f'{approval_pdf.year_month.replace("/", "")}_approval.pdf'
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return response
+            
+    except ApprovalPdf.DoesNotExist:
+        messages.error(request, '承認PDFが見つかりません')
+        return redirect('products_master:upload_approval_pdf')
+    except Exception as e:
+        messages.error(request, f'ダウンロード中にエラーが発生しました: {str(e)}')
+        return redirect('products_master:upload_approval_pdf')

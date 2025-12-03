@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+
+{% block title %}承認PDFアップロード - デジタル価格表システム{% endblock %}
+
+{% block breadcrumb %}
+    {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
+{% endblock %}
+
+{% block content %}
+    {% include 'components/page_header.html' with page_title="承認PDFアップロード" page_subtitle="部長承認PDFをアップロードして価格表を承認済みにします" %}
+    
+    <div class="container">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>承認PDFアップロード</h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="post" enctype="multipart/form-data">
+                            {% csrf_token %}
+                            <div class="mb-3">
+                                <label for="year_month" class="form-label">対象年月</label>
+                                <input type="month" class="form-control" id="year_month" name="year_month" required>
+                                <div class="form-text">承認対象の年月を選択してください</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="pdf_file" class="form-label">承認PDF</label>
+                                <input type="file" class="form-control" id="pdf_file" name="pdf_file" accept=".pdf" required>
+                                <div class="form-text">部長承認済みのPDFファイルを選択してください</div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-upload"></i> アップロード
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>承認済み一覧</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if approved_pdfs %}
+                            <div class="list-group">
+                                {% for pdf in approved_pdfs %}
+                                    <div class="list-group-item">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <span>{{ pdf.year_month }}</span>
+                                                <a href="{% url 'products_master:download_approval_pdf' pdf.pk %}" class="btn btn-sm btn-outline-primary ms-2">
+                                                    <i class="fas fa-download"></i> ダウンロード
+                                                </a>
+                                            </div>
+                                            <span class="badge bg-success">承認済み</span>
+                                        </div>
+                                        <small class="text-muted">
+                                            アップロード: {{ pdf.uploaded_at|date:"Y/m/d H:i" }}
+                                            {% if pdf.uploaded_by %} by {{ pdf.uploaded_by }}{% endif %}
+                                        </small>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="text-muted text-center py-3">
+                                <i class="fas fa-file-pdf fa-2x mb-2"></i>
+                                <p>承認済みPDFはありません</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-3">
+            <a href="{% url 'products_master:integrated_pricelist' %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> デジタル価格表に戻る
+            </a>
+        </div>
+    </div>
+{% endblock %}

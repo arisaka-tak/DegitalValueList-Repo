@@ -40,6 +40,8 @@ urlpatterns = [
     path('integrated-pricelist/reset-sort/', pricelist_views.reset_sort_order, name='reset_sort_order'),
     path('integrated-pricelist/export-excel/', pricelist_views.export_excel, name='export_excel'),
     path('integrated-pricelist/cross-page-move/', pricelist_views.cross_page_move, name='cross_page_move'),
+    path('upload-approval-pdf/', pricelist_views.upload_approval_pdf, name='upload_approval_pdf'),
+    path('download-approval-pdf/<int:pk>/', pricelist_views.download_approval_pdf, name='download_approval_pdf'),
     
     # AI価格抽出
     path('ai-extract/', ai_history_views.ai_extract_history, name='ai_extract'),
