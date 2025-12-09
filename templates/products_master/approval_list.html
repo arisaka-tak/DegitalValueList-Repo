@@ -65,9 +65,9 @@
                                                     {{ approval.product_name }}
                                                 </a>
                                             </td>
-                                            <td>{{ approval.manufacturer|default:"-" }}</td>
-                                            <td>{{ approval.livestock_type|default:"-" }}</td>
-                                            <td>{{ approval.category|default:"-" }}</td>
+                                            <td>{{ approval.manufacturer_name|default:"-" }}</td>
+                                            <td>{{ approval.livestock_type_name|default:"-" }}</td>
+                                            <td>{{ approval.category_name|default:"-" }}</td>
                                             <td>
                                                 {% if approval.status == '削除申請' %}
                                                     <span class="badge bg-danger">削除申請</span>
@@ -79,27 +79,29 @@
                                             </td>
                                             <td>{{ approval.created_at|date:"Y/m/d H:i" }}</td>
                                             <td>
-                                                <a href="{% url 'products_master:approval_detail' approval.pk %}" class="btn btn-sm btn-outline-primary me-1">詳細</a>
-                                                <button type="button" class="btn btn-sm btn-success me-1{% if approval.status == '再申請待ち' %} disabled{% endif %}"
-                                                        {% if approval.status != '再申請待ち' %}
-                                                        hx-post="{% url 'products_master:approve_application' approval.pk %}"
-                                                        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                                                        hx-confirm="承認しますか？"
-                                                        {% else %}
-                                                        disabled
-                                                        {% endif %}>承認</button>
-                                                <button type="button" class="btn btn-sm btn-warning me-1{% if approval.status == '再申請待ち' %} disabled{% endif %}"
-                                                        {% if approval.status != '再申請待ち' %}
-                                                        hx-post="{% url 'products_master:reject_application' approval.pk %}"
-                                                        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                                                        hx-confirm="申請を却下しますか？（再申請待ちに変更）"
-                                                        {% else %}
-                                                        disabled
-                                                        {% endif %}>却下</button>
-                                                <button type="button" class="btn btn-sm btn-danger"
-                                                        hx-post="{% url 'products_master:cancel_application' approval.pk %}"
-                                                        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                                                        hx-confirm="申請を取消しますか？">申請取消</button>
+                                                <div class="btn-group" role="group">
+                                                    <a href="{% url 'products_master:approval_detail' approval.pk %}" class="btn btn-sm btn-outline-primary">詳細</a>
+                                                    <button type="button" class="btn btn-sm btn-success{% if approval.status == '再申請待ち' %} disabled{% endif %}"
+                                                            {% if approval.status != '再申請待ち' %}
+                                                            hx-post="{% url 'products_master:approve_application' approval.pk %}"
+                                                            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                                                            hx-confirm="承認しますか？"
+                                                            {% else %}
+                                                            disabled
+                                                            {% endif %}>承認</button>
+                                                    <button type="button" class="btn btn-sm btn-warning{% if approval.status == '再申請待ち' %} disabled{% endif %}"
+                                                            {% if approval.status != '再申請待ち' %}
+                                                            hx-post="{% url 'products_master:reject_application' approval.pk %}"
+                                                            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                                                            hx-confirm="申請を却下しますか？（再申請待ちに変更）"
+                                                            {% else %}
+                                                            disabled
+                                                            {% endif %}>却下</button>
+                                                    <button type="button" class="btn btn-sm btn-danger"
+                                                            hx-post="{% url 'products_master:cancel_application' approval.pk %}"
+                                                            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                                                            hx-confirm="申請を取消しますか？">取消</button>
+                                                </div>
                                             </td>
                                         </tr>
                                         {% endfor %}

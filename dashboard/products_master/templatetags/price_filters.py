@@ -44,12 +44,22 @@ def format_price(value):
 def approval_to_json(approval):
     """承認データをJSON形式に変換"""
     try:
+        # 畜種、分類、メーカーのIDを取得
+        livestock_type_id = ''
+        category_id = ''
+        manufacturer_id = ''
+        
+        # 承認データはIDで保存されているのでそのまま使用
+        livestock_type_id = approval.livestock_type or ''
+        category_id = approval.category or ''
+        manufacturer_id = approval.manufacturer or ''
+        
         data = {
             'product_number': approval.product_number if hasattr(approval, 'product_number') else None,
             'product_code': approval.product_code or '',
-            'livestock_type': approval.livestock_type or '',
-            'category': approval.category or '',
-            'manufacturer': approval.manufacturer or '',
+            'livestock_type': livestock_type_id,
+            'category': category_id,
+            'manufacturer': manufacturer_id,
             'product_name': approval.product_name or '',
             'model_number': approval.model_number or '',
             'specification': approval.specification or '',

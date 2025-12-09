@@ -10,6 +10,8 @@ class PriceHistoryComponent extends HTMLElement {
         this.editable = this.getAttribute('editable') !== 'false';
         this.render();
         this.setupEventListeners();
+        
+
     }
 
     render() {
@@ -78,6 +80,9 @@ class PriceHistoryComponent extends HTMLElement {
             return; // 承認モードではイベントリスナーを設定しない
         }
         
+        // 初期状態でボタン状態を更新
+        this.updateAddButtonState();
+        
         // イベント委譲でボタンクリックを処理
         this.addEventListener('click', (e) => {
             const action = e.target.dataset.action;
@@ -131,6 +136,18 @@ class PriceHistoryComponent extends HTMLElement {
         if (this.mode === 'approval') return; // 承認モードでは追加不可
         
         const tbody = this.querySelector('#priceHistoryTable tbody');
+        
+        // 既に新規行があるかチェック
+        const existingNewRow = tbody.querySelector('tr[data-id="new"]');
+        if (existingNewRow) {
+            alert('新規行は1つまでしか追加できません。');
+            const firstInput = existingNewRow.querySelector('input');
+            if (firstInput) {
+                firstInput.focus();
+            }
+            return;
+        }
+        
         const newRow = document.createElement('tr');
         newRow.className = 'table-warning';
         newRow.setAttribute('data-id', 'new');
@@ -147,15 +164,45 @@ class PriceHistoryComponent extends HTMLElement {
         `;
         tbody.insertBefore(newRow, tbody.firstChild);
         
-        // イベントは委譲で処理するため、ここでは追加しない
+        // 新規行の最初の入力フィールドにフォーカス
+        const firstInput = newRow.querySelector('input');
+        if (firstInput) {
+            firstInput.focus();
+        }
         
         this.rowIndex++;
+        this.updateAddButtonState();
     }
 
-    // 新規行削除機能（standalone版と同じ）
+    // 新規行削除機能
     removeNewRow(button) {
-        button.closest('tr').remove();
+        const row = button.closest('tr');
+        row.remove();
+        this.updateAddButtonState();
     }
+    
+    // ボタン状態更新
+    updateAddButtonState() {
+        const addButton = document.getElementById('addPriceRowBtn');
+        const tbody = this.querySelector('#priceHistoryTable tbody');
+        const hasNewRow = tbody && tbody.querySelector('tr[data-id="new"]');
+        
+        if (addButton) {
+            if (hasNewRow) {
+                addButton.textContent = '編集中';
+                addButton.disabled = true;
+                addButton.classList.remove('btn-outline-primary');
+                addButton.classList.add('btn-secondary');
+            } else {
+                addButton.textContent = '新規追加';
+                addButton.disabled = false;
+                addButton.classList.remove('btn-secondary');
+                addButton.classList.add('btn-outline-primary');
+            }
+        }
+    }
+    
+
 
     // 削除マーク機能（standalone版と同じ）
     markForDeletion(button) {
@@ -491,8 +538,32 @@ customElements.define('price-history-component', PriceHistoryComponent);
 
 // 既存のグローバル関数との互換性を保持
 window.addPriceRow = function() {
+    console.log('addPriceRow called');
     const component = document.querySelector('price-history-component');
-    if (component) {
-        component.addNewRow();
+    
+    if (!component) {
+        console.log('Component not found');
+        return;
     }
+    
+    // 既に新規行があるかチェック
+    const tbody = component.querySelector('#priceHistoryTable tbody');
+    const existingNewRow = tbody ? tbody.querySelector('tr[data-id="new"]') : null;
+    
+    console.log('Existing new row:', existingNewRow);
+    
+    if (existingNewRow) {
+        console.log('New row already exists, focusing...');
+        // 既存の新規行にフォーカス
+        const firstInput = existingNewRow.querySelector('input');
+        if (firstInput) {
+            firstInput.focus();
+        }
+        alert('新規行は1つまでしか追加できません。');
+        return;
+    }
+    
+    console.log('Adding new row...');
+    // 新規行を追加
+    component.addPriceRow();
 };

@@ -22,7 +22,7 @@ def ai_extract(request):
     
     context = {
         'current_user': get_current_user(),
-        'breadcrumbs': get_breadcrumbs('ai_extract'),
+        'breadcrumbs': _get_dynamic_breadcrumbs_for_ai_extract(request),
         'pdf_form': pdf_form
     }
     return render(request, 'products_master/ai_extract_input.html', context)
@@ -597,6 +597,19 @@ def ai_extract_get_detail(request):
         return JsonResponse({'error': '明細データが見つかりません'}, status=404)
     except Exception as e:
         return JsonResponse({'error': f'処理エラー: {str(e)}'}, status=500)
+
+def _get_dynamic_breadcrumbs_for_ai_extract(request):
+    """AI価格抽出画面の動的パンくずリスト"""
+    referer = request.META.get('HTTP_REFERER', '')
+    
+    if 'integrated-pricelist' in referer:
+        # デジタル価格表から来た場合
+        return get_breadcrumbs('ai_extract', 
+                              from_page_title='デジタル価格表', 
+                              from_page_url='/products/integrated-pricelist/')
+    else:
+        # 商品一覧から来た場合（デフォルト）
+        return get_breadcrumbs('ai_extract')
 
 @csrf_exempt
 @require_http_methods(["POST"])

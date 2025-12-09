@@ -14,10 +14,15 @@ def product_list(request):
     products = Product.active_objects.all()
     
     if search_query:
+        from dashboard.products_master.ai_services import normalize_text
+        
+        # 検索クエリを正規化（全角・半角統一）
+        normalized_query = normalize_text(search_query)
+        
         products = products.filter(
-            Q(product_name__icontains=search_query) |
-            Q(manufacturer__icontains=search_query) |
-            Q(product_code__icontains=search_query)
+            Q(product_name__icontains=normalized_query) |
+            Q(manufacturer__name__icontains=normalized_query) |
+            Q(product_code__icontains=normalized_query)
         )
     
     products = products.order_by('pk')

@@ -3,7 +3,9 @@ from django.core.paginator import Paginator
 from django.http import JsonResponse, HttpResponse
 from django.contrib import messages
 from django.shortcuts import redirect
+from django.db.models import Q
 from dashboard.products_master.models import Product, PriceHistory, ApprovalPdf
+from dashboard.products_master.ai_services import normalize_text
 from digital_pricelist_system.utils import get_current_user
 from digital_pricelist_system.breadcrumbs import get_breadcrumbs
 from datetime import datetime, timedelta
@@ -69,8 +71,10 @@ def integrated_pricelist(request):
     next_month = today.replace(day=1) + timedelta(days=32)
     default_month = next_month.strftime('%Y/%m')
     
-    # 適用年月フィルター
+    # フィルターパラメータを取得
     selected_month = request.GET.get('month', default_month)
+    manufacturer_filter = request.GET.get('manufacturer', '').strip()
+    product_name_filter = request.GET.get('product_name', '').strip()
     
     # HTML5 month入力からYYYY/MM形式に変換
     if selected_month and '-' in selected_month:
@@ -87,8 +91,31 @@ def integrated_pricelist(request):
     if Product.objects.filter(Q(sort_num=0) | Q(sort_num__isnull=True), is_active=True).exists():
         _initialize_sort_numbers()
     
+    # 商品フィルターを適用（ノーマライズ検索）
+    products_query = Product.objects.filter(is_active=True)
+    
+    if manufacturer_filter:
+        # ノーマライズした検索キーワードで部分一致検索
+        normalized_manufacturer = normalize_text(manufacturer_filter)
+        manufacturer_conditions = Q()
+        for keyword in normalized_manufacturer.split():
+            if keyword:
+                manufacturer_conditions |= Q(manufacturer__name__icontains=keyword)
+        if manufacturer_conditions:
+            products_query = products_query.filter(manufacturer_conditions)
+    
+    if product_name_filter:
+        # ノーマライズした検索キーワードで部分一致検索
+        normalized_product_name = normalize_text(product_name_filter)
+        product_name_conditions = Q()
+        for keyword in normalized_product_name.split():
+            if keyword:
+                product_name_conditions |= Q(product_name__icontains=keyword)
+        if product_name_conditions:
+            products_query = products_query.filter(product_name_conditions)
+    
     # 全ての有効な商品を取得（関連データも一括取得）
-    all_products = Product.objects.filter(is_active=True).select_related(
+    all_products = products_query.select_related(
         'livestock_type', 'category', 'manufacturer'
     ).order_by('livestock_type', 'category', 'manufacturer', 'sort_num', 'product_name')
     

@@ -26,12 +26,18 @@
                                 <product-basic-info-component 
                                     product-data='{{ approval|approval_to_json }}'
                                     form-data='{{ approval|approval_to_json }}'
+                                    livestock-types='{{ livestock_types_json|default:"[]" }}'
+                                    categories='{{ categories_json|default:"[]" }}'
+                                    manufacturers='{{ manufacturers_json|default:"[]" }}'
                                     editable="true">
                                 </product-basic-info-component>
                             </form>
                         {% else %}
                             <product-basic-info-component 
                                 product-data='{{ approval|approval_to_json }}'
+                                livestock-types='{{ livestock_types_json|default:"[]" }}'
+                                categories='{{ categories_json|default:"[]" }}'
+                                manufacturers='{{ manufacturers_json|default:"[]" }}'
                                 editable="false">
                             </product-basic-info-component>
                         {% endif %}
@@ -71,13 +77,16 @@
         <!-- 価格履歴 -->
         <div class="row mt-4">
             <div class="col-12">
-                {% include 'components/price_history_section.html' with section_title="申請価格履歴" show_diff_note=not_is_new_product show_add_button=is_editable histories_json=price_histories|approval_histories_to_json mode=is_editable|yesno:"edit,approval" show_diff=True editable=is_editable %}
+                {% include 'components/price_history_section.html' with section_title="申請価格履歴" show_diff_note=not_is_new_product show_add_button=is_editable histories_json=price_histories|approval_histories_to_json mode=is_editable|yesno:"approval_edit,approval" show_diff=True editable=is_editable %}
             </div>
         </div>
     </div>
 
     <!-- ボトムアクションバー -->
     {% include 'components/bottom_action_bar.html' with action_type='approval_detail' %}
+
+    <!-- メーカー選択モーダル -->
+    {% include 'components/manufacturer_modal.html' %}
 
     <!-- 承認・却下・取消フォーム -->
     <form id="approveForm" method="POST" action="{% url 'products_master:approve_application' approval.pk %}" style="display: none;">
@@ -91,6 +100,8 @@
     </form>
 
     <script>
+
+    
     // 承認処理
     window.acceptApplication = function() {
         if (confirm('この申請を承認しますか？')) {

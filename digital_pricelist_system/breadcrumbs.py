@@ -16,8 +16,9 @@ def get_breadcrumbs(page_type, **kwargs):
     
     # ベースURL定義
     URLS = {
-        'product_list': '/products/products/',
+        'product_list': '/products/',
         'approval_list': '/products/approvals/',
+        'integrated_pricelist': '/products/integrated-pricelist/',
     }
     
     breadcrumbs_map = {
@@ -30,7 +31,7 @@ def get_breadcrumbs(page_type, **kwargs):
             {'title': kwargs.get('product_name', '商品詳細'), 'url': None}
         ],
         'product_new': [
-            {'title': '商品一覧', 'url': URLS['product_list']},
+            {'title': kwargs.get('from_page_title', '商品一覧'), 'url': kwargs.get('from_page_url', URLS['product_list'])},
             {'title': '新規作成', 'url': None}
         ],
         'product_edit': [
@@ -60,13 +61,27 @@ def get_breadcrumbs(page_type, **kwargs):
         
         # AI価格抽出
         'ai_extract': [
-            {'title': '商品一覧', 'url': URLS['product_list']},
+            {'title': kwargs.get('from_page_title', '商品一覧'), 'url': kwargs.get('from_page_url', URLS['product_list'])},
             {'title': 'AI価格抽出', 'url': None}
         ],
         'ai_extract_results': [
             {'title': '商品一覧', 'url': URLS['product_list']},
             {'title': 'AI価格抽出', 'url': '/products/ai-extract/'},
             {'title': '照合結果', 'url': None}
+        ],
+        'ai_extract_history': [
+            {'title': '商品一覧', 'url': URLS['product_list']},
+            {'title': 'AI価格抽出', 'url': '/products/ai-extract/'},
+            {'title': '抽出履歴', 'url': None}
+        ],
+        'ai_extract_history_detail': [
+            {'title': '商品一覧', 'url': URLS['product_list']},
+            {'title': 'AI価格抽出', 'url': '/products/ai-extract/'},
+            {'title': '抽出履歴', 'url': '/products/ai-extract/history/'},
+            {'title': kwargs.get('transaction_name', '照合結果'), 'url': None}
+        ],
+        'upload_approval_pdf': [
+            {'title': '決裁書アップロード', 'url': None}
         ],
         
         # マスタメンテナンス

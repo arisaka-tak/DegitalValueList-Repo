@@ -16,6 +16,7 @@ class ProductBasicInfoComponent extends HTMLElement {
         const errorFields = JSON.parse(this.getAttribute('error-fields') || '[]');
         const livestockTypes = JSON.parse(this.getAttribute('livestock-types') || '[]');
         const categories = JSON.parse(this.getAttribute('categories') || '[]');
+        const manufacturers = JSON.parse(this.getAttribute('manufacturers') || '[]');
 
         this.innerHTML = `
             <div class="row">
@@ -48,7 +49,7 @@ class ProductBasicInfoComponent extends HTMLElement {
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="id_manufacturer">メーカー</label>
-                        ${this.renderManufacturerField('manufacturer', productData, formData, isEditable, diffFlags, errorFields)}
+                        ${this.renderManufacturerField('manufacturer', productData, formData, isEditable, diffFlags, errorFields, manufacturers)}
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="id_model_number">型式</label>
@@ -137,12 +138,14 @@ class ProductBasicInfoComponent extends HTMLElement {
             return `<select class="form-select${errorClass}" id="id_${fieldName}" name="${fieldName}">${optionsHtml}</select>`;
         } else {
             const diffClass = isDiff ? ' text-danger fw-bold' : '';
-            const displayValue = value || '-';
+            // IDから名前を取得して表示
+            const selectedOption = options.find(option => option.id == value);
+            const displayValue = selectedOption ? selectedOption.name : (value || '-');
             return `<div class="form-control-plaintext${diffClass}">${this.escapeHtml(displayValue)}</div>`;
         }
     }
 
-    renderManufacturerField(fieldName, productData, formData, isEditable, diffFlags, errorFields) {
+    renderManufacturerField(fieldName, productData, formData, isEditable, diffFlags, errorFields, manufacturers = []) {
         const value = productData[fieldName] || '';
         const formValue = formData[fieldName] !== undefined ? formData[fieldName] : value;
         const isDiff = diffFlags[fieldName] || false;
@@ -150,16 +153,24 @@ class ProductBasicInfoComponent extends HTMLElement {
         
         if (isEditable) {
             const errorClass = hasError ? ' is-invalid' : '';
+            // メーカーIDから名前を取得して表示する
+            let displayName = 'メーカーを選択してください';
+            if (formValue) {
+                // メーカー名をAPIから取得するためのプレースホルダー
+                displayName = `ID: ${formValue}`;
+            }
             return `
                 <div class="input-group">
-                    <input type="text" class="form-control${errorClass}" id="id_${fieldName}_display" readonly placeholder="メーカーを選択してください">
+                    <input type="text" class="form-control${errorClass}" id="id_${fieldName}_display" readonly placeholder="メーカーを選択してください" value="${displayName}">
                     <input type="hidden" id="id_${fieldName}" name="${fieldName}" value="${this.escapeHtml(formValue)}">
                     <button type="button" class="btn btn-outline-secondary" onclick="openManufacturerModal()">選択</button>
                 </div>
             `;
         } else {
             const diffClass = isDiff ? ' text-danger fw-bold' : '';
-            const displayValue = value || '-';
+            // IDから名前を取得して表示
+            const selectedManufacturer = manufacturers.find(m => m.id == value);
+            const displayValue = selectedManufacturer ? selectedManufacturer.name : (value || '-');
             return `<div class="form-control-plaintext${diffClass}">${this.escapeHtml(displayValue)}</div>`;
         }
     }
@@ -177,6 +188,47 @@ class ProductBasicInfoComponent extends HTMLElement {
         if (hiddenInput && displayInput) {
             hiddenInput.value = id;
             displayInput.value = name;
+        }
+    }
+    
+    // コンポーネントがレンダリングされた後にメーカー名を取得
+    connectedCallback() {
+        this.render();
+        // メーカー名を非同期で取得
+        setTimeout(() => this.loadManufacturerName(), 100);
+    }
+    
+    async loadManufacturerName() {
+        const manufacturerId = document.getElementById('id_manufacturer')?.value;
+        const displayInput = document.getElementById('id_manufacturer_display');
+        
+        if (manufacturerId && displayInput && manufacturerId !== '') {
+            try {
+                const response = await fetch('/products/api/manufacturers/');
+                const manufacturers = await response.json();
+                const manufacturer = manufacturers.find(m => m.id == manufacturerId);
+                if (manufacturer) {
+                    displayInput.value = manufacturer.name;
+                }
+            } catch (error) {
+                console.error('Failed to load manufacturer name:', error);
+            }
+        }
+    }
+    
+    async loadManufacturerNameForDisplay(fieldName, manufacturerId) {
+        try {
+            const response = await fetch('/products/api/manufacturers/');
+            const manufacturers = await response.json();
+            const manufacturer = manufacturers.find(m => m.id == manufacturerId);
+            if (manufacturer) {
+                const displayElement = document.getElementById(`display_${fieldName}`);
+                if (displayElement) {
+                    displayElement.textContent = manufacturer.name;
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load manufacturer name for display:', error);
         }
     }
 }

@@ -1,13 +1,13 @@
 {% extends 'base.html' %}
 
-{% block title %}承認PDFアップロード - デジタル価格表システム{% endblock %}
+{% block title %}決裁書アップロード - デジタル価格表システム{% endblock %}
 
 {% block breadcrumb %}
     {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
 {% endblock %}
 
 {% block content %}
-    {% include 'components/page_header.html' with page_title="承認PDFアップロード" page_subtitle="部長承認PDFをアップロードして価格表を承認済みにします" %}
+    {% include 'components/page_header.html' with page_title="決裁書アップロード" page_subtitle="部長決裁書をアップロードして価格表を承認済みにします" %}
     
     <div class="container">
         {% if messages %}
@@ -23,7 +23,7 @@
             <div class="col-md-6">
                 <div class="card">
                     <div class="card-header">
-                        <h5>承認PDFアップロード</h5>
+                        <h5>決裁書アップロード</h5>
                     </div>
                     <div class="card-body">
                         <form method="post" enctype="multipart/form-data">
@@ -34,9 +34,9 @@
                                 <div class="form-text">承認対象の年月を選択してください</div>
                             </div>
                             <div class="mb-3">
-                                <label for="pdf_file" class="form-label">承認PDF</label>
+                                <label for="pdf_file" class="form-label">決裁書PDF</label>
                                 <input type="file" class="form-control" id="pdf_file" name="pdf_file" accept=".pdf" required>
-                                <div class="form-text">部長承認済みのPDFファイルを選択してください</div>
+                                <div class="form-text">部長決裁済みのPDFファイルを選択してください</div>
                             </div>
                             <button type="submit" class="btn btn-primary">
                                 <i class="fas fa-upload"></i> アップロード
@@ -49,7 +49,7 @@
             <div class="col-md-6">
                 <div class="card">
                     <div class="card-header">
-                        <h5>承認済み一覧</h5>
+                        <h5>決裁済み一覧</h5>
                     </div>
                     <div class="card-body">
                         {% if approved_pdfs %}
@@ -63,7 +63,7 @@
                                                     <i class="fas fa-download"></i> ダウンロード
                                                 </a>
                                             </div>
-                                            <span class="badge bg-success">承認済み</span>
+                                            <span class="badge bg-success">決裁済み</span>
                                         </div>
                                         <small class="text-muted">
                                             アップロード: {{ pdf.uploaded_at|date:"Y/m/d H:i" }}
@@ -75,7 +75,7 @@
                         {% else %}
                             <div class="text-muted text-center py-3">
                                 <i class="fas fa-file-pdf fa-2x mb-2"></i>
-                                <p>承認済みPDFはありません</p>
+                                <p>決裁済みPDFはありません</p>
                             </div>
                         {% endif %}
                     </div>

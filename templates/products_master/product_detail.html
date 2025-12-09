@@ -138,13 +138,73 @@
     <script>
     // 価格履歴機能はWebコンポーネントに移行済み
     
+    // 新規行追加制御（1行まで）
+    let hasNewRow = false;
+    
+
+    
+    // 新規行削除時の処理
+    document.addEventListener('click', function(e) {
+        if (e.target.dataset.action === 'remove-new-row') {
+            hasNewRow = false;
+            
+            // ボタンを有効化
+            const addButton = document.getElementById('addPriceRowBtn');
+            if (addButton) {
+                addButton.textContent = '新規追加';
+                addButton.disabled = false;
+                addButton.classList.remove('btn-secondary');
+                addButton.classList.add('btn-outline-primary');
+            }
+        }
+    });
+    
+    // ページ読み込み後の初期化
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Page loaded, addPriceRow function ready');
+        
+        // Webコンポーネント読み込み後に関数を再定義
+        setTimeout(function() {
+            window.addPriceRow = function() {
+                console.log('Override addPriceRow called, hasNewRow:', hasNewRow);
+                
+                if (hasNewRow) {
+                    alert('新規行は1つまでしか追加できません。');
+                    return;
+                }
+                
+                const component = document.querySelector('price-history-component');
+                if (component) {
+                    component.addPriceRow();
+                    hasNewRow = true;
+                    
+                    // ボタンを無効化
+                    const addButton = document.getElementById('addPriceRowBtn');
+                    if (addButton) {
+                        addButton.textContent = '編集中';
+                        addButton.disabled = true;
+                        addButton.classList.remove('btn-outline-primary');
+                        addButton.classList.add('btn-secondary');
+                    }
+                }
+            };
+            console.log('addPriceRow function overridden');
+        }, 500);
+    });
+    
     // 申請ボタン処理
     window.submitApplication = function(button) {
+        console.log('submitApplication called');
+        
         // ダブルクリック防止
-        if (button.disabled) return false;
+        if (button.disabled) {
+            console.log('Button already disabled');
+            return false;
+        }
         
         // 1. エラーチェックを先に実行
         const errors = validateForm();
+        console.log('Validation errors:', errors);
         if (errors.length > 0) {
             alert('エラーがあります：\n' + errors.join('\n'));
             return false;
@@ -152,20 +212,25 @@
         
         // 2. エラーがない場合のみ確認アラート
         if (!confirm('この内容で申請しますか？')) {
+            console.log('User cancelled');
             return false;
         }
         
+        console.log('Proceeding with form submission');
         button.disabled = true;
         button.textContent = '処理中...';
         
         // フォームを取得
         const form = document.getElementById('productForm');
+        console.log('Form found:', form);
         
         // ページ内のすべての入力要素をフォームに追加
         const allInputs = document.querySelectorAll('input, textarea, select');
+        console.log('Found inputs:', allInputs.length);
         
         allInputs.forEach(input => {
             if (input.name && !form.querySelector(`[name="${input.name}"]`)) {
+                console.log('Adding hidden input:', input.name, '=', input.value);
                 const hiddenInput = document.createElement('input');
                 hiddenInput.type = 'hidden';
                 hiddenInput.name = input.name;
@@ -176,6 +241,7 @@
         
         // フォームをPOSTで送信（actionは現在のページ）
         form.method = 'post';
+        console.log('Submitting form');
         form.submit();
         
         return false;
@@ -186,9 +252,30 @@
         const errors = [];
         
         // 商品名のチェック
-        const productName = document.querySelector('input[name="product_name"]')?.value?.trim();
+        const productNameInput = document.querySelector('input[name="product_name"], textarea[name="product_name"]');
+        const productName = productNameInput?.value?.trim();
+        console.log('Product name input found:', productNameInput);
+        console.log('Product name value:', productName);
         if (!productName) {
             errors.push('商品名は必須です');
+        }
+        
+        // 畜種のチェック
+        const livestockType = document.querySelector('select[name="livestock_type"]')?.value;
+        if (!livestockType) {
+            errors.push('畜種は必須です');
+        }
+        
+        // 分類のチェック
+        const category = document.querySelector('select[name="category"]')?.value;
+        if (!category) {
+            errors.push('分類は必須です');
+        }
+        
+        // メーカーのチェック
+        const manufacturer = document.querySelector('input[name="manufacturer"]')?.value;
+        if (!manufacturer) {
+            errors.push('メーカーは必須です');
         }
         
         // 商品コードのチェック
