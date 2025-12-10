@@ -45,3 +45,9 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Deploy
+deploy/
+
+# Test files
+*.pdf
