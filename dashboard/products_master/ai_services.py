@@ -3,7 +3,6 @@ AI価格抽出関連のサービス
 """
 import unicodedata
 import re
-from fuzzywuzzy import fuzz
 
 from .models import Product
 
@@ -109,8 +108,11 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
     ai_model_bigrams = get_bigrams(normalize_text(ai_model_number))
     ai_keyword_list = ai_product_bigrams | ai_spec_bigrams | ai_model_bigrams
     
+    # NFJ 310の場合のみデバッグ出力
+    is_nfj310_debug = debug and 'NFJ 310' in ai_product_name
+    
     # AI側の正規化処理をデバッグ出力
-    if debug:
+    if is_nfj310_debug:
         print(f"\n=== AI側データ正規化 ===")
         print(f"AI生データ: 商品名='{ai_product_name}', 型式='{ai_model_number}', 規格='{ai_specification}'")
         print(f"AI正規化後: 商品名='{normalize_text(ai_product_name)}', 型式='{normalize_text(ai_model_number)}', 規格='{normalize_text(ai_specification)}'")
@@ -118,13 +120,13 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
     
     # 空のキーワードリストの場合は早期リターン
     if not ai_keyword_list:
-        if debug:
+        if is_nfj310_debug:
             print("AIキーワードリストが空のためスキップ")
         return []
     
     # 全商品を対象とした照合（関連データも一括取得）
     products = Product.objects.select_related('manufacturer', 'livestock_type', 'category').all()
-    if debug:
+    if is_nfj310_debug:
         print(f"全商品対象: {products.count()}件")
     
     candidates = []
@@ -161,6 +163,7 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
         
         # ボーナススコアを計算
         bonus_score = 0
+        best_match_field = '2-gramキーワードリスト'
         
         # 商品名由来キーワードの一致率ボーナス（AI商品名 vs マスタキーワードカラム）
         product_bonus_ratio = 0
@@ -178,6 +181,31 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
             if model_bonus_ratio >= 0.7:  # 70%以上
                 bonus_score += 15
         
+        # マスタ型式網羅チェック（AI抽出の品名・型式・規格のいずれかにマスタ型式が含まれる）
+        model_coverage_matched = False
+        if product.model_number and len(product.model_number.strip()) > 3:
+            master_model_normalized = normalize_text(product.model_number)
+            ai_all_fields = f"{ai_product_name} {ai_model_number} {ai_specification}"
+            ai_all_normalized = normalize_text(ai_all_fields)
+            
+            # 記号を除去して3文字以上の型式のみチェック
+            def clean_model_text(text):
+                """記号を除去してアルファベット・数字・漢字・ひらがな・カタカナのみにする"""
+                return re.sub(r'[^A-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]', '', text) if text else ''
+            
+            master_model_clean = clean_model_text(master_model_normalized)
+            ai_all_clean = clean_model_text(ai_all_normalized)
+            
+            if master_model_clean and len(master_model_clean) > 3:
+                if master_model_clean in ai_all_clean:
+                    model_coverage_matched = True
+                    best_match_field = 'マスタ型式網羅(記号除去)'
+                
+            # デバッグ出力（商品739とNFJ310と220の問題を調査）
+            if is_nfj310_debug and (product.pk == 739 or product.model_number == '220' or 'NFJ310' in (product.model_number or '')):
+                clean_match = master_model_clean in ai_all_clean if master_model_clean else False
+                print(f"商品{product.pk}[型式:{product.model_number}]: 正規化='{master_model_normalized}' 記号除去='{master_model_clean}' マッチ={clean_match} スコア={base_score}")
+        
         # メーカー名一致ボーナス（2-gram照合70%以上）
         manufacturer_bonus = 0
         ai_manufacturer = extracted_data.get('manufacturer', '')
@@ -191,18 +219,54 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
                     manufacturer_bonus = 5
                     bonus_score += manufacturer_bonus
         
+        # 新価格と仕切価格の範囲チェックボーナス（±10%の範囲で+10点）
+        price_range_bonus = 0
+        ai_new_price = extracted_data.get('new_price')
+        if ai_new_price and product.price_histories.exists():
+            try:
+                # AI側の新価格を数値に変換
+                ai_price_num = float(str(ai_new_price).replace(',', '').strip())
+                
+                # マスタ側の処理日時点の仕切価格を取得
+                from datetime import datetime
+                today = datetime.now().strftime('%Y/%m')
+                latest_price_history = product.price_histories.filter(
+                    is_active=True,
+                    effective_year_month__lte=today
+                ).order_by('-effective_year_month').first()
+                if latest_price_history and latest_price_history.wholesale_price:
+                    master_price_str = str(latest_price_history.wholesale_price).strip()
+                    # 数値のみの場合に処理
+                    if master_price_str.replace(',', '').replace('.', '').isdigit():
+                        master_price_num = float(master_price_str.replace(',', ''))
+                        
+                        # ±10%の範囲チェック
+                        price_diff_ratio = abs(ai_price_num - master_price_num) / master_price_num
+                        if price_diff_ratio <= 0.1:  # 10%以内
+                            price_range_bonus = 10
+                            bonus_score += price_range_bonus
+            except (ValueError, TypeError, ZeroDivisionError):
+                # 数値変換エラーや0除算エラーは無視
+                pass
+        
         # 最終スコア = 基本加点 - 余剰減点 + ボーナス
         max_score = base_score - penalty + bonus_score
-        best_match_field = '2-gramキーワードリスト'
+        
+        # マスタ型式網羅時は最低70点を保証
+        if model_coverage_matched:
+            max_score = max(max_score, 70)
+            if is_nfj310_debug:
+                print(f"型式マッチ: {product.product_name} | 型式:{product.model_number} | 記号除去後:'{master_model_clean}' | スコア:{max_score}")
         
         # デバッグ出力を無効化
         # if not first_product_checked and 'エコクーラー' in product.product_name:
         #     first_product_checked = True
         
-        # デバッグ情報収集
-        if debug:
+        # デバッグ情報収集（商品739、スコア30以上またはNFJ関連のみ）
+        if is_nfj310_debug and (product.pk == 739 or max_score >= 30 or 'NFJ' in (product.model_number or '') or product.model_number == '220'):
             debug_info.append({
                 'product_name': product.product_name,
+                'model_number': product.model_number,
                 'score': max_score,
                 'base_score': base_score,
                 'penalty': penalty,
@@ -212,13 +276,23 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
                 'matched_keywords': f"{matched_keywords}/{total_ai_keywords}",
                 'product_bonus_ratio': product_bonus_ratio,
                 'model_bonus_ratio': model_bonus_ratio,
+                'model_coverage_matched': model_coverage_matched,
                 'manufacturer_bonus': manufacturer_bonus,
                 'master_keywords': list(master_keyword_list),
+                'best_match_field': best_match_field,
                 'threshold': threshold
             })
         
+        # 型式網羅マッチの場合は閾値を下げる
+        effective_threshold = 30 if model_coverage_matched else threshold
+        
+        # 商品739とNFJ310と220のデバッグ情報を追加出力
+        if is_nfj310_debug and (product.pk == 739 or product.model_number == '220' or 'NFJ310' in (product.model_number or '')):
+            clean_model_debug = clean_model_text(master_model_normalized) if 'master_model_normalized' in locals() else ''
+            print(f"商品{product.pk}[型式:{product.model_number}] 最終スコア: {max_score} (閾値:{effective_threshold}) 型式網羅:{model_coverage_matched} 記号除去後:'{clean_model_debug}' マッチキーワード:{matched_keywords}/{total_ai_keywords}")
+        
         # 閾値以上の場合のみ候補に追加
-        if max_score >= threshold and max_score > 0:
+        if max_score >= effective_threshold and max_score > 0:
             candidates.append({
                 'product': {
                     'pk': product.pk,
@@ -242,7 +316,7 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
         processed_count += 1
     
     # デバッグ情報出力
-    if debug:
+    if is_nfj310_debug:
         print(f"\n=== 照合結果: {extracted_data.get('product_name', 'Unknown')} ===")
         print(f"AI入力: 商品名='{ai_product_name}', 型式='{ai_model_number}', 規格='{ai_specification}', メーカー='{extracted_data.get('manufacturer', '')}'")
         print(f"AI正規化後キーワード: {list(ai_keyword_list)}")
@@ -296,7 +370,7 @@ def process_extraction_results(json_data):
             continue
         
         # 商品照合実行
-        candidates = find_similar_products(product_data, threshold=50, debug=False)
+        candidates = find_similar_products(product_data, threshold=50, debug=True)
         
         results.append({
             'index': i,

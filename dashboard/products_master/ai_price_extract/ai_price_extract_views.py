@@ -10,7 +10,7 @@ from dashboard.products_master.models import Product, PriceHistoryApproval, Prod
 from dashboard.products_master.ai_extract_models import AIExtractTransaction, AIExtractTransactionDetail
 from dashboard.products_master.ai_services import process_extraction_results
 from dashboard.products_master.forms import PDFUploadForm
-from dashboard.products_master.pdf_ai_services import pdf_ai_service, PDFProcessingError, AIExtractionError
+# from dashboard.products_master.pdf_ai_services import pdf_ai_service, PDFProcessingError, AIExtractionError
 from dashboard.products_master.product_detail.product_detail_views import _process_approval
 from digital_pricelist_system.utils import get_current_user
 from digital_pricelist_system.breadcrumbs import get_breadcrumbs
@@ -458,39 +458,113 @@ def ai_extract_pdf_process(request):
         transaction_name = pdf_form.cleaned_data['transaction_name']
         print(f"PDF file: {pdf_file.name}, Transaction: {transaction_name}")
         
-        # PDF処理・AI抽出
-        print("Starting PDF processing...")
-        entities, pdf_text = pdf_ai_service.process_pdf_to_entities(pdf_file)
-        print(f"Entities extracted: {len(entities)}")
+        # Document Intelligence + AI抽出処理
+        print("Starting Document Intelligence + AI processing...")
         
-        if not entities:
-            print("No entities found")
-            messages.warning(request, 'PDFから商品情報を抽出できませんでした。')
-            return redirect('products_master:ai_extract')
+        # 一時ファイルに保存
+        import tempfile
+        import os
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+            for chunk in pdf_file.chunks():
+                temp_file.write(chunk)
+            temp_pdf_path = temp_file.name
         
-        # AI抽出結果をJSON形式に変換
-        json_data = {
-            'products': [
-                {
-                    'product_name': entity['name'],
-                    'new_price': entity['price'],
-                    'model_number': None,
-                    'manufacturer': None,
-                    'specification': None
-                }
-                for entity in entities
-            ]
-        }
+        try:
+            # extract_di_only.py の処理を実行
+            import subprocess
+            import sys
+            
+            # Document Intelligence 抽出
+            project_root = os.path.dirname(os.path.abspath(__file__ + '/../../../'))
+            # ai_price_extract_views.pyの位置: dashboard/products_master/ai_price_extract/ai_price_extract_views.py
+            # pdf_processingの位置: dashboard/products_master/pdf_processing/
+            products_master_dir = os.path.dirname(os.path.dirname(__file__))
+            pdf_processing_dir = os.path.join(products_master_dir, 'pdf_processing')
+            di_result = subprocess.run([
+                sys.executable, os.path.join(pdf_processing_dir, 'extract_di_only.py'), temp_pdf_path
+            ], capture_output=True, text=True, encoding='utf-8', errors='ignore', cwd=project_root)
+            
+            if di_result.returncode != 0:
+                raise Exception(f"Document Intelligence処理エラー: {di_result.stderr}")
+            
+            # AI解析処理
+            ai_result = subprocess.run([
+                sys.executable, os.path.join(pdf_processing_dir, 'process_ai_only.py')
+            ], capture_output=True, text=True, encoding='utf-8', errors='ignore', cwd=project_root)
+            
+            if ai_result.returncode != 0:
+                raise Exception(f"AI解析処理エラー: {ai_result.stderr}")
+            
+            # 結果JSONファイルを読み込み
+            import json
+            result_path = os.path.join(pdf_processing_dir, 'ai_results.json')
+            with open(result_path, 'r', encoding='utf-8') as f:
+                ai_results = json.load(f)
+            
+            entities = ai_results.get('products', [])
+            print(f"AI entities extracted: {len(entities)}")
+            
+            if not entities:
+                print("No entities found")
+                
+                # エンティティが抽出できなかった場合の空のトランザクションを作成
+                import uuid
+                transaction_id = f"EMPTY_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
+                
+                document_metadata = ai_results.get('document_metadata', {})
+                sender = document_metadata.get('sender', '')
+                
+                empty_transaction = AIExtractTransaction.objects.create(
+                    transaction_id=transaction_id,
+                    executor=get_current_user(),
+                    effective_year_month='',
+                    revision_reason='PDFからの抽出失敗',
+                    remarks=f"{transaction_name} (送信元: {sender}) - 商品情報が抽出できませんでした",
+                    total_products=0,
+                    status='抽出失敗'
+                )
+                
+                messages.warning(request, f'PDFから商品情報を抽出できませんでした。トランザクションID: {transaction_id}')
+                return redirect('products_master:ai_extract_history_detail', pk=empty_transaction.pk)
+            
+            # AI抽出結果をJSON形式に変換
+            document_metadata = ai_results.get('document_metadata', {})
+            manufacturer_name = document_metadata.get('sender', '')
+            
+            json_data = {
+                'document_metadata': document_metadata,
+                'products': [
+                    {
+                        'product_name': entity.get('name'),
+                        'new_price': entity.get('price'),
+                        'model_number': entity.get('model'),
+                        'manufacturer': manufacturer_name if manufacturer_name else None,
+                        'specification': entity.get('spec')
+                    }
+                    for entity in entities
+                ]
+            }
+            
+        finally:
+            # 一時ファイルを削除
+            if os.path.exists(temp_pdf_path):
+                os.unlink(temp_pdf_path)
         
         # 照合トランザクションを作成
         import uuid
         transaction_id = f"PDF_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
+        
+        # 文書メタデータを取得
+        document_metadata = json_data.get('document_metadata', {})
+        sender = document_metadata.get('sender', '')
+        reason = document_metadata.get('reason', 'PDFからのAI抽出')
+        
         match_transaction = AIExtractTransaction.objects.create(
             transaction_id=transaction_id,
             executor=get_current_user(),
             effective_year_month='',
-            revision_reason='PDFからのAI抽出',
-            remarks=transaction_name,
+            revision_reason=reason,
+            remarks=f"{transaction_name} (送信元: {sender})",
             total_products=len(entities),
             status='照合中'
         )
@@ -519,7 +593,11 @@ def ai_extract_pdf_process(request):
                 transaction=match_transaction,
                 sequence=i + 1,
                 extracted_product_name=extracted_data.get('product_name'),
+                extracted_model_number=extracted_data.get('model_number'),
+                extracted_manufacturer=extracted_data.get('manufacturer'),
+                extracted_specification=extracted_data.get('specification'),
                 extracted_price=str(extracted_data.get('new_price', '')),
+                extracted_revision_reason=reason,
                 matched_product=matched_product,
                 match_score=match_score,
                 status='未処理'
@@ -528,10 +606,10 @@ def ai_extract_pdf_process(request):
         messages.success(request, f'PDFから{len(entities)}件の商品情報を抽出しました。')
         return redirect('products_master:ai_extract_history_detail', pk=match_transaction.pk)
         
-    except (PDFProcessingError, AIExtractionError) as e:
-        print(f"PDF/AI Error: {str(e)}")
-        messages.error(request, str(e))
-        return redirect('products_master:ai_extract')
+    # except (PDFProcessingError, AIExtractionError) as e:
+    #     print(f"PDF/AI Error: {str(e)}")
+    #     messages.error(request, str(e))
+    #     return redirect('products_master:ai_extract')
     except Exception as e:
         print(f"Unexpected error: {str(e)}")
         import traceback
@@ -551,8 +629,9 @@ def ai_extract_pdf_api(request):
         pdf_file = request.FILES['pdf_file']
         transaction_name = request.POST.get('transaction_name', f'PDF抽出_{datetime.now().strftime("%Y%m%d_%H%M%S")}')
         
-        # PDF処理・AI抽出
-        entities, pdf_text = pdf_ai_service.process_pdf_to_entities(pdf_file)
+        # PDF処理・AI抽出（現在は使用されていない）
+        # entities, pdf_text = pdf_ai_service.process_pdf_to_entities(pdf_file)
+        entities, pdf_text = [], ""
         
         return JsonResponse({
             'success': True,
@@ -561,8 +640,8 @@ def ai_extract_pdf_api(request):
             'total_entities': len(entities)
         })
         
-    except (PDFProcessingError, AIExtractionError) as e:
-        return JsonResponse({'error': str(e)}, status=400)
+    # except (PDFProcessingError, AIExtractionError) as e:
+    #     return JsonResponse({'error': str(e)}, status=400)
     except Exception as e:
         return JsonResponse({'error': f'予期しないエラー: {str(e)}'}, status=500)
 

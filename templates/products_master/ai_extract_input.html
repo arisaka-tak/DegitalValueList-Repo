@@ -73,8 +73,8 @@
                                         <a href="{% url 'products_master:ai_extract' %}" class="btn btn-secondary">
                                             戻る
                                         </a>
-                                        <button type="submit" class="btn btn-primary">
-                                            🤖 AI抽出開始
+                                        <button type="submit" class="btn btn-primary" id="pdfSubmitBtn">
+                                            <span id="btnIcon">🤖</span> <span id="btnText">AI抽出開始</span>
                                         </button>
                                     </div>
                                 </form>
@@ -144,6 +144,62 @@
         
         // 初期化時に1つの商品フォームを追加
         addProduct();
+        
+        // PDFフォームのローディング表示を初期化
+        const submitBtn = document.getElementById('pdfSubmitBtn');
+        
+        // いろいろなセレクタでフォームを探す
+        let pdfForm = document.querySelector('form[action*="ai_extract_pdf_process"]');
+        if (!pdfForm) {
+            pdfForm = document.querySelector('form[method="post"][enctype="multipart/form-data"]');
+        }
+        if (!pdfForm && submitBtn) {
+            pdfForm = submitBtn.closest('form');
+        }
+        
+        console.log('Submit button:', submitBtn);
+        console.log('PDF Form:', pdfForm);
+        console.log('All forms:', document.querySelectorAll('form'));
+        
+        if (submitBtn) {
+            // ボタンクリックでローディング開始
+            submitBtn.addEventListener('click', function(e) {
+                e.preventDefault(); // デフォルトの送信を一旦停止
+                
+                const form = this.closest('form');
+                const fileInput = form ? form.querySelector('input[type="file"]') : null;
+                
+                console.log('Button clicked');
+                console.log('Form found:', form);
+                console.log('File input:', fileInput);
+                console.log('Files:', fileInput ? fileInput.files.length : 0);
+                
+                if (!fileInput || !fileInput.files.length) {
+                    console.log('No file selected');
+                    return;
+                }
+                
+                console.log('Starting loading animation');
+                
+                // ローディング表示
+                this.disabled = true;
+                this.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>AI抽出実行中...';
+                
+                // 他の入力を無効化（必要なフィールドは除外）
+                if (form) {
+                    const inputs = form.querySelectorAll('input:not([type="file"]):not([type="submit"]):not([name="csrfmiddlewaretoken"]):not([name="transaction_name"]), select, textarea');
+                    inputs.forEach(input => input.disabled = true);
+                    
+                    // ローディング表示後にフォーム送信
+                    setTimeout(() => {
+                        console.log('Submitting form');
+                        form.submit();
+                    }, 100);
+                }
+            });
+        } else {
+            console.log('Submit button not found');
+        }
     });
     
     let productCount = 0;

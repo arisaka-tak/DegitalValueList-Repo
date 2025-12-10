@@ -82,7 +82,7 @@ class PDFUploadForm(forms.Form):
             'accept': '.pdf',
             'id': 'pdf-file-input'
         }),
-        help_text='価格表やカタログのPDFファイルをアップロードしてください（最大10MB）'
+        help_text='価格表やカタログのPDFファイルをアップロードしてください（最大50MB）'
     )
     transaction_name = forms.CharField(
         label='処理名',
@@ -97,9 +97,9 @@ class PDFUploadForm(forms.Form):
     def clean_pdf_file(self):
         pdf_file = self.cleaned_data.get('pdf_file')
         if pdf_file:
-            # ファイルサイズチェック（10MB制限）
-            if pdf_file.size > 10 * 1024 * 1024:
-                raise forms.ValidationError('ファイルサイズは10MB以下にしてください。')
+            # ファイルサイズチェック（50MB制限）
+            if pdf_file.size > 50 * 1024 * 1024:
+                raise forms.ValidationError('ファイルサイズは50MB以下にしてください。')
             
             # ファイル形式チェック
             if not pdf_file.name.lower().endswith('.pdf'):

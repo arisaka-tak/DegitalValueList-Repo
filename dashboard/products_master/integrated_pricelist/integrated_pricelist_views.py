@@ -6,6 +6,7 @@ from django.shortcuts import redirect
 from django.db.models import Q
 from dashboard.products_master.models import Product, PriceHistory, ApprovalPdf
 from dashboard.products_master.ai_services import normalize_text
+import unicodedata
 from digital_pricelist_system.utils import get_current_user
 from digital_pricelist_system.breadcrumbs import get_breadcrumbs
 from datetime import datetime, timedelta
@@ -95,24 +96,26 @@ def integrated_pricelist(request):
     products_query = Product.objects.filter(is_active=True)
     
     if manufacturer_filter:
-        # ノーマライズした検索キーワードで部分一致検索
-        normalized_manufacturer = normalize_text(manufacturer_filter)
-        manufacturer_conditions = Q()
-        for keyword in normalized_manufacturer.split():
-            if keyword:
-                manufacturer_conditions |= Q(manufacturer__name__icontains=keyword)
-        if manufacturer_conditions:
-            products_query = products_query.filter(manufacturer_conditions)
+        # 全角・半角英数字のみ正規化して部分一致検索
+        def normalize_simple(text):
+            if not text:
+                return ""
+            text = unicodedata.normalize('NFKC', text)
+            return text.upper()
+        
+        normalized_manufacturer = normalize_simple(manufacturer_filter)
+        products_query = products_query.filter(manufacturer__name__icontains=normalized_manufacturer)
     
     if product_name_filter:
-        # ノーマライズした検索キーワードで部分一致検索
-        normalized_product_name = normalize_text(product_name_filter)
-        product_name_conditions = Q()
-        for keyword in normalized_product_name.split():
-            if keyword:
-                product_name_conditions |= Q(product_name__icontains=keyword)
-        if product_name_conditions:
-            products_query = products_query.filter(product_name_conditions)
+        # 全角・半角英数字のみ正規化して部分一致検索
+        def normalize_simple(text):
+            if not text:
+                return ""
+            text = unicodedata.normalize('NFKC', text)
+            return text.upper()
+        
+        normalized_filter = normalize_simple(product_name_filter)
+        products_query = products_query.filter(product_name__icontains=normalized_filter)
     
     # 全ての有効な商品を取得（関連データも一括取得）
     all_products = products_query.select_related(
@@ -166,11 +169,14 @@ def integrated_pricelist(request):
         is_group_start = previous_group != current_group
         previous_group = current_group
         
+        # 仕切価格0円の場合は価格なし扱い
+        has_valid_price = price_history is not None and price_history.wholesale_price != 0
+        
         # 商品と価格履歴のペアを作成
         product_data.append({
             'product': product,
             'price_history': price_history,
-            'has_price': price_history is not None,
+            'has_price': has_valid_price,
             'is_group_start': is_group_start
         })
     
@@ -261,11 +267,11 @@ def export_excel(request):
     # 価格履歴マップを作成
     price_histories = {h.product_id: h for h in histories}
     
-    # 価格ありの商品のみフィルタ
+    # 価格ありかつ仕切価格0円以外の商品のみフィルタ
     product_data = []
     for product in all_products:
         price_history = price_histories.get(product.id)
-        if price_history:  # 価格なしの商品はExcelに出さない
+        if price_history and price_history.wholesale_price != 0:  # 価格なしまたは仕切価格0円の商品はExcelに出さない
             product_data.append({
                 'product': product,
                 'price_history': price_history,
