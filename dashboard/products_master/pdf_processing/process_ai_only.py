@@ -18,6 +18,7 @@ django.setup()
 
 from openai import AzureOpenAI
 import httpx
+from dashboard.products_master.pdf_processing.extract_di_only import get_proxy_settings
 
 # Azure OpenAI設定
 AZURE_OPENAI_ENDPOINT = "https://zlc-ai-dev.openai.azure.com/"
@@ -33,11 +34,18 @@ class AITableAnalyzer:
     def _init_openai_client(self):
         """Azure OpenAI クライアント初期化"""
         try:
-            # プロキシ設定を取得
-            proxy_url = os.environ.get('HTTP_PROXY') or os.environ.get('HTTPS_PROXY')
+            # extract_di_only.pyと同じプロキシ検出ロジックを使用
+            proxy_url = get_proxy_settings()
             
             if proxy_url:
-                http_client = httpx.Client(proxies=proxy_url)
+                print(f"プロキシを使用: {proxy_url}")
+                try:
+                    # httpx 0.27.xの新しいAPI
+                    http_client = httpx.Client(proxy=proxy_url)
+                except TypeError:
+                    # 古いhttpxバージョン
+                    http_client = httpx.Client(proxies={'http': proxy_url, 'https': proxy_url})
+                
                 client = AzureOpenAI(
                     azure_endpoint=AZURE_OPENAI_ENDPOINT,
                     api_key=AZURE_OPENAI_API_KEY,
@@ -45,6 +53,7 @@ class AITableAnalyzer:
                     http_client=http_client
                 )
             else:
+                print("プロキシなしで接続")
                 client = AzureOpenAI(
                     azure_endpoint=AZURE_OPENAI_ENDPOINT,
                     api_key=AZURE_OPENAI_API_KEY,
@@ -505,7 +514,6 @@ def process_tables_with_ai(input_path: str = None, output_path: str = None):
         input_path = os.path.join(os.path.dirname(__file__), "di_result.pkl")
     if output_path is None:
         output_path = os.path.join(os.path.dirname(__file__), "ai_results.json")
-    """Document Intelligence結果をAIで処理"""
     
     if not os.path.exists(input_path):
         print(f"入力ファイルが見つかりません: {input_path}")

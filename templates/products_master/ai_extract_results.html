@@ -520,6 +520,24 @@
     
     // 再照合を実行するヘルパー関数
     function performRematch(index, extractedData, btn, originalText) {
+        {% if is_history_view and transaction %}
+        const transactionPk = {{ transaction.pk }};
+        const sequence = index + 1;
+        
+        fetch('/products/ai-extract/rematch/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                transaction_pk: transactionPk,
+                sequence: sequence,
+                extracted_data: extractedData
+            })
+        })
+        {% else %}
+        // 履歴画面以外では旧形式を使用（後方互換性）
         fetch('/products/ai-extract/rematch/', {
             method: 'POST',
             headers: {
@@ -531,6 +549,7 @@
                 extracted_data: extractedData
             })
         })
+        {% endif %}
         .then(response => response.json())
         .then(data => {
             if (data.success) {

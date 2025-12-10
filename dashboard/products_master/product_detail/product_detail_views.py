@@ -1,6 +1,7 @@
 import json
 from django.shortcuts import render, get_object_or_404
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, QueryDict, HttpResponseRedirect
+from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
 from django.template.loader import render_to_string
 from dashboard.products_master.models import Product, PriceHistory, ProductApproval, PriceHistoryApproval, LivestockType, Category, Manufacturer
@@ -10,7 +11,6 @@ from decimal import Decimal
 from dashboard.products_master.forms import ProductForm
 from digital_pricelist_system.utils import get_current_user
 from digital_pricelist_system.breadcrumbs import get_breadcrumbs
-from django.views.decorators.csrf import csrf_exempt
 
 def product_detail(request, pk):
     """商品詳細画面"""
@@ -101,8 +101,6 @@ def product_copy(request, pk):
     original_product = get_object_or_404(Product, pk=pk)
     
     # コピーモードで詳細画面にリダイレクト（copy_fromパラメータ付き）
-    from django.urls import reverse
-    from django.http import HttpResponseRedirect
     url = reverse('products_master:product_new') + f'?copy_from={pk}'
     return HttpResponseRedirect(url)
 

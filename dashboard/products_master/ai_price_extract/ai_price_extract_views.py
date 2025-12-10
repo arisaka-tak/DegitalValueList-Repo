@@ -13,7 +13,7 @@ import traceback
 from decimal import Decimal
 from datetime import datetime
 from dashboard.products_master.pdf_processing.extract_di_only import main as extract_di_main
-from dashboard.products_master.pdf_processing.process_ai_only import main as process_ai_main
+from dashboard.products_master.pdf_processing.process_ai_simple import main as process_ai_main
 from dashboard.products_master.models import Product, PriceHistoryApproval, ProductApproval
 from dashboard.products_master.ai_extract_models import AIExtractTransaction, AIExtractTransactionDetail
 from dashboard.products_master.ai_services import process_extraction_results
@@ -371,13 +371,14 @@ def _process_ai_extract_submission(request, results, json_data):
 @csrf_exempt
 @require_http_methods(["POST"])
 def ai_extract_rematch(request):
-    """AI抽出結果の再照合API"""
+    """AI抽出結果の再照合API（結果をDBに保存）"""
     try:
         data = json.loads(request.body)
-        index = data.get('index')
+        transaction_pk = data.get('transaction_pk')
+        sequence = data.get('sequence')
         extracted_data = data.get('extracted_data')
         
-        if index is None or not extracted_data:
+        if not transaction_pk or not sequence or not extracted_data:
             return JsonResponse({'error': 'パラメータが不正です'}, status=400)
         
         # 空文字やNoneをnullに正規化
@@ -391,11 +392,48 @@ def ai_extract_rematch(request):
         
         if results and 'results' in results and len(results['results']) > 0:
             result = results['results'][0]
+            candidates = result.get('candidates', [])
+            
+            # データベースの照合結果を更新
+            try:
+                detail = AIExtractTransactionDetail.objects.get(
+                    transaction__pk=transaction_pk,
+                    sequence=int(sequence)
+                )
+                
+                # 新しい照合結果で更新
+                if candidates:
+                    best_candidate = candidates[0]
+                    matched_product_id = best_candidate.get('product', {}).get('pk')
+                    if matched_product_id:
+                        try:
+                            matched_product = Product.objects.get(pk=matched_product_id)
+                            detail.matched_product = matched_product
+                            detail.match_score = best_candidate.get('score', 0)
+                            detail.selected_candidate_text = f"{detail.match_score}% - {matched_product.product_name}"
+                        except Product.DoesNotExist:
+                            detail.matched_product = None
+                            detail.match_score = None
+                            detail.selected_candidate_text = None
+                    else:
+                        detail.matched_product = None
+                        detail.match_score = None
+                        detail.selected_candidate_text = None
+                else:
+                    # 候補がない場合はクリア
+                    detail.matched_product = None
+                    detail.match_score = None
+                    detail.selected_candidate_text = None
+                
+                detail.save()
+                
+            except AIExtractTransactionDetail.DoesNotExist:
+                return JsonResponse({'error': '照合結果が見つかりません'}, status=404)
             
             # 候補に現在の仕切価格情報を追加
             today = datetime.now().strftime('%Y/%m')
             
-            for candidate in result.get('candidates', []):
+            for candidate in candidates:
                 product_pk = candidate.get('product', {}).get('pk')
                 if product_pk:
                     try:
@@ -421,6 +459,19 @@ def ai_extract_rematch(request):
                 'result': result
             })
         else:
+            # 照合結果がない場合もDBを更新
+            try:
+                detail = AIExtractTransactionDetail.objects.get(
+                    transaction__pk=transaction_pk,
+                    sequence=int(sequence)
+                )
+                detail.matched_product = None
+                detail.match_score = None
+                detail.selected_candidate_text = None
+                detail.save()
+            except AIExtractTransactionDetail.DoesNotExist:
+                pass
+            
             return JsonResponse({
                 'success': True,
                 'result': {
@@ -514,7 +565,7 @@ def ai_extract_pdf_process(request):
                 # ネットワークエラーの場合は具体的なメッセージを表示
                 error_msg = str(e)
                 if 'getaddrinfo failed' in error_msg or 'Failed to resolve' in error_msg:
-                    messages.error(request, 'ネットワークエラー: Azure Document Intelligenceサービスに接続できません。インターネット接続やプロキシ設定を確認してください。')
+                    messages.error(request, 'ネットワークエラー: Azure Document Intelligenceサービスのドメイン名解決に失敗しました。企業ネットワークでAzureサービスがブロックされている可能性があります。ネットワーク管理者にお問い合わせください。')
                     return redirect('products_master:ai_extract')
                 else:
                     raise Exception(f"PDF処理に失敗: {e}")
@@ -533,7 +584,7 @@ def ai_extract_pdf_process(request):
                     status='処理失敗'
                 )
                 
-                messages.error(request, 'PDF処理が失敗しました。ネットワーク接続を確認してください。')
+                messages.error(request, 'PDF処理が失敗しました。Azure Document Intelligenceサービスに接続できません。企業ネットワークの制限により、Azureサービスへのアクセスがブロックされている可能性があります。')
                 return redirect('products_master:ai_extract_history_detail', pk=failed_transaction.pk)
             
             entities = ai_results.get('products', [])

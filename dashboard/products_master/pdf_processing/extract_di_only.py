@@ -7,6 +7,8 @@ import sys
 import pickle
 import urllib.request
 import re
+import getpass
+from urllib.parse import urlparse
 import httpx
 from azure.ai.documentintelligence import DocumentIntelligenceClient
 from azure.core.credentials import AzureKeyCredential
@@ -118,7 +120,6 @@ def extract_from_pdf(pdf_path: str, output_path: str = None):
     """PDFからDocument Intelligence結果を抽出してpickleファイルに保存"""
     if output_path is None:
         output_path = os.path.join(os.path.dirname(__file__), "di_result.pkl")
-    """PDFからDocument Intelligence結果を抽出してpickleファイルに保存"""
     
     if not os.path.exists(pdf_path):
         print(f"PDFファイルが見つかりません: {pdf_path}")
@@ -136,16 +137,38 @@ def extract_from_pdf(pdf_path: str, output_path: str = None):
         if proxy_url:
             print(f"プロキシを使用: {proxy_url}")
             
-            # 認証付きプロキシの設定
-            if HTTPX_AUTH_AVAILABLE:
-                # Windows統合認証を使用
-                auth = httpx_auth.NTLMAuth()
-                http_client = httpx.Client(proxies=proxy_url, auth=auth)
-                print("統合認証でプロキシ接続を試行")
-            else:
-                # httpx_authがない場合は通常のプロキシ
-                http_client = httpx.Client(proxies=proxy_url)
-                print("通常のプロキシ接続を試行")
+            # Windows統合認証付きプロキシ設定
+            try:
+                # 現在のユーザーの認証情報を取得
+                
+                username = os.environ.get('USERNAME', getpass.getuser())
+                domain = os.environ.get('USERDOMAIN', '')
+                
+                if domain:
+                    auth_user = f"{domain}\\{username}"
+                else:
+                    auth_user = username
+                
+                print(f"認証ユーザー: {auth_user}")
+                
+                # 認証付きプロキシURLを作成
+                parsed = urlparse(proxy_url)
+                
+                # プロキシ設定を試行
+                try:
+                    # httpx 0.27.xの新しいAPI
+                    http_client = httpx.Client(proxy=proxy_url)
+                    print("プロキシ接続を試行")
+                except TypeError:
+                    # 古いhttpxバージョン
+                    http_client = httpx.Client(proxies={'http': proxy_url, 'https': proxy_url})
+                    print("レガシープロキシ設定で接続")
+                
+            except Exception as e:
+                print(f"プロキシ設定エラー: {e}")
+                # フォールバック: プロキシなし
+                http_client = httpx.Client()
+                print("プロキシなしで接続にフォールバック")
             
             client = DocumentIntelligenceClient(
                 endpoint=DOCUMENT_INTELLIGENCE_ENDPOINT,
