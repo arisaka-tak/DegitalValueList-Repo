@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os
+import configparser
 from dotenv import load_dotenv
 
 # .envファイルを読み込み
@@ -19,6 +20,51 @@ load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+def get_config():
+    """設定ファイルを読み込み"""
+    config = configparser.ConfigParser()
+    config_path = BASE_DIR / "config.ini"
+    
+    if config_path.exists():
+        try:
+            config.read(config_path, encoding='utf-8')
+            return config
+        except Exception:
+            pass
+    
+    return None
+
+def get_database_path():
+    """データベースパスを取得"""
+    # 環境変数から取得（Django_run.pyから設定）
+    if 'DATABASE_PATH' in os.environ:
+        return os.environ['DATABASE_PATH']
+    
+    # config.iniから直接読み込み
+    config = get_config()
+    if config:
+        db_path = config.get('DATABASE', 'path', fallback='db.sqlite3')
+        # 相対パスの場合はBASE_DIRからの相対パスとして解釈
+        if not os.path.isabs(db_path):
+            return str(BASE_DIR / db_path)
+        return db_path
+    
+    # デフォルト
+    return str(BASE_DIR / 'db.sqlite3')
+
+def get_media_root():
+    """メディアファイル保存先を取得"""
+    config = get_config()
+    if config:
+        media_path = config.get('FILES', 'media_root', fallback='media')
+        # 相対パスの場合はBASE_DIRからの相対パスとして解釈
+        if not os.path.isabs(media_path):
+            return BASE_DIR / media_path
+        return Path(media_path)
+    
+    # デフォルト
+    return BASE_DIR / 'media'
 
 
 # Quick-start development settings - unsuitable for production
@@ -82,7 +128,7 @@ WSGI_APPLICATION = 'digital_pricelist_system.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': get_database_path(),
     }
 }
 
@@ -128,7 +174,7 @@ STATICFILES_DIRS = [
 
 # Media files (uploads)
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = get_media_root()
 
 # File upload settings
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB

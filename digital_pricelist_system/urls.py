@@ -16,6 +16,8 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 from dashboard import dashboard_views as views
 
 urlpatterns = [
@@ -25,3 +27,7 @@ urlpatterns = [
     path('products/', include('dashboard.products_master.urls')),
     path('system/', include('system_admin.urls')),
 ]
+
+# メディアファイル配信（開発環境用）
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

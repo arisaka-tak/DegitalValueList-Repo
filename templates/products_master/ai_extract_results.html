@@ -30,12 +30,17 @@
                             <label class="form-label mb-1">適用年月 <span class="text-danger">*</span></label>
                             <input type="month" class="form-control form-control-sm" name="effective_year_month" required>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-5">
                             <label class="form-label mb-1">改定理由（一括設定）</label>
                             <input type="text" class="form-control form-control-sm" name="revision_reason" value="AI価格抽出による更新" placeholder="全商品に適用する改定理由">
                         </div>
-                        <div class="col-md-3">
-                            <div class="text-end">
+                        <div class="col-md-4">
+                            <div class="d-flex justify-content-end align-items-center gap-2">
+                                {% if is_history_view and transaction.uploaded_pdf %}
+                                    <a href="{{ transaction.uploaded_pdf.url }}" 
+                                       class="btn btn-outline-success btn-sm" 
+                                       download>📄 元PDFダウンロード</a>
+                                {% endif %}
                                 <span class="badge bg-primary">{{ results.total_products }}商品</span>
                             </div>
                         </div>

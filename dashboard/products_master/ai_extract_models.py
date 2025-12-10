@@ -1,5 +1,11 @@
 from django.db import models
 from dashboard.products_master.models import Product, ProductApproval
+import os
+
+def ai_extract_pdf_upload_path(instance, filename):
+    """トランザクションIDを付けたユニークなファイル名を生成"""
+    name, ext = os.path.splitext(filename)
+    return f'ai_price_extract/{instance.transaction_id}_{filename}'
 
 class AIExtractTransaction(models.Model):
     """AI価格抽出トランザクション履歴"""
@@ -8,6 +14,7 @@ class AIExtractTransaction(models.Model):
     effective_year_month = models.CharField('適用年月', max_length=7)
     revision_reason = models.TextField('改定理由', blank=True, null=True)
     remarks = models.CharField('備考', max_length=200, blank=True, null=True, help_text='処理名やメモ')
+    uploaded_pdf = models.FileField('アップロードPDF', upload_to=ai_extract_pdf_upload_path, blank=True, null=True)
     total_products = models.IntegerField('対象商品数', default=0)
     success_count = models.IntegerField('成功件数', default=0)
     skip_count = models.IntegerField('スキップ件数', default=0)

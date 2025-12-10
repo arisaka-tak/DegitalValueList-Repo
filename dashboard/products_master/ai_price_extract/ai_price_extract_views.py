@@ -565,6 +565,7 @@ def ai_extract_pdf_process(request):
             effective_year_month='',
             revision_reason=reason,
             remarks=f"{transaction_name} (送信元: {sender})",
+            uploaded_pdf=pdf_file,
             total_products=len(entities),
             status='照合中'
         )

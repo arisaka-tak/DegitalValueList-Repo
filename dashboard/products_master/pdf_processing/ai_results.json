@@ -2,9 +2,17 @@
   "source_file": "C:\\Project\\ZCS_DegitalValueList\\dashboard\\products_master\\pdf_processing\\di_result.pkl",
   "document_metadata": {
     "sender": "イノセント",
-    "reason": "製造元メーカーの廃業のため"
+    "reason": null
   },
   "processed_tables": 0,
-  "extracted_products_count": 0,
-  "products": []
+  "extracted_products_count": 1,
+  "products": [
+    {
+      "name": "SPZ+",
+      "price": "0",
+      "model": "A0098",
+      "spec": null,
+      "table_id": "text"
+    }
+  ]
 }

@@ -22,14 +22,13 @@
                     <table class="table table-hover mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th width="15%">実行日時</th>
-                                <th width="12%">実行者</th>
-                                <th width="12%">適用年月</th>
-                                <th width="15%">備考</th>
+                                <th width="18%">実行日時</th>
+                                <th width="15%">実行者</th>
+                                <th width="20%">備考</th>
                                 <th width="8%">対象数</th>
                                 <th width="8%">成功数</th>
                                 <th width="8%">スキップ数</th>
-                                <th width="10%">ステータス</th>
+                                <th width="11%">ステータス</th>
                                 <th width="12%">操作</th>
                             </tr>
                         </thead>
@@ -38,7 +37,6 @@
                             <tr>
                                 <td>{{ transaction.created_at|date:"Y/m/d H:i:s" }}</td>
                                 <td>{{ transaction.executor }}</td>
-                                <td>{{ transaction.effective_year_month|default:"-" }}</td>
                                 <td>{{ transaction.remarks|default:"-" }}</td>
                                 <td class="text-center">{{ transaction.total_products }}</td>
                                 <td class="text-center">{{ transaction.success_count }}</td>
@@ -55,19 +53,27 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    <a href="{% url 'products_master:ai_extract_history_detail' transaction.pk %}" 
-                                       class="btn btn-outline-primary btn-sm me-1">詳細</a>
-                                    <form method="post" action="{% url 'products_master:ai_extract_history_delete' transaction.pk %}" 
-                                          style="display: inline;" 
-                                          onsubmit="return confirm('トランザクション「{{ transaction.transaction_id }}」を削除しますか？')">
-                                        {% csrf_token %}
-                                        <button type="submit" class="btn btn-outline-danger btn-sm">削除</button>
-                                    </form>
+                                    <div class="d-flex flex-column gap-1">
+                                        <a href="{% url 'products_master:ai_extract_history_detail' transaction.pk %}" 
+                                           class="btn btn-outline-primary btn-sm" style="width: 60px; font-size: 12px; white-space: nowrap;">詳細</a>
+                                        {% if transaction.uploaded_pdf %}
+                                            <a href="{{ transaction.uploaded_pdf.url }}" 
+                                               class="btn btn-outline-success btn-sm" style="width: 60px; font-size: 12px; white-space: nowrap;" 
+                                               download>PDF</a>
+                                        {% else %}
+                                            <span class="btn btn-outline-secondary btn-sm disabled" style="width: 60px; font-size: 12px; white-space: nowrap;">-</span>
+                                        {% endif %}
+                                        <form method="post" action="{% url 'products_master:ai_extract_history_delete' transaction.pk %}" 
+                                              onsubmit="return confirm('トランザクション「{{ transaction.transaction_id }}」を削除しますか？')">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-outline-danger btn-sm" style="width: 60px; font-size: 12px; white-space: nowrap;">削除</button>
+                                        </form>
+                                    </div>
                                 </td>
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="9" class="text-center text-muted py-4">
+                                <td colspan="8" class="text-center text-muted py-4">
                                     実行履歴がありません
                                 </td>
                             </tr>

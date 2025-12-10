@@ -8,7 +8,7 @@ from pathlib import Path
 
 def main():
     """シンプルビルド"""
-    project_root = Path(__file__).parent
+    project_root = Path(__file__).parent.parent  # pj_docからプロジェクトルートへ
     
     print("=== シンプル配布ビルド ===")
     
@@ -24,7 +24,7 @@ def main():
         "--add-data=manage.py;.",
         "--hidden-import=django",
         "--hidden-import=dashboard.products_master",
-        "app_launcher.py"
+        "Django_run.py"
     ]
     
     print("PyInstallerを実行中...")
@@ -32,7 +32,13 @@ def main():
     
     print("✅ ビルド完了!")
     print("📁 dist/DigitalPriceList.exe が作成されました")
-    print("📁 db.sqlite3 と一緒に配布してください")
+    print("")
+    print("📁 配布構成:")
+    print("  DigitalPriceList.exe  # 実行ファイル")
+    print("  config.ini           # 環境設定ファイル（本番/テスト切り替え用）")
+    print("  db.sqlite3           # データベースファイル")
+    print("")
+    print("🔄 環境切り替え: config.iniを差し替えて再起動")
 
 if __name__ == "__main__":
     main()

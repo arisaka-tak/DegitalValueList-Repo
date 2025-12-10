@@ -37,6 +37,11 @@ db.sqlite3-journal
 *.swp
 *.swo
 
+# PyInstaller
+*.spec
+build/
+dist/
+
 # OS
 .DS_Store
 Thumbs.db

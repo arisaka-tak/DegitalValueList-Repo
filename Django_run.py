@@ -8,6 +8,7 @@ import time
 import webbrowser
 import subprocess
 import socket
+import configparser
 from pathlib import Path
 
 def is_port_in_use(port):
@@ -37,10 +38,11 @@ def kill_existing_server():
             subprocess.run(['pkill', '-f', 'manage.py runserver'], 
                          capture_output=True, check=False)
         
-        # 停止を待つ
+        # 停止を待つ（ポート番号は動的に取得）
+        port, _, _ = load_config()
         for _ in range(5):
             time.sleep(1)
-            if not is_port_in_use(8000):
+            if not is_port_in_use(port):
                 break
                 
     except Exception:
@@ -64,12 +66,42 @@ def find_venv_python():
     
     return sys.executable  # フォールバック
 
+def load_config():
+    """config.iniを読み込み"""
+    config = configparser.ConfigParser()
+    config_path = Path(__file__).parent / "config.ini"
+    
+    # デフォルト値
+    defaults = {
+        'port': 8000,
+        'auto_browser': True,
+        'db_path': 'db.sqlite3'
+    }
+    
+    if config_path.exists():
+        try:
+            config.read(config_path, encoding='utf-8')
+            port = config.getint('SYSTEM', 'port', fallback=defaults['port'])
+            auto_browser = config.getboolean('SYSTEM', 'auto_browser', fallback=defaults['auto_browser'])
+            db_path = config.get('DATABASE', 'path', fallback=defaults['db_path'])
+            return port, auto_browser, db_path
+        except Exception:
+            pass
+    
+    return defaults['port'], defaults['auto_browser'], defaults['db_path']
+
 def main():
     # プロジェクトルートディレクトリ（manage.pyがある場所）
     project_root = Path(__file__).parent
     
     if not (project_root / "manage.py").exists():
         return
+    
+    # 設定読み込み
+    port, auto_browser, db_path = load_config()
+    
+    # データベースパスを環境変数に設定
+    os.environ['DATABASE_PATH'] = str(project_root / db_path)
     
     # 仮想環境のPythonを取得
     venv_python = find_venv_python()
@@ -84,25 +116,26 @@ def main():
     # 現在のディレクトリを変更
     os.chdir(project_root)
     
-    # ポート8000が使用中かチェック
-    if is_port_in_use(8000):
+    # 指定ポートが使用中かチェック
+    if is_port_in_use(port):
         kill_existing_server()
     
     # サーバー起動（バックグラウンドで実行）
     try:
         # サーバープロセスを開始（ログを表示するため標準出力をキャプチャしない）
         process = subprocess.Popen([
-            venv_python, "manage.py", "runserver", "127.0.0.1:8000"
+            venv_python, "manage.py", "runserver", f"127.0.0.1:{port}"
         ])
         
         # サーバーが起動するまで待機
         for i in range(10):
             time.sleep(1)
-            if is_port_in_use(8000):
+            if is_port_in_use(port):
                 break
         
-        # ブラウザを開く
-        webbrowser.open("http://127.0.0.1:8000/")
+        # ブラウザを開く（設定で有効な場合のみ）
+        if auto_browser:
+            webbrowser.open(f"http://127.0.0.1:{port}/")
         
         # プロセスの終了を待つ
         try:
