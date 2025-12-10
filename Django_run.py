@@ -9,6 +9,8 @@ import webbrowser
 import subprocess
 import socket
 import configparser
+import logging
+from datetime import datetime
 from pathlib import Path
 
 def is_port_in_use(port):
@@ -90,11 +92,57 @@ def load_config():
     
     return defaults['port'], defaults['auto_browser'], defaults['db_path']
 
-def main():
-    # プロジェクトルートディレクトリ（manage.pyがある場所）
-    project_root = Path(__file__).parent
+def setup_logging(project_root):
+    """ログ設定"""
+    log_dir = project_root / "logs"
+    log_dir.mkdir(exist_ok=True)
     
-    if not (project_root / "manage.py").exists():
+    log_file = log_dir / f"system_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    
+    # ログ設定
+    handlers = [logging.FileHandler(log_file, encoding='utf-8')]
+    
+    # 開発環境でのみコンソール出力を追加
+    if not getattr(sys, 'frozen', False) and sys.stdout is not None:
+        handlers.append(logging.StreamHandler(sys.stdout))
+    
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=handlers
+    )
+    
+    return logging.getLogger(__name__)
+
+def main():
+    # PyInstaller環境でのパス設定
+    if getattr(sys, 'frozen', False):
+        project_root = Path(sys.executable).parent
+    else:
+        project_root = Path(__file__).parent
+    
+    # ログ設定
+    logger = setup_logging(project_root)
+    
+    logger.info("デジタル価格表システムを起動しています...")
+    
+    if not getattr(sys, 'frozen', False):
+        print("デジタル価格表システムを起動しています...")
+    
+    # PyInstaller環境でのパス設定
+    if getattr(sys, 'frozen', False):
+        # PyInstallerでビルドされた場合
+        project_root = Path(sys.executable).parent
+        print(f"PyInstaller環境で実行中: {project_root}")
+    else:
+        # 開発環境
+        project_root = Path(__file__).parent
+        print(f"開発環境で実行中: {project_root}")
+    
+    # manage.pyの存在チェック（PyInstaller環境ではスキップ）
+    if not getattr(sys, 'frozen', False) and not (project_root / "manage.py").exists():
+        print(f"エラー: manage.pyが見つかりません: {project_root}")
+        input("何かキーを押して終了...")
         return
     
     # 設定読み込み
@@ -103,15 +151,24 @@ def main():
     # データベースパスを環境変数に設定
     os.environ['DATABASE_PATH'] = str(project_root / db_path)
     
-    # 仮想環境のPythonを取得
-    venv_python = find_venv_python()
-    
-    # Djangoがインストールされているかチェック
-    try:
-        subprocess.run([venv_python, '-c', 'import django'], 
-                      capture_output=True, text=True, check=True)
-    except subprocess.CalledProcessError:
-        return
+    # Python実行ファイルを取得
+    if getattr(sys, 'frozen', False):
+        # PyInstaller環境では現在の実行ファイルを使用
+        python_executable = sys.executable
+        print(f"Python実行ファイル: {python_executable}")
+    else:
+        # 開発環境では仮想環境を探す
+        python_executable = find_venv_python()
+        print(f"仮想環境Python: {python_executable}")
+        
+        # Djangoがインストールされているかチェック
+        try:
+            subprocess.run([python_executable, '-c', 'import django'], 
+                          capture_output=True, text=True, check=True)
+        except subprocess.CalledProcessError:
+            print("エラー: Djangoがインストールされていません")
+            input("何かキーを押して終了...")
+            return
     
     # 現在のディレクトリを変更
     os.chdir(project_root)
@@ -120,34 +177,67 @@ def main():
     if is_port_in_use(port):
         kill_existing_server()
     
-    # サーバー起動（バックグラウンドで実行）
+    # サーバー起動
     try:
-        # サーバープロセスを開始（ログを表示するため標準出力をキャプチャしない）
-        process = subprocess.Popen([
-            venv_python, "manage.py", "runserver", f"127.0.0.1:{port}"
-        ])
+        logger.info(f"ポート {port} でDjangoサーバーを起動中...")
+        if not getattr(sys, 'frozen', False):
+            print(f"ポート {port} でDjangoサーバーを起動中...")
         
-        # サーバーが起動するまで待機
-        for i in range(10):
-            time.sleep(1)
-            if is_port_in_use(port):
-                break
+        if getattr(sys, 'frozen', False):
+            # PyInstaller環境ではDjangoを直接起動
+            import django
+            from django.core.management import execute_from_command_line
+            
+            # Django設定
+            os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'digital_pricelist_system.settings')
+            django.setup()
+            
+            logger.info("ブラウザを起動しています...")
+            if auto_browser:
+                webbrowser.open(f"http://127.0.0.1:{port}/")
+            
+            logger.info(f"サーバーが起動しました: http://127.0.0.1:{port}/")
+            
+            if not getattr(sys, 'frozen', False):
+                print("ブラウザを起動しています...")
+                print(f"\nサーバーが起動しました: http://127.0.0.1:{port}/")
+                print("終了するには、このウィンドウを閉じるかCtrl+Cを押してください。")
+            
+            # Djangoサーバーを起動
+            execute_from_command_line(['manage.py', 'runserver', f'127.0.0.1:{port}', '--noreload'])
+        else:
+            # 開発環境では従来通り
+            process = subprocess.Popen([
+                python_executable, "manage.py", "runserver", f"127.0.0.1:{port}"
+            ])
+            
+            # サーバーが起動するまで待機
+            for i in range(10):
+                time.sleep(1)
+                if is_port_in_use(port):
+                    break
+            
+            # ブラウザを開く（設定で有効な場合のみ）
+            if auto_browser:
+                webbrowser.open(f"http://127.0.0.1:{port}/")
+            
+            # プロセスの終了を待つ
+            try:
+                process.wait()
+            except KeyboardInterrupt:
+                raise
         
-        # ブラウザを開く（設定で有効な場合のみ）
-        if auto_browser:
-            webbrowser.open(f"http://127.0.0.1:{port}/")
-        
-        # プロセスの終了を待つ
-        try:
-            process.wait()
-        except KeyboardInterrupt:
-            raise
         
     except KeyboardInterrupt:
-        process.terminate()
-        process.wait()
-    except Exception:
-        pass
+        print("\nシステムを終了しています...")
+        if not getattr(sys, 'frozen', False):
+            process.terminate()
+            process.wait()
+    except Exception as e:
+        logger.error(f"システム起動エラー: {e}")
+        if not getattr(sys, 'frozen', False):
+            print(f"エラーが発生しました: {e}")
+            input("何かキーを押して終了...")
 
 if __name__ == "__main__":
     main()

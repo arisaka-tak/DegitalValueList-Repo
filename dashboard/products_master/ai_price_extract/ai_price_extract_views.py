@@ -4,8 +4,16 @@ from django.contrib import messages
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 import json
+import subprocess
+import sys
+import tempfile
+import os
+import uuid
+import traceback
 from decimal import Decimal
 from datetime import datetime
+from dashboard.products_master.pdf_processing.extract_di_only import main as extract_di_main
+from dashboard.products_master.pdf_processing.process_ai_only import main as process_ai_main
 from dashboard.products_master.models import Product, PriceHistoryApproval, ProductApproval
 from dashboard.products_master.ai_extract_models import AIExtractTransaction, AIExtractTransactionDetail
 from dashboard.products_master.ai_services import process_extraction_results
@@ -51,7 +59,6 @@ def ai_extract_process(request):
                         product[key] = None
         
         # 照合トランザクションを作成
-        import uuid
         transaction_id = f"MATCH_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
         match_transaction = AIExtractTransaction.objects.create(
             transaction_id=transaction_id,
@@ -104,7 +111,6 @@ def ai_extract_process(request):
     except ImportError as e:
         return JsonResponse({'error': f'ライブラリエラー: {str(e)}'}, status=500)
     except Exception as e:
-        import traceback
         error_detail = traceback.format_exc()
         return JsonResponse({
             'error': f'処理エラー: {str(e)}',
@@ -143,7 +149,6 @@ def _process_ai_extract_submission(request, results, json_data):
             transaction.save()
         else:
             # フォールバック: 新規作成
-            import uuid
             transaction_id = f"AI_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
             transaction = AIExtractTransaction.objects.create(
                 transaction_id=transaction_id,
@@ -312,7 +317,6 @@ def _process_ai_extract_submission(request, results, json_data):
                 
             except Exception as submit_error:
                 # submit_approval_core内でのエラーをキャッチ
-                import traceback
                 error_detail = str(submit_error)
                 traceback_info = traceback.format_exc()
                 
@@ -389,7 +393,6 @@ def ai_extract_rematch(request):
             result = results['results'][0]
             
             # 候補に現在の仕切価格情報を追加
-            from datetime import datetime
             today = datetime.now().strftime('%Y/%m')
             
             for candidate in result.get('candidates', []):
@@ -462,44 +465,76 @@ def ai_extract_pdf_process(request):
         print("Starting Document Intelligence + AI processing...")
         
         # 一時ファイルに保存
-        import tempfile
-        import os
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
             for chunk in pdf_file.chunks():
                 temp_file.write(chunk)
             temp_pdf_path = temp_file.name
         
         try:
-            # extract_di_only.py の処理を実行
-            import subprocess
-            import sys
+            print("PDF処理を開始します...")
             
-            # Document Intelligence 抽出
-            project_root = os.path.dirname(os.path.abspath(__file__ + '/../../../'))
-            # ai_price_extract_views.pyの位置: dashboard/products_master/ai_price_extract/ai_price_extract_views.py
-            # pdf_processingの位置: dashboard/products_master/pdf_processing/
-            products_master_dir = os.path.dirname(os.path.dirname(__file__))
-            pdf_processing_dir = os.path.join(products_master_dir, 'pdf_processing')
-            di_result = subprocess.run([
-                sys.executable, os.path.join(pdf_processing_dir, 'extract_di_only.py'), temp_pdf_path
-            ], capture_output=True, text=True, encoding='utf-8', errors='ignore', cwd=project_root)
+            # 直接インポートでPDF処理（統一）
+            try:
+                # 一時ファイルパスを明示的に指定
+                temp_dir = tempfile.gettempdir()
+                di_result_path = os.path.join(temp_dir, f"di_result_{os.getpid()}.pkl")
+                ai_result_path = os.path.join(temp_dir, f"ai_results_{os.getpid()}.json")
+                
+                # Document Intelligence処理
+                print(f"DI処理実行: {temp_pdf_path} -> {di_result_path}")
+                extract_di_main(temp_pdf_path, di_result_path)
+                
+                # AI解析処理
+                print(f"AI処理実行: {di_result_path} -> {ai_result_path}")
+                ai_results = process_ai_main(di_result_path, ai_result_path)
+                
+                # 一時ファイルを清理
+                try:
+                    if os.path.exists(di_result_path):
+                        os.unlink(di_result_path)
+                    if os.path.exists(ai_result_path):
+                        os.unlink(ai_result_path)
+                except Exception:
+                    pass
+                
+            except ImportError as e:
+                print(f"インポートエラー: {e}")
+                raise Exception(f"PDF処理モジュールのインポートに失敗: {e}")
+            except Exception as e:
+                print(f"PDF処理エラー: {e}")
+                # 一時ファイルを清理
+                try:
+                    if 'di_result_path' in locals() and os.path.exists(di_result_path):
+                        os.unlink(di_result_path)
+                    if 'ai_result_path' in locals() and os.path.exists(ai_result_path):
+                        os.unlink(ai_result_path)
+                except Exception:
+                    pass
+                
+                # ネットワークエラーの場合は具体的なメッセージを表示
+                error_msg = str(e)
+                if 'getaddrinfo failed' in error_msg or 'Failed to resolve' in error_msg:
+                    messages.error(request, 'ネットワークエラー: Azure Document Intelligenceサービスに接続できません。インターネット接続やプロキシ設定を確認してください。')
+                    return redirect('products_master:ai_extract')
+                else:
+                    raise Exception(f"PDF処理に失敗: {e}")
             
-            if di_result.returncode != 0:
-                raise Exception(f"Document Intelligence処理エラー: {di_result.stderr}")
-            
-            # AI解析処理
-            ai_result = subprocess.run([
-                sys.executable, os.path.join(pdf_processing_dir, 'process_ai_only.py')
-            ], capture_output=True, text=True, encoding='utf-8', errors='ignore', cwd=project_root)
-            
-            if ai_result.returncode != 0:
-                raise Exception(f"AI解析処理エラー: {ai_result.stderr}")
-            
-            # 結果JSONファイルを読み込み
-            import json
-            result_path = os.path.join(pdf_processing_dir, 'ai_results.json')
-            with open(result_path, 'r', encoding='utf-8') as f:
-                ai_results = json.load(f)
+            if ai_results is None:
+                # AI処理が失敗した場合の空のトランザクションを作成
+                transaction_id = f"FAILED_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
+                
+                failed_transaction = AIExtractTransaction.objects.create(
+                    transaction_id=transaction_id,
+                    executor=get_current_user(),
+                    effective_year_month='',
+                    revision_reason='PDF処理失敗',
+                    remarks=f"{transaction_name} - PDF処理が失敗しました",
+                    total_products=0,
+                    status='処理失敗'
+                )
+                
+                messages.error(request, 'PDF処理が失敗しました。ネットワーク接続を確認してください。')
+                return redirect('products_master:ai_extract_history_detail', pk=failed_transaction.pk)
             
             entities = ai_results.get('products', [])
             print(f"AI entities extracted: {len(entities)}")
@@ -508,7 +543,6 @@ def ai_extract_pdf_process(request):
                 print("No entities found")
                 
                 # エンティティが抽出できなかった場合の空のトランザクションを作成
-                import uuid
                 transaction_id = f"EMPTY_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
                 
                 document_metadata = ai_results.get('document_metadata', {})
@@ -546,12 +580,11 @@ def ai_extract_pdf_process(request):
             }
             
         finally:
-            # 一時ファイルを削除
+            # PDF一時ファイルを削除
             if os.path.exists(temp_pdf_path):
                 os.unlink(temp_pdf_path)
         
         # 照合トランザクションを作成
-        import uuid
         transaction_id = f"PDF_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
         
         # 文書メタデータを取得
@@ -613,7 +646,6 @@ def ai_extract_pdf_process(request):
     #     return redirect('products_master:ai_extract')
     except Exception as e:
         print(f"Unexpected error: {str(e)}")
-        import traceback
         print(f"Traceback: {traceback.format_exc()}")
         messages.error(request, f'予期しないエラーが発生しました: {str(e)}')
         return redirect('products_master:ai_extract')

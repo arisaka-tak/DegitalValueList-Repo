@@ -741,10 +741,24 @@ def process_tables_with_ai(input_path: str = None, output_path: str = None):
         print("商品データが抽出されませんでした。")
     
     print(f"✓ 処理完了: 結果を {output_path} に保存しました")
+    return result_data
+
+def main(input_file=None, output_file=None):
+    """メイン関数"""
+    # コマンドラインからの実行時のみ sys.argv を使用
+    if input_file is None:
+        if __name__ == "__main__" and len(sys.argv) > 1:
+            input_file = sys.argv[1]
+        else:
+            input_file = os.path.join(os.path.dirname(__file__), "di_result.pkl")
+    
+    if output_file is None:
+        if __name__ == "__main__" and len(sys.argv) > 2:
+            output_file = sys.argv[2]
+        else:
+            output_file = os.path.join(os.path.dirname(__file__), "ai_results.json")
+    
+    return process_tables_with_ai(input_file, output_file)
 
 if __name__ == "__main__":
-    # コマンドライン引数で入出力ファイルを指定可能
-    input_file = sys.argv[1] if len(sys.argv) > 1 else None
-    output_file = sys.argv[2] if len(sys.argv) > 2 else None
-    
-    process_tables_with_ai(input_file, output_file)
+    main()

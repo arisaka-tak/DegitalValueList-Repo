@@ -5,12 +5,114 @@ PDFから表データを抽出してJSONファイルに保存
 import os
 import sys
 import pickle
+import urllib.request
+import re
+import httpx
 from azure.ai.documentintelligence import DocumentIntelligenceClient
 from azure.core.credentials import AzureKeyCredential
+
+try:
+    import httpx_auth
+    HTTPX_AUTH_AVAILABLE = True
+except ImportError:
+    HTTPX_AUTH_AVAILABLE = False
+
+try:
+    import winreg
+    WINREG_AVAILABLE = True
+except ImportError:
+    WINREG_AVAILABLE = False
 
 # Document Intelligence設定
 DOCUMENT_INTELLIGENCE_ENDPOINT = "https://digital-valuelist-prd.cognitiveservices.azure.com/"
 DOCUMENT_INTELLIGENCE_API_KEY = "397a72600d7e45f6b2462d5b99edc38a"
+
+def get_proxy_settings():
+    """プロキシ設定を自動検出（PACファイル対応）"""
+    try:
+        # 環境変数からプロキシを取得
+        proxies = urllib.request.getproxies()
+        if proxies:
+            print(f"検出されたプロキシ設定: {proxies}")
+            return proxies.get('https') or proxies.get('http')
+        
+        # Windows レジストリからプロキシ設定を取得
+        if os.name == 'nt' and WINREG_AVAILABLE:
+            try:
+                key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
+                    r"Software\Microsoft\Windows\CurrentVersion\Internet Settings")
+                
+                # PACファイルのチェック
+                try:
+                    auto_config_url, _ = winreg.QueryValueEx(key, "AutoConfigURL")
+                    if auto_config_url:
+                        print(f"PACファイル検出: {auto_config_url}")
+                        # PACファイルからプロキシを解析
+                        proxy = parse_pac_file(auto_config_url)
+                        if proxy:
+                            winreg.CloseKey(key)
+                            return proxy
+                except FileNotFoundError:
+                    pass
+                
+                # 直接プロキシ設定のチェック
+                try:
+                    proxy_enable, _ = winreg.QueryValueEx(key, "ProxyEnable")
+                    if proxy_enable:
+                        proxy_server, _ = winreg.QueryValueEx(key, "ProxyServer")
+                        print(f"Windows 直接プロキシ: {proxy_server}")
+                        winreg.CloseKey(key)
+                        return f"http://{proxy_server}"
+                except FileNotFoundError:
+                    pass
+                
+                winreg.CloseKey(key)
+            except Exception as e:
+                print(f"Windowsレジストリエラー: {e}")
+        
+        return None
+    except Exception as e:
+        print(f"プロキシ検出エラー: {e}")
+        return None
+
+def parse_pac_file(pac_url):
+    """簡易PACファイルパーサー"""
+    try:
+        
+        print(f"PACファイルを取得中: {pac_url}")
+        
+        # PACファイルをダウンロード
+        with urllib.request.urlopen(pac_url, timeout=10) as response:
+            pac_bytes = response.read()
+            
+        # 文字エンコーディングを自動検出
+        try:
+            pac_content = pac_bytes.decode('utf-8')
+        except UnicodeDecodeError:
+            try:
+                pac_content = pac_bytes.decode('shift_jis')
+            except UnicodeDecodeError:
+                try:
+                    pac_content = pac_bytes.decode('latin1')
+                except UnicodeDecodeError:
+                    print(f"PACファイルの文字エンコーディングを判定できません")
+                    return None
+        
+        # PROXY 指定を検索（簡易版）
+        proxy_pattern = r'PROXY\s+([^;\s]+)'
+        matches = re.findall(proxy_pattern, pac_content, re.IGNORECASE)
+        
+        if matches:
+            proxy_server = matches[0].strip('"\' ')
+            print(f"PACからプロキシを検出: {proxy_server}")
+            return f"http://{proxy_server}"
+        
+        print("PACファイルからプロキシを検出できませんでした")
+        return None
+        
+    except Exception as e:
+        print(f"PACファイル解析エラー: {e}")
+        return None
 
 def extract_from_pdf(pdf_path: str, output_path: str = None):
     """PDFからDocument Intelligence結果を抽出してpickleファイルに保存"""
@@ -27,11 +129,35 @@ def extract_from_pdf(pdf_path: str, output_path: str = None):
     print(f"出力ファイル: {output_path}")
     
     try:
+        # プロキシ設定を取得
+        proxy_url = get_proxy_settings()
+        
         # Document Intelligence クライアント初期化
-        client = DocumentIntelligenceClient(
-            endpoint=DOCUMENT_INTELLIGENCE_ENDPOINT,
-            credential=AzureKeyCredential(DOCUMENT_INTELLIGENCE_API_KEY)
-        )
+        if proxy_url:
+            print(f"プロキシを使用: {proxy_url}")
+            
+            # 認証付きプロキシの設定
+            if HTTPX_AUTH_AVAILABLE:
+                # Windows統合認証を使用
+                auth = httpx_auth.NTLMAuth()
+                http_client = httpx.Client(proxies=proxy_url, auth=auth)
+                print("統合認証でプロキシ接続を試行")
+            else:
+                # httpx_authがない場合は通常のプロキシ
+                http_client = httpx.Client(proxies=proxy_url)
+                print("通常のプロキシ接続を試行")
+            
+            client = DocumentIntelligenceClient(
+                endpoint=DOCUMENT_INTELLIGENCE_ENDPOINT,
+                credential=AzureKeyCredential(DOCUMENT_INTELLIGENCE_API_KEY),
+                http_client=http_client
+            )
+        else:
+            print("プロキシなしで接続")
+            client = DocumentIntelligenceClient(
+                endpoint=DOCUMENT_INTELLIGENCE_ENDPOINT,
+                credential=AzureKeyCredential(DOCUMENT_INTELLIGENCE_API_KEY)
+            )
         
         # PDF解析実行
         with open(pdf_path, 'rb') as f:
@@ -69,17 +195,26 @@ def extract_from_pdf(pdf_path: str, output_path: str = None):
         import traceback
         traceback.print_exc()
 
-if __name__ == "__main__":
-    # コマンドライン引数でPDFパスを指定可能
-    if len(sys.argv) > 1:
-        pdf_path = sys.argv[1]
-    else:
-        pdf_path = "C:\Project\ZCS_DegitalValueList\キ　木村農産・土佐農機訂正　0204値上げ.pdf"
+def main(pdf_path=None, output_path=None):
+    """メイン関数"""
+    # コマンドラインからの実行時のみ sys.argv を使用
+    if pdf_path is None and __name__ == "__main__":
+        if len(sys.argv) > 1:
+            pdf_path = sys.argv[1]
+        else:
+            pdf_path = "C:\Project\ZCS_DegitalValueList\キ　木村農産・土佐農機訂正　0204値上げ.pdf"
     
-    # 出力ファイル名も指定可能
-    if len(sys.argv) > 2:
-        output_path = sys.argv[2]
-    else:
-        output_path = None
+    if output_path is None:
+        if __name__ == "__main__" and len(sys.argv) > 2:
+            output_path = sys.argv[2]
+        else:
+            output_path = os.path.join(os.path.dirname(__file__), "di_result.pkl")
+    
+    # パラメータが指定されていない場合はエラー
+    if pdf_path is None:
+        raise ValueError("入力PDFパスが指定されていません")
     
     extract_from_pdf(pdf_path, output_path)
+
+if __name__ == "__main__":
+    main()
