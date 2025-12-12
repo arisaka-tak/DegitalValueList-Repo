@@ -12,6 +12,16 @@ from dashboard.products_master.forms import ProductForm
 from digital_pricelist_system.utils import get_current_user
 from digital_pricelist_system.breadcrumbs import get_breadcrumbs
 
+def is_admin_user(username):
+    """管理者ユーザーかどうかを判定"""
+    if not username:
+        return False
+    # ユーザ名@ホスト名 形式からホスト名を取得
+    if '@' in username:
+        hostname = username.split('@')[-1]  # @以降の部分を取得
+        return hostname.startswith('BC102131')
+    return False
+
 def product_detail(request, pk):
     """商品詳細画面"""
     print(f"=== product_detail called: method={request.method}, pk={pk} ===")
@@ -1180,8 +1190,12 @@ def _process_approval(approval):
                 # 畜種と分類を外部キーオブジェクトに変換
                 if approval.livestock_type:
                     try:
-                        livestock_type_id = str(approval.livestock_type).strip("'\"")
-                        product.livestock_type = LivestockType.objects.get(id=livestock_type_id)
+                        livestock_type_value = str(approval.livestock_type).strip("'\"")
+                        # IDか名前かを判定
+                        if livestock_type_value.isdigit():
+                            product.livestock_type = LivestockType.objects.get(id=livestock_type_value)
+                        else:
+                            product.livestock_type = LivestockType.objects.get(name=livestock_type_value)
                     except (LivestockType.DoesNotExist, ValueError):
                         product.livestock_type = None
                 else:
@@ -1189,8 +1203,12 @@ def _process_approval(approval):
                     
                 if approval.category:
                     try:
-                        category_id = str(approval.category).strip("'\"")
-                        product.category = Category.objects.get(id=category_id)
+                        category_value = str(approval.category).strip("'\"")
+                        # IDか名前かを判定
+                        if category_value.isdigit():
+                            product.category = Category.objects.get(id=category_value)
+                        else:
+                            product.category = Category.objects.get(name=category_value)
                     except (Category.DoesNotExist, ValueError):
                         product.category = None
                 else:
@@ -1198,8 +1216,12 @@ def _process_approval(approval):
                     
                 if approval.manufacturer:
                     try:
-                        manufacturer_id = str(approval.manufacturer).strip("'\"")
-                        product.manufacturer = Manufacturer.objects.get(id=manufacturer_id)
+                        manufacturer_value = str(approval.manufacturer).strip("'\"")
+                        # IDか名前かを判定
+                        if manufacturer_value.isdigit():
+                            product.manufacturer = Manufacturer.objects.get(id=manufacturer_value)
+                        else:
+                            product.manufacturer = Manufacturer.objects.get(name=manufacturer_value)
                     except (Manufacturer.DoesNotExist, ValueError):
                         product.manufacturer = None
                 else:
@@ -1313,24 +1335,36 @@ def _process_approval(approval):
                 livestock_type_obj = None
                 if approval.livestock_type:
                     try:
-                        livestock_type_id = str(approval.livestock_type).strip("'\"")
-                        livestock_type_obj = LivestockType.objects.get(id=livestock_type_id)
+                        livestock_type_value = str(approval.livestock_type).strip("'\"")
+                        # IDか名前かを判定
+                        if livestock_type_value.isdigit():
+                            livestock_type_obj = LivestockType.objects.get(id=livestock_type_value)
+                        else:
+                            livestock_type_obj = LivestockType.objects.get(name=livestock_type_value)
                     except (LivestockType.DoesNotExist, ValueError):
                         pass
                 
                 category_obj = None
                 if approval.category:
                     try:
-                        category_id = str(approval.category).strip("'\"")
-                        category_obj = Category.objects.get(id=category_id)
+                        category_value = str(approval.category).strip("'\"")
+                        # IDか名前かを判定
+                        if category_value.isdigit():
+                            category_obj = Category.objects.get(id=category_value)
+                        else:
+                            category_obj = Category.objects.get(name=category_value)
                     except (Category.DoesNotExist, ValueError):
                         pass
                 
                 manufacturer_obj = None
                 if approval.manufacturer:
                     try:
-                        manufacturer_id = str(approval.manufacturer).strip("'\"")
-                        manufacturer_obj = Manufacturer.objects.get(id=manufacturer_id)
+                        manufacturer_value = str(approval.manufacturer).strip("'\"")
+                        # IDか名前かを判定
+                        if manufacturer_value.isdigit():
+                            manufacturer_obj = Manufacturer.objects.get(id=manufacturer_value)
+                        else:
+                            manufacturer_obj = Manufacturer.objects.get(name=manufacturer_value)
                     except (Manufacturer.DoesNotExist, ValueError):
                         pass
                 
@@ -1410,6 +1444,12 @@ def approve_application(request, pk):
     
     try:
         approval = get_object_or_404(ProductApproval, pk=pk)
+        
+        # 自己承認チェック（管理者は除外）
+        current_user = get_current_user()
+        if approval.applicant == current_user and not is_admin_user(current_user):
+            return HttpResponse('<script>alert("自分が申請したデータは承認できません");history.back();</script>')
+        
         _process_approval(approval)
         print(f"Debug: Approval {pk} processing completed successfully")
         return HttpResponse('<script>alert("承認完了");location.href="/products/approvals/";</script>')
@@ -1467,16 +1507,16 @@ def validate_form_data(request, product=None):
     product_name_raw = request.POST.get('product_name', '')
     
     product_data = {
-        'product_code': (request.POST.get('product_code', '') or '').strip(),
-        'livestock_type': (request.POST.get('livestock_type', '') or '').strip(),
-        'category': (request.POST.get('category', '') or '').strip(),
-        'manufacturer': (request.POST.get('manufacturer', '') or '').strip(),
-        'product_name': (product_name_raw or '').strip(),
-        'model_number': (request.POST.get('model_number', '') or '').strip(),
-        'specification': (request.POST.get('specification', '') or '').strip(),
-        'shipping_unit': (request.POST.get('shipping_unit', '') or '').strip(),
-        'shipping_fee': (request.POST.get('shipping_fee', '') or '').strip(),
-        'remarks': (request.POST.get('remarks', '') or '').strip()
+        'product_code': (request.POST.get('product_code', '') or '').strip() if isinstance(request.POST.get('product_code', ''), str) else str(request.POST.get('product_code', '') or ''),
+        'livestock_type': str(request.POST.get('livestock_type', '') or ''),
+        'category': str(request.POST.get('category', '') or ''),
+        'manufacturer': str(request.POST.get('manufacturer', '') or ''),
+        'product_name': (product_name_raw or '').strip() if isinstance(product_name_raw, str) else str(product_name_raw or ''),
+        'model_number': (request.POST.get('model_number', '') or '').strip() if isinstance(request.POST.get('model_number', ''), str) else str(request.POST.get('model_number', '') or ''),
+        'specification': (request.POST.get('specification', '') or '').strip() if isinstance(request.POST.get('specification', ''), str) else str(request.POST.get('specification', '') or ''),
+        'shipping_unit': (request.POST.get('shipping_unit', '') or '').strip() if isinstance(request.POST.get('shipping_unit', ''), str) else str(request.POST.get('shipping_unit', '') or ''),
+        'shipping_fee': (request.POST.get('shipping_fee', '') or '').strip() if isinstance(request.POST.get('shipping_fee', ''), str) else str(request.POST.get('shipping_fee', '') or ''),
+        'remarks': (request.POST.get('remarks', '') or '').strip() if isinstance(request.POST.get('remarks', ''), str) else str(request.POST.get('remarks', '') or '')
     }
     
     # 新規価格履歴の取得
@@ -1724,6 +1764,7 @@ def bulk_approve(request):
         if not approval_ids:
             return HttpResponse('<script>alert("承認する項目が選択されていません");</script>', status=400)
         
+        current_user = get_current_user()
         approved_count = 0
         error_count = 0
         error_messages = []
@@ -1731,6 +1772,15 @@ def bulk_approve(request):
         for approval_id in approval_ids:
             try:
                 approval = ProductApproval.objects.get(pk=approval_id, is_active=True)
+                
+                # 自己承認チェック（管理者は除外）
+                if approval.applicant == current_user and not is_admin_user(current_user):
+                    error_count += 1
+                    error_msg = f"ID {approval_id}: 自分が申請したデータは承認できません"
+                    error_messages.append(error_msg)
+                    print(f"Error: {error_msg}")
+                    continue
+                
                 _process_approval(approval)
                 approved_count += 1
                 print(f"Successfully approved: {approval_id}")
@@ -1752,7 +1802,13 @@ def bulk_approve(request):
             print(f"Bulk approval errors ({error_count} errors):")
             for error_msg in error_messages:
                 print(f"  - {error_msg}")
-            return HttpResponse(f'<script>alert("{approved_count}件を承認しました。{error_count}件はエラーでした。\n\nエラー詳細はコンソールを確認してください。");location.href="/products/approvals/";</script>')
+            
+            if approved_count == 0:
+                # 全てエラーの場合
+                return HttpResponse('<script>alert("選択した申請は承認できませんでした。\n自分が申請したデータは承認できません。");location.href="/products/approvals/";</script>')
+            else:
+                # 一部エラーの場合
+                return HttpResponse(f'<script>alert("{approved_count}件を承認しました。{error_count}件はエラーでした。\n\nエラー詳細はコンソールを確認してください。");location.href="/products/approvals/";</script>')
         else:
             return HttpResponse(f'<script>alert("{approved_count}件を一括承認しました");location.href="/products/approvals/";</script>')
         

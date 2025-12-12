@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-digital_pricelist_system Djangoサーバーを起動してブラウザを自動で開くスクリプト
+digital_valuelist_system Djangoサーバーを起動してブラウザを自動で開くスクリプト
 """
 import os
 import sys
@@ -114,7 +114,38 @@ def setup_logging(project_root):
     
     return logging.getLogger(__name__)
 
+def validate_config_paths():
+    """設定ファイルのパスを検証"""
+    if getattr(sys, 'frozen', False):
+        project_root = Path(sys.executable).parent
+    else:
+        project_root = Path(__file__).parent
+    
+    config_path = project_root / "config.ini"
+    if not config_path.exists():
+        sys.exit(1)
+    
+    config = configparser.ConfigParser()
+    config.read(config_path, encoding='utf-8')
+    
+    # データベースファイルチェック
+    db_path = config.get('DATABASE', 'path', fallback='db.sqlite3')
+    if not Path(db_path).is_absolute():
+        db_path = project_root / db_path
+    if not Path(db_path).exists():
+        sys.exit(1)
+    
+    # MEDIA_ROOTチェック
+    media_root = config.get('FILES', 'media_root', fallback='media')
+    if not Path(media_root).is_absolute():
+        media_root = project_root / media_root
+    if not Path(media_root).exists():
+        sys.exit(1)
+
 def main():
+    # 設定ファイル検証
+    validate_config_paths()
+    
     # PyInstaller環境でのパス設定
     if getattr(sys, 'frozen', False):
         project_root = Path(sys.executable).parent
@@ -126,48 +157,46 @@ def main():
     
     logger.info("デジタル価格表システムを起動しています...")
     
-    if not getattr(sys, 'frozen', False):
-        print("デジタル価格表システムを起動しています...")
-    
-    # PyInstaller環境でのパス設定
-    if getattr(sys, 'frozen', False):
-        # PyInstallerでビルドされた場合
-        project_root = Path(sys.executable).parent
-        print(f"PyInstaller環境で実行中: {project_root}")
-    else:
-        # 開発環境
-        project_root = Path(__file__).parent
-        print(f"開発環境で実行中: {project_root}")
-    
     # manage.pyの存在チェック（PyInstaller環境ではスキップ）
     if not getattr(sys, 'frozen', False) and not (project_root / "manage.py").exists():
-        print(f"エラー: manage.pyが見つかりません: {project_root}")
-        input("何かキーを押して終了...")
+        logger.error(f"manage.pyが見つかりません: {project_root}")
         return
     
     # 設定読み込み
+    config_path = project_root / "config.ini"
+    logger.info(f"設定ファイル: {config_path} {'(存在)' if config_path.exists() else '(デフォルト値使用)'}")
+    
     port, auto_browser, db_path = load_config()
     
     # データベースパスを環境変数に設定
-    os.environ['DATABASE_PATH'] = str(project_root / db_path)
+    db_full_path = project_root / db_path
+    os.environ['DATABASE_PATH'] = str(db_full_path)
+    
+    # DBパスを表示
+    db_exists = db_full_path.exists()
+    logger.info(f"DBファイル: {db_full_path} {'(存在)' if db_exists else '(新規作成)'}")
+    
+    # MEDIA_ROOTパスを表示
+    from digital_pricelist_system.settings import get_media_root
+    media_root = get_media_root()
+    logger.info(f"MEDIA_ROOT: {media_root}")
     
     # Python実行ファイルを取得
     if getattr(sys, 'frozen', False):
         # PyInstaller環境では現在の実行ファイルを使用
         python_executable = sys.executable
-        print(f"Python実行ファイル: {python_executable}")
+        logger.info(f"Python実行ファイル: {python_executable}")
     else:
         # 開発環境では仮想環境を探す
         python_executable = find_venv_python()
-        print(f"仮想環境Python: {python_executable}")
+        logger.info(f"仮想環境Python: {python_executable}")
         
         # Djangoがインストールされているかチェック
         try:
             subprocess.run([python_executable, '-c', 'import django'], 
                           capture_output=True, text=True, check=True)
         except subprocess.CalledProcessError:
-            print("エラー: Djangoがインストールされていません")
-            input("何かキーを押して終了...")
+            logger.error("Djangoがインストールされていません")
             return
     
     # 現在のディレクトリを変更
@@ -180,8 +209,6 @@ def main():
     # サーバー起動
     try:
         logger.info(f"ポート {port} でDjangoサーバーを起動中...")
-        if not getattr(sys, 'frozen', False):
-            print(f"ポート {port} でDjangoサーバーを起動中...")
         
         if getattr(sys, 'frozen', False):
             # PyInstaller環境ではDjangoを直接起動
@@ -198,10 +225,11 @@ def main():
             
             logger.info(f"サーバーが起動しました: http://127.0.0.1:{port}/")
             
+            # 開発環境でのみコンソールメッセージ表示
             if not getattr(sys, 'frozen', False):
-                print("ブラウザを起動しています...")
-                print(f"\nサーバーが起動しました: http://127.0.0.1:{port}/")
-                print("終了するには、このウィンドウを閉じるかCtrl+Cを押してください。")
+                logger.info("ブラウザを起動しています...")
+                logger.info(f"サーバーが起動しました: http://127.0.0.1:{port}/")
+                logger.info("終了するには、このウィンドウを閉じるかCtrl+Cを押してください。")
             
             # Djangoサーバーを起動
             execute_from_command_line(['manage.py', 'runserver', f'127.0.0.1:{port}', '--noreload'])
@@ -229,15 +257,14 @@ def main():
         
         
     except KeyboardInterrupt:
-        print("\nシステムを終了しています...")
+        logger.info("システムを終了しています...")
         if not getattr(sys, 'frozen', False):
             process.terminate()
             process.wait()
     except Exception as e:
         logger.error(f"システム起動エラー: {e}")
         if not getattr(sys, 'frozen', False):
-            print(f"エラーが発生しました: {e}")
-            input("何かキーを押して終了...")
+            logger.error(f"エラーが発生しました: {e}")
 
 if __name__ == "__main__":
     main()

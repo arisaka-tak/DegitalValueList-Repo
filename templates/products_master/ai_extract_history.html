@@ -25,10 +25,9 @@
                                 <th width="18%">実行日時</th>
                                 <th width="15%">実行者</th>
                                 <th width="20%">備考</th>
-                                <th width="8%">対象数</th>
-                                <th width="8%">成功数</th>
-                                <th width="8%">スキップ数</th>
-                                <th width="11%">ステータス</th>
+                                <th width="10%">対象数</th>
+                                <th width="10%">抽出件数</th>
+                                <th width="13%">ステータス</th>
                                 <th width="12%">操作</th>
                             </tr>
                         </thead>
@@ -39,8 +38,7 @@
                                 <td>{{ transaction.executor }}</td>
                                 <td>{{ transaction.remarks|default:"-" }}</td>
                                 <td class="text-center">{{ transaction.total_products }}</td>
-                                <td class="text-center">{{ transaction.success_count }}</td>
-                                <td class="text-center">{{ transaction.skip_count }}</td>
+                                <td class="text-center">{{ transaction.total_products }}</td>
                                 <td>
                                     {% if transaction.status == '照合中' %}
                                         <span class="badge bg-info">{{ transaction.status }}</span>
@@ -73,7 +71,7 @@
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="8" class="text-center text-muted py-4">
+                                <td colspan="7" class="text-center text-muted py-4">
                                     実行履歴がありません
                                 </td>
                             </tr>

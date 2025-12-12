@@ -17,7 +17,9 @@ def main():
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--onefile",
-        "--name=DigitalPriceList", 
+        "--noconsole",
+        "--name=DegitalValueList",
+        "--distpath=dist/web",
         "--add-data=templates;templates",
         "--add-data=static;static", 
         "--add-data=dashboard;dashboard",
@@ -36,6 +38,27 @@ def main():
         print("❌ PyInstallerビルドに失敗しました")
         return
     
+    # バッチ処理用exeをビルド
+    batch_cmd = [
+        sys.executable, "-m", "PyInstaller",
+        "--onefile",
+        "--name=batch_ai_extract",
+        "--distpath=dist/batch",
+        "--add-data=dashboard;dashboard",
+        "--add-data=digital_pricelist_system;digital_pricelist_system",
+        "--add-data=manage.py;.",
+        "--hidden-import=django",
+        "--hidden-import=dashboard.products_master",
+        "batch_ai_extract.py"
+    ]
+    
+    print("バッチ処理用exeをビルド中...")
+    batch_result = subprocess.run(batch_cmd, cwd=project_root)
+    
+    if batch_result.returncode != 0:
+        print("❌ バッチ処理用exeビルドに失敗しました")
+        return
+    
     # 配布用フォルダを作成
     deploy_dir = project_root / "deploy"
     if deploy_dir.exists():
@@ -45,11 +68,18 @@ def main():
     print("配布用フォルダを作成中...")
     
     # exeファイルをコピー
-    exe_src = project_root / "dist" / "DigitalPriceList.exe"
-    exe_dst = deploy_dir / "DigitalPriceList.exe"
+    exe_src = project_root / "dist" / "web" / "DegitalValueList.exe"
+    exe_dst = deploy_dir / "DegitalValueList.exe"
     if exe_src.exists():
         shutil.copy2(exe_src, exe_dst)
         print(f"  ✅ {exe_dst.name} をコピー")
+    
+    # バッチ処理用exeをコピー
+    batch_exe_src = project_root / "dist" / "batch" / "batch_ai_extract.exe"
+    batch_exe_dst = deploy_dir / "batch_ai_extract.exe"
+    if batch_exe_src.exists():
+        shutil.copy2(batch_exe_src, batch_exe_dst)
+        print(f"  ✅ {batch_exe_dst.name} をコピー")
     
     # config.iniをコピー
     config_src = project_root / "config.ini"
@@ -65,18 +95,38 @@ def main():
         shutil.copy2(db_src, db_dst)
         print(f"  ✅ {db_dst.name} をコピー")
     
+    # mediaフォルダを作成
+    media_dir = deploy_dir / "media"
+    media_dir.mkdir(exist_ok=True)
+    print(f"  ✅ {media_dir.name} フォルダを作成")
+    
+    # media/approvalフォルダを作成
+    approval_dir = media_dir / "approval"
+    approval_dir.mkdir(exist_ok=True)
+    print(f"  ✅ {approval_dir.name} フォルダを作成")
+    
+    # media/ai_extractフォルダを作成
+    ai_extract_dir = media_dir / "ai_extract"
+    ai_extract_dir.mkdir(exist_ok=True)
+    print(f"  ✅ {ai_extract_dir.name} フォルダを作成")
+    
     print("")
     print("✅ ビルド完了!")
     print(f"📁 配布フォルダ: {deploy_dir}")
     print("")
     print("📁 配布構成:")
     print("  deploy/")
-    print("  ├── DigitalPriceList.exe  # 実行ファイル")
+    print("  ├── DegitalValueList.exe  # Webアプリ実行ファイル")
+    print("  ├── batch_ai_extract.exe  # バッチ処理実行ファイル")
     print("  ├── config.ini           # 環境設定ファイル")
-    print("  └── db.sqlite3           # データベースファイル")
+    print("  ├── db.sqlite3           # データベースファイル")
+    print("  └── media/               # ファイル保存フォルダ")
+    print("      ├── approval/        # 決裁書PDF")
+    print("      └── ai_extract/      # AI抽出PDF")
     print("")
     print("🚀 配布方法: deployフォルダを丸ごとコピーして配布")
     print("🔄 環境切り替え: config.iniを差し替えて再起動")
+    print("⏰ バッチ処理: batch_ai_extract.exe をタスクスケジューラで定期実行")
 
 if __name__ == "__main__":
     main()

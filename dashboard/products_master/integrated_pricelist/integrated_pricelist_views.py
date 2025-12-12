@@ -566,7 +566,7 @@ def upload_approval_pdf(request):
             approval_month = year_month.replace('/', '')
             
             # 保存ディレクトリを作成
-            approval_dir = os.path.join(settings.BASE_DIR, 'approvals')
+            approval_dir = os.path.join(settings.MEDIA_ROOT, 'approval')
             os.makedirs(approval_dir, exist_ok=True)
             
             # ファイルを保存

@@ -3,8 +3,13 @@ AI価格抽出関連のサービス
 """
 import unicodedata
 import re
+import logging
+from datetime import datetime
 
 from .models import Product
+
+# ログ設定
+logger = logging.getLogger(__name__)
 
 
 def get_bigrams(text):
@@ -113,21 +118,21 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
     
     # AI側の正規化処理をデバッグ出力
     if is_nfj310_debug:
-        print(f"\n=== AI側データ正規化 ===")
-        print(f"AI生データ: 商品名='{ai_product_name}', 型式='{ai_model_number}', 規格='{ai_specification}'")
-        print(f"AI正規化後: 商品名='{normalize_text(ai_product_name)}', 型式='{normalize_text(ai_model_number)}', 規格='{normalize_text(ai_specification)}'")
-        print(f"AIキーワード: {list(ai_keyword_list)}")
+        logger.debug(f"AI側データ正規化")
+        logger.debug(f"AI生データ: 商品名='{ai_product_name}', 型式='{ai_model_number}', 規格='{ai_specification}'")
+        logger.debug(f"AI正規化後: 商品名='{normalize_text(ai_product_name)}', 型式='{normalize_text(ai_model_number)}', 規格='{normalize_text(ai_specification)}'")
+        logger.debug(f"AIキーワード: {list(ai_keyword_list)}")
     
     # 空のキーワードリストの場合は早期リターン
     if not ai_keyword_list:
         if is_nfj310_debug:
-            print("AIキーワードリストが空のためスキップ")
+            logger.debug("AIキーワードリストが空のためスキップ")
         return []
     
     # 全商品を対象とした照合（関連データも一括取得）
     products = Product.objects.select_related('manufacturer', 'livestock_type', 'category').all()
     if is_nfj310_debug:
-        print(f"全商品対象: {products.count()}件")
+        logger.debug(f"全商品対象: {products.count()}件")
     
     candidates = []
     debug_info = []
@@ -183,28 +188,33 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
         
         # マスタ型式網羅チェック（AI抽出の品名・型式・規格のいずれかにマスタ型式が含まれる）
         model_coverage_matched = False
-        if product.model_number and len(product.model_number.strip()) > 3:
-            master_model_normalized = normalize_text(product.model_number)
-            ai_all_fields = f"{ai_product_name} {ai_model_number} {ai_specification}"
-            ai_all_normalized = normalize_text(ai_all_fields)
+        if product.model_number:
+            master_model_stripped = product.model_number.strip()
+            # 数字オンリーの場合は6桁以上、それ以外は4桁以上
+            min_length = 6 if master_model_stripped.isdigit() else 4
+            
+            if len(master_model_stripped) >= min_length:
+                master_model_normalized = normalize_text(product.model_number)
+                ai_all_fields = f"{ai_product_name} {ai_model_number} {ai_specification}"
+                ai_all_normalized = normalize_text(ai_all_fields)
             
             # 記号を除去して3文字以上の型式のみチェック
             def clean_model_text(text):
                 """記号を除去してアルファベット・数字・漢字・ひらがな・カタカナのみにする"""
                 return re.sub(r'[^A-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]', '', text) if text else ''
             
-            master_model_clean = clean_model_text(master_model_normalized)
-            ai_all_clean = clean_model_text(ai_all_normalized)
-            
-            if master_model_clean and len(master_model_clean) > 3:
-                if master_model_clean in ai_all_clean:
-                    model_coverage_matched = True
-                    best_match_field = 'マスタ型式網羅(記号除去)'
+                master_model_clean = clean_model_text(master_model_normalized)
+                ai_all_clean = clean_model_text(ai_all_normalized)
+                
+                if master_model_clean and len(master_model_clean) >= min_length:
+                    if master_model_clean in ai_all_clean:
+                        model_coverage_matched = True
+                        best_match_field = 'マスタ型式網羅(記号除去)'
                 
             # デバッグ出力（商品739とNFJ310と220の問題を調査）
             if is_nfj310_debug and (product.pk == 739 or product.model_number == '220' or 'NFJ310' in (product.model_number or '')):
                 clean_match = master_model_clean in ai_all_clean if master_model_clean else False
-                print(f"商品{product.pk}[型式:{product.model_number}]: 正規化='{master_model_normalized}' 記号除去='{master_model_clean}' マッチ={clean_match} スコア={base_score}")
+                logger.debug(f"商品{product.pk}[型式:{product.model_number}]: 正規化='{master_model_normalized}' 記号除去='{master_model_clean}' マッチ={clean_match} スコア={base_score}")
         
         # メーカー名一致ボーナス（2-gram照合70%以上）
         manufacturer_bonus = 0
@@ -228,7 +238,6 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
                 ai_price_num = float(str(ai_new_price).replace(',', '').strip())
                 
                 # マスタ側の処理日時点の仕切価格を取得
-                from datetime import datetime
                 today = datetime.now().strftime('%Y/%m')
                 latest_price_history = product.price_histories.filter(
                     is_active=True,
@@ -256,7 +265,7 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
         if model_coverage_matched:
             max_score = max(max_score, 70)
             if is_nfj310_debug:
-                print(f"型式マッチ: {product.product_name} | 型式:{product.model_number} | 記号除去後:'{master_model_clean}' | スコア:{max_score}")
+                logger.debug(f"型式マッチ: {product.product_name} | 型式:{product.model_number} | 記号除去後:'{master_model_clean}' | スコア:{max_score}")
         
         # デバッグ出力を無効化
         # if not first_product_checked and 'エコクーラー' in product.product_name:
@@ -301,7 +310,7 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
                     'specification': product.specification,
                     'manufacturer': product.manufacturer,
                 },
-                'score': min(max_score, 100),  # 100%上限
+                'score': min(max_score, 98),  # 98%上限
                 'matched_field': best_match_field,
                 'display_info': f"{product.product_name} | {product.model_number or '-'} | {product.specification or '-'}",
                 'manufacturer': str(product.manufacturer) if product.manufacturer else '-',
@@ -349,7 +358,7 @@ def process_extraction_results(json_data):
         dict: 処理結果
     """
     if 'products' not in json_data:
-        print(f"Debug: Processing product {i}: {product_data}")
+        logger.debug(f"Processing product {i}: {product_data}")
         return {
             'status': 'error',
             'message': 'JSONに"products"キーが見つかりません'

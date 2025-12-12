@@ -5,7 +5,7 @@ import os
 def ai_extract_pdf_upload_path(instance, filename):
     """トランザクションIDを付けたユニークなファイル名を生成"""
     name, ext = os.path.splitext(filename)
-    return f'ai_price_extract/{instance.transaction_id}_{filename}'
+    return f'ai_extract/{instance.transaction_id}_{filename}'
 
 class AIExtractTransaction(models.Model):
     """AI価格抽出トランザクション履歴"""

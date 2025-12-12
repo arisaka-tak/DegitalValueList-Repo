@@ -8,6 +8,8 @@ import pickle
 from azure.ai.documentintelligence import DocumentIntelligenceClient
 from azure.core.credentials import AzureKeyCredential
 
+import traceback
+
 # Document Intelligence設定
 DOCUMENT_INTELLIGENCE_ENDPOINT = "https://digital-valuelist-prd.cognitiveservices.azure.com/"
 DOCUMENT_INTELLIGENCE_API_KEY = "397a72600d7e45f6b2462d5b99edc38a"
@@ -63,7 +65,7 @@ def extract_from_pdf(pdf_path: str, output_path: str = "di_result.pkl"):
         
     except Exception as e:
         print(f"エラーが発生しました: {str(e)}")
-        import traceback
+
         traceback.print_exc()
 
 if __name__ == "__main__":

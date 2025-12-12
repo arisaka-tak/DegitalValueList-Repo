@@ -258,7 +258,7 @@ def _process_ai_extract_submission(request, results, json_data):
             # 新しい価格履歴をフォームデータ形式で追加
             year, month = map(int, effective_year_month.split('-'))
             
-            # 個別の改定理由を取得
+            # 個別の改定理由を取得（空の場合は一括設定を使用）
             individual_reason_str = request.POST.get(f'revision_reason_{i}', '').strip()
             final_reason = individual_reason_str if individual_reason_str else revision_reason
             
@@ -486,9 +486,56 @@ def ai_extract_rematch(request):
         return JsonResponse({'error': f'処理エラー: {str(e)}'}, status=500)
 
 
+def setup_proxy_from_config():
+    """プロキシ設定をconfig.iniから読み込み環境変数に設定"""
+    import configparser
+    from pathlib import Path
+    import sys
+    
+    config = configparser.ConfigParser()
+    
+    # PyInstaller環境ではexeと同じフォルダのconfig.iniを参照
+    if getattr(sys, 'frozen', False):
+        config_path = Path(sys.executable).parent / "config.ini"
+    else:
+        config_path = Path(__file__).parent.parent.parent.parent / "config.ini"
+    
+    if config_path.exists():
+        try:
+            config.read(config_path, encoding='utf-8')
+            http_proxy = config.get('PROXY', 'http_proxy', fallback='')
+            https_proxy = config.get('PROXY', 'https_proxy', fallback='')
+            proxy_auth = config.get('PROXY', 'proxy_auth', fallback='')
+            
+            if http_proxy:
+                # プロトコルを除去して正しい形式に変換
+                clean_proxy = http_proxy.replace('http://', '').replace('https://', '')
+                if proxy_auth:
+                    proxy_url = f"http://{proxy_auth}@{clean_proxy}"
+                    os.environ['HTTP_PROXY'] = proxy_url
+                else:
+                    proxy_url = f"http://{clean_proxy}"
+                    os.environ['HTTP_PROXY'] = proxy_url
+                
+                print(f"プロキシ設定: {clean_proxy}")
+            
+            if https_proxy and 'HTTP_PROXY' in os.environ:
+                # HTTPプロキシが設定されている場合のみHTTPSも設定
+                clean_proxy = https_proxy.replace('http://', '').replace('https://', '')
+                if proxy_auth:
+                    os.environ['HTTPS_PROXY'] = f"http://{proxy_auth}@{clean_proxy}"
+                else:
+                    os.environ['HTTPS_PROXY'] = f"http://{clean_proxy}"
+            
+        except Exception as e:
+            print(f"プロキシ設定エラー: {e}")
+
 def ai_extract_pdf_process(request):
     """PDFアップロード・AI抽出処理"""
     print(f"=== ai_extract_pdf_process called: method={request.method} ===")
+    
+    # プロキシ設定を環境変数に設定
+    setup_proxy_from_config()
     
     if request.method != 'POST':
         messages.error(request, 'POSTメソッドが必要です。')
@@ -514,6 +561,7 @@ def ai_extract_pdf_process(request):
         
         # Document Intelligence + AI抽出処理
         print("Starting Document Intelligence + AI processing...")
+        print(f"プロキシ設定: HTTP={os.environ.get('HTTP_PROXY', 'なし')}, HTTPS={os.environ.get('HTTPS_PROXY', 'なし')}")
         
         # 一時ファイルに保存
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
@@ -682,7 +730,7 @@ def ai_extract_pdf_process(request):
                 extracted_manufacturer=extracted_data.get('manufacturer'),
                 extracted_specification=extracted_data.get('specification'),
                 extracted_price=str(extracted_data.get('new_price', '')),
-                extracted_revision_reason=reason,
+                extracted_revision_reason='',  # 明細はデフォルト空欄
                 matched_product=matched_product,
                 match_score=match_score,
                 status='未処理'
@@ -773,6 +821,89 @@ def _get_dynamic_breadcrumbs_for_ai_extract(request):
     else:
         # 商品一覧から来た場合（デフォルト）
         return get_breadcrumbs('ai_extract')
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def ai_extract_search_products(request):
+    """商品検索API（モーダル用）"""
+    try:
+        data = json.loads(request.body)
+        query = data.get('query', '').strip()
+        category_id = data.get('category_id')
+        livestock_type_id = data.get('livestock_type_id')
+        manufacturer_id = data.get('manufacturer_id')
+        
+        # 基本クエリ
+        from django.db.models import Q
+        products_query = Product.objects.select_related('manufacturer', 'category', 'livestock_type')
+        
+        # 絞り込み条件を適用
+        if category_id:
+            products_query = products_query.filter(category_id=category_id)
+        if livestock_type_id:
+            products_query = products_query.filter(livestock_type_id=livestock_type_id)
+        if manufacturer_id:
+            products_query = products_query.filter(manufacturer_id=manufacturer_id)
+        
+        # キーワード検索（空の場合は絞り込みのみ）
+        if query:
+            products_query = products_query.filter(
+                Q(product_name__icontains=query) |
+                Q(model_number__icontains=query) |
+                Q(specification__icontains=query)
+            )
+        
+        products = products_query[:50]  # 上位50件
+        
+        # 現在の仕切価格を取得
+        from datetime import datetime
+        today = datetime.now().strftime('%Y/%m')
+        
+        result = []
+        for product in products:
+            current_price_history = product.price_histories.filter(
+                effective_year_month__lte=today,
+                is_active=True
+            ).order_by('-effective_year_month').first()
+            
+            current_wholesale_price = '-'
+            if current_price_history:
+                current_wholesale_price = current_price_history.wholesale_price or '-'
+            
+            result.append({
+                'pk': product.pk,
+                'product_name': product.product_name,
+                'model_number': product.model_number or '-',
+                'specification': product.specification or '-',
+                'manufacturer': str(product.manufacturer) if product.manufacturer else '-',
+                'current_wholesale_price': current_wholesale_price,
+                'display_info': f"{product.product_name} | {product.model_number or '-'} | {product.specification or '-'}"
+            })
+        
+        return JsonResponse({'products': result})
+        
+    except Exception as e:
+        return JsonResponse({'error': f'検索エラー: {str(e)}'}, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def ai_extract_get_masters(request):
+    """マスタデータ取得API（絞り込み用）"""
+    try:
+        from dashboard.products_master.models import Category, LivestockType, Manufacturer
+        
+        categories = [{'id': c.id, 'name': c.name} for c in Category.objects.all().order_by('name')]
+        livestock_types = [{'id': l.id, 'name': l.name} for l in LivestockType.objects.all().order_by('name')]
+        manufacturers = [{'id': m.id, 'name': m.name} for m in Manufacturer.objects.all().order_by('name')]
+        
+        return JsonResponse({
+            'categories': categories,
+            'livestock_types': livestock_types,
+            'manufacturers': manufacturers
+        })
+        
+    except Exception as e:
+        return JsonResponse({'error': f'マスタデータ取得エラー: {str(e)}'}, status=500)
 
 @csrf_exempt
 @require_http_methods(["POST"])

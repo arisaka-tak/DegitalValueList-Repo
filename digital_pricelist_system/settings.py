@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os
+import sys
 import configparser
 from dotenv import load_dotenv
 
@@ -41,29 +42,59 @@ def get_database_path():
     if 'DATABASE_PATH' in os.environ:
         return os.environ['DATABASE_PATH']
     
+    # PyInstaller環境ではexeと同じフォルダのファイルを参照
+    if getattr(sys, 'frozen', False):
+        exe_dir = Path(sys.executable).parent
+        config_path = exe_dir / "config.ini"
+    else:
+        config_path = BASE_DIR / "config.ini"
+    
     # config.iniから直接読み込み
-    config = get_config()
-    if config:
-        db_path = config.get('DATABASE', 'path', fallback='db.sqlite3')
-        # 相対パスの場合はBASE_DIRからの相対パスとして解釈
-        if not os.path.isabs(db_path):
-            return str(BASE_DIR / db_path)
-        return db_path
+    config = configparser.ConfigParser()
+    if config_path.exists():
+        try:
+            config.read(config_path, encoding='utf-8')
+            db_path = config.get('DATABASE', 'path', fallback='db.sqlite3')
+            # PyInstaller環境では相対パスをexeフォルダからの相対パスとして解釈
+            if getattr(sys, 'frozen', False) and not os.path.isabs(db_path):
+                return str(exe_dir / db_path)
+            elif not os.path.isabs(db_path):
+                return str(BASE_DIR / db_path)
+            return db_path
+        except Exception:
+            pass
     
     # デフォルト
+    if getattr(sys, 'frozen', False):
+        return str(Path(sys.executable).parent / 'db.sqlite3')
     return str(BASE_DIR / 'db.sqlite3')
 
 def get_media_root():
     """メディアファイル保存先を取得"""
-    config = get_config()
-    if config:
-        media_path = config.get('FILES', 'media_root', fallback='media')
-        # 相対パスの場合はBASE_DIRからの相対パスとして解釈
-        if not os.path.isabs(media_path):
-            return BASE_DIR / media_path
-        return Path(media_path)
+    # PyInstaller環境ではexeと同じフォルダのファイルを参照
+    if getattr(sys, 'frozen', False):
+        exe_dir = Path(sys.executable).parent
+        config_path = exe_dir / "config.ini"
+    else:
+        config_path = BASE_DIR / "config.ini"
+    
+    config = configparser.ConfigParser()
+    if config_path.exists():
+        try:
+            config.read(config_path, encoding='utf-8')
+            media_path = config.get('FILES', 'media_root', fallback='media')
+            # PyInstaller環境では相対パスをexeフォルダからの相対パスとして解釈
+            if getattr(sys, 'frozen', False) and not os.path.isabs(media_path):
+                return exe_dir / media_path
+            elif not os.path.isabs(media_path):
+                return BASE_DIR / media_path
+            return Path(media_path)
+        except Exception:
+            pass
     
     # デフォルト
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).parent / 'media'
     return BASE_DIR / 'media'
 
 
@@ -179,6 +210,7 @@ MEDIA_ROOT = get_media_root()
 # File upload settings
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024   # 10MB
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000  # AI抽出で大量のフィールドが送信される場合に対応
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
