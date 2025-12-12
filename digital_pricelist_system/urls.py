@@ -18,11 +18,16 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.http import HttpResponse
 from dashboard import dashboard_views as views
+
+def favicon_view(request):
+    return HttpResponse(status=204)
 
 urlpatterns = [
     path('', views.dashboard, name='dashboard'),
     path('sidebar/', views.sidebar, name='sidebar'),
+    path('favicon.ico', favicon_view, name='favicon'),
     path('admin/', admin.site.urls),
     path('products/', include('dashboard.products_master.urls')),
     path('system/', include('system_admin.urls')),

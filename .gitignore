@@ -48,6 +48,7 @@ Thumbs.db
 
 # Deploy
 deploy/
+deploy_onedir/
 
 # Test files
 *.pdf

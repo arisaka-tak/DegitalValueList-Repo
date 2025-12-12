@@ -22,25 +22,48 @@ def kill_existing_server():
     """既存のDjangoサーバーを停止"""
     try:
         if os.name == 'nt':  # Windows
-            # Djangoサーバーのみを特定して停止
-            result = subprocess.run([
-                'wmic', 'process', 'where', 
-                "CommandLine like '%manage.py%runserver%'", 
-                'get', 'ProcessId'
-            ], capture_output=True, text=True, check=False)
-            
-            if result.stdout:
-                lines = result.stdout.strip().split('\n')
-                for line in lines[1:]:  # ヘッダーをスキップ
-                    pid = line.strip()
-                    if pid and pid.isdigit():
-                        subprocess.run(['taskkill', '/f', '/pid', pid], 
-                                     capture_output=True, check=False)
+            # PyInstaller版の場合は実行ファイル名で検索
+            if getattr(sys, 'frozen', False):
+                exe_name = Path(sys.executable).name
+                result = subprocess.run([
+                    'wmic', 'process', 'where', 
+                    f"Name='{exe_name}'", 
+                    'get', 'ProcessId'
+                ], capture_output=True, text=True, check=False)
+                
+                if result.stdout:
+                    lines = result.stdout.strip().split('\n')
+                    current_pid = os.getpid()
+                    for line in lines[1:]:  # ヘッダーをスキップ
+                        pid = line.strip()
+                        if pid and pid.isdigit() and int(pid) != current_pid:
+                            subprocess.run(['taskkill', '/f', '/pid', pid], 
+                                         capture_output=True, check=False)
+            else:
+                # 開発環境の場合
+                result = subprocess.run([
+                    'wmic', 'process', 'where', 
+                    "CommandLine like '%manage.py%runserver%'", 
+                    'get', 'ProcessId'
+                ], capture_output=True, text=True, check=False)
+                
+                if result.stdout:
+                    lines = result.stdout.strip().split('\n')
+                    for line in lines[1:]:
+                        pid = line.strip()
+                        if pid and pid.isdigit():
+                            subprocess.run(['taskkill', '/f', '/pid', pid], 
+                                         capture_output=True, check=False)
         else:  # Unix/Linux/Mac
-            subprocess.run(['pkill', '-f', 'manage.py runserver'], 
-                         capture_output=True, check=False)
+            if getattr(sys, 'frozen', False):
+                exe_name = Path(sys.executable).name
+                subprocess.run(['pkill', '-f', exe_name], 
+                             capture_output=True, check=False)
+            else:
+                subprocess.run(['pkill', '-f', 'manage.py runserver'], 
+                             capture_output=True, check=False)
         
-        # 停止を待つ（ポート番号は動的に取得）
+        # 停止を待つ
         port, _, _ = load_config()
         for _ in range(5):
             time.sleep(1)

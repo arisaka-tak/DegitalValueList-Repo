@@ -1,9 +1,10 @@
 import json
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse, JsonResponse, QueryDict, HttpResponseRedirect
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
 from django.template.loader import render_to_string
+from django.contrib import messages
 from dashboard.products_master.models import Product, PriceHistory, ProductApproval, PriceHistoryApproval, LivestockType, Category, Manufacturer
 from django.db.models import Q, Max
 from django.db import connection, transaction
@@ -1440,29 +1441,34 @@ def _process_approval(approval):
 def approve_application(request, pk):
     """申請を承認"""
     if request.method != 'POST':
-        return HttpResponse('Invalid method', status=405)
+        messages.error(request, '無効なリクエストです')
+        return redirect('products_master:approval_list')
     
     try:
         approval = get_object_or_404(ProductApproval, pk=pk)
         
-        # 自己承認チェック（管理者は除外）
+        # 自己承認チェック
         current_user = get_current_user()
-        if approval.applicant == current_user and not is_admin_user(current_user):
-            return HttpResponse('<script>alert("自分が申請したデータは承認できません");history.back();</script>')
+        if approval.applicant == current_user:
+            messages.error(request, '自分が申請したデータは承認できません')
+            return redirect('products_master:approval_detail', pk=pk)
         
         _process_approval(approval)
         print(f"Debug: Approval {pk} processing completed successfully")
-        return HttpResponse('<script>alert("承認完了");location.href="/products/approvals/";</script>')
+        messages.success(request, '承認完了')
+        return redirect('products_master:approval_list')
         
     except Exception as e:
         import traceback
         print(f"ERROR in approve_application: {traceback.format_exc()}")
-        return HttpResponse('<script>alert("エラー発生");</script>', status=500)
+        messages.error(request, 'エラーが発生しました')
+        return redirect('products_master:approval_list')
 
 def reject_application(request, pk):
     """申請を却下（再申請待ちに変更）"""
     if request.method != 'POST':
-        return HttpResponse('Invalid method', status=405)
+        messages.error(request, '無効なリクエストです')
+        return redirect('products_master:approval_list')
     
     try:
         approval = get_object_or_404(ProductApproval, pk=pk)
@@ -1473,14 +1479,17 @@ def reject_application(request, pk):
         
         # 申請却下時は商品マスタのステータスはそのまま（申請中を維持）
         
-        return HttpResponse('<script>alert("申請を却下しました。再申請待ちに変更されました。");location.href="/products/approvals/";</script>')
+        messages.warning(request, '申請を却下しました。再申請待ちに変更されました。')
+        return redirect('products_master:approval_list')
     except Exception as e:
-        return HttpResponse('<script>alert("エラー発生");</script>', status=500)
+        messages.error(request, 'エラーが発生しました')
+        return redirect('products_master:approval_list')
 
 def cancel_application(request, pk):
     """申請を取消（完全削除）"""
     if request.method != 'POST':
-        return HttpResponse('Invalid method', status=405)
+        messages.error(request, '無効なリクエストです')
+        return redirect('products_master:approval_list')
     
     try:
         approval = get_object_or_404(ProductApproval, pk=pk)
@@ -1495,9 +1504,11 @@ def cancel_application(request, pk):
                 pass
         
         approval.delete()
-        return HttpResponse('<script>alert("申請取消完了");location.href="/products/approvals/";</script>')
+        messages.success(request, '申請取消完了')
+        return redirect('products_master:approval_list')
     except Exception as e:
-        return HttpResponse('<script>alert("エラー発生");</script>', status=500)
+        messages.error(request, 'エラーが発生しました')
+        return redirect('products_master:approval_list')
 
 
 
@@ -1757,12 +1768,14 @@ def _update_reapplication(request, approval):
 def bulk_approve(request):
     """選択式一括承認"""
     if request.method != 'POST':
-        return HttpResponse('Invalid method', status=405)
+        messages.error(request, '無効なリクエストです')
+        return redirect('products_master:approval_list')
     
     try:
         approval_ids = request.POST.getlist('approval_ids')
         if not approval_ids:
-            return HttpResponse('<script>alert("承認する項目が選択されていません");</script>', status=400)
+            messages.error(request, '承認する項目が選択されていません')
+            return redirect('products_master:approval_list')
         
         current_user = get_current_user()
         approved_count = 0
@@ -1773,8 +1786,8 @@ def bulk_approve(request):
             try:
                 approval = ProductApproval.objects.get(pk=approval_id, is_active=True)
                 
-                # 自己承認チェック（管理者は除外）
-                if approval.applicant == current_user and not is_admin_user(current_user):
+                # 自己承認チェック
+                if approval.applicant == current_user:
                     error_count += 1
                     error_msg = f"ID {approval_id}: 自分が申請したデータは承認できません"
                     error_messages.append(error_msg)
@@ -1805,15 +1818,18 @@ def bulk_approve(request):
             
             if approved_count == 0:
                 # 全てエラーの場合
-                return HttpResponse('<script>alert("選択した申請は承認できませんでした。\n自分が申請したデータは承認できません。");location.href="/products/approvals/";</script>')
+                messages.error(request, '選択した申請は承認できませんでした。自分が申請したデータは承認できません。')
             else:
                 # 一部エラーの場合
-                return HttpResponse(f'<script>alert("{approved_count}件を承認しました。{error_count}件はエラーでした。\n\nエラー詳細はコンソールを確認してください。");location.href="/products/approvals/";</script>')
+                messages.warning(request, f'{approved_count}件を承認しました。{error_count}件はエラーでした。')
         else:
-            return HttpResponse(f'<script>alert("{approved_count}件を一括承認しました");location.href="/products/approvals/";</script>')
+            messages.success(request, f'{approved_count}件を一括承認しました')
         
-    except Exception:
-        return HttpResponse('<script>alert("エラー発生");</script>', status=500)
+        return redirect('products_master:approval_list')
+        
+    except Exception as e:
+        messages.error(request, 'エラーが発生しました')
+        return redirect('products_master:approval_list')
 
 def api_manufacturers(request):
     """メーカーリストAPI"""

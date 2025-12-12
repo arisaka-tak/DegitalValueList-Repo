@@ -104,6 +104,18 @@
         <div style="width: calc(100vw - 250px); overflow-x: auto;">
             {% block breadcrumb %}{% endblock %}
             
+            <!-- メッセージ表示 -->
+            {% if messages %}
+                <div class="container mt-3">
+                    {% for message in messages %}
+                        <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags == 'warning' %}warning{% elif message.tags == 'success' %}success{% else %}info{% endif %} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+            
             <div class="p-4">
                 {% block content %}
                 {% endblock %}
