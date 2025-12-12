@@ -214,6 +214,13 @@ def main():
             # PyInstaller環境ではDjangoを直接起動
             import django
             from django.core.management import execute_from_command_line
+            import io
+            
+            # noconsole環境でstdoutがNoneの場合の対策
+            if sys.stdout is None:
+                sys.stdout = io.StringIO()
+            if sys.stderr is None:
+                sys.stderr = io.StringIO()
             
             # Django設定
             os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'digital_pricelist_system.settings')

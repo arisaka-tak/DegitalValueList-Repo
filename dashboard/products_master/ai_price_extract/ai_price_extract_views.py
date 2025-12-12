@@ -98,6 +98,7 @@ def ai_extract_process(request):
                 extracted_manufacturer=extracted_data.get('manufacturer'),
                 extracted_specification=extracted_data.get('specification'),
                 extracted_price=str(extracted_data.get('new_price', '')),
+                extracted_retail_price=str(extracted_data.get('retail_price', '')) if extracted_data.get('retail_price') else None,
                 extracted_revision_reason=extracted_data.get('revision_reason'),  # 改定理由を保存
                 matched_product=matched_product,
                 match_score=match_score,
@@ -230,6 +231,7 @@ def _process_ai_extract_submission(request, results, json_data):
             
             # フォームから新価格を取得
             new_price_str = request.POST.get(f'new_price_{i}')
+            retail_price_str = request.POST.get(f'retail_price_{i}')
             
             if not new_price_str:
                 detail.status = 'エラー'
@@ -278,6 +280,15 @@ def _process_ai_extract_submission(request, results, json_data):
                 f'new_wholesale_price_1': str(new_price),
                 f'new_revision_reason_1': final_reason,
             }
+            
+            # 標準小売価格が入力されている場合は追加
+            if retail_price_str:
+                try:
+                    retail_price = Decimal(str(retail_price_str).strip())
+                    if retail_price >= 0:
+                        form_data[f'new_retail_price_1'] = str(retail_price)
+                except (ValueError, TypeError):
+                    pass
             
             # モックリクエストを作成
             from django.http import QueryDict
@@ -333,6 +344,7 @@ def _process_ai_extract_submission(request, results, json_data):
             
             # 既存の明細データを更新
             detail.extracted_price = new_price_str
+            detail.extracted_retail_price = retail_price_str if retail_price_str else None
             detail.matched_product = product
             detail.selected_candidate_text = f"{detail.match_score or 0}% - {product.product_name}"
             detail.status = '申請済'
@@ -670,6 +682,7 @@ def ai_extract_pdf_process(request):
                     {
                         'product_name': entity.get('name'),
                         'new_price': entity.get('price'),
+                        'retail_price': entity.get('retail_price'),
                         'model_number': entity.get('model'),
                         'manufacturer': manufacturer_name if manufacturer_name else None,
                         'specification': entity.get('spec')
@@ -730,6 +743,7 @@ def ai_extract_pdf_process(request):
                 extracted_manufacturer=extracted_data.get('manufacturer'),
                 extracted_specification=extracted_data.get('specification'),
                 extracted_price=str(extracted_data.get('new_price', '')),
+                extracted_retail_price=str(extracted_data.get('retail_price', '')) if extracted_data.get('retail_price') else None,
                 extracted_revision_reason='',  # 明細はデフォルト空欄
                 matched_product=matched_product,
                 match_score=match_score,
@@ -948,6 +962,8 @@ def ai_extract_update_detail(request):
                 
                 if field == 'extracted_price':
                     detail.extracted_price = str(value) if value else ''
+                elif field == 'extracted_retail_price':
+                    detail.extracted_retail_price = str(value) if value else None
                 elif field == 'extracted_revision_reason':
                     detail.extracted_revision_reason = str(value) if value else ''
                 elif field == 'extracted_product_name':

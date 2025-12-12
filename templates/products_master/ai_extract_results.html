@@ -9,7 +9,7 @@
 {% block content %}
     {% include 'components/page_header.html' with page_title="AI価格抽出結果" page_subtitle="商品照合結果の確認" %}
     
-    <div class="container main-content">
+    <div class="container-fluid main-content">
         {% if messages %}
             {% for message in messages %}
                 <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
@@ -60,9 +60,9 @@
                                 <tr>
                                     <th width="3%" class="text-center">#</th>
                                     <th width="18%">AI抽出情報</th>
-                                    <th width="8%">新仕切価格</th>
-                                    <th width="12%">改定理由</th>
-                                    <th width="23%">マッチング候補</th>
+                                    <th width="12%">価格情報</th>
+                                    <th width="14%">改定理由</th>
+                                    <th width="19%">マッチング候補</th>
                                     <th width="8%" class="text-center">ステータス</th>
                                     <th width="6%" class="text-center">操作</th>
                                 </tr>
@@ -129,15 +129,37 @@
                                             {% for detail in details %}
                                                 {% if detail.sequence == result.index|add:1 %}
                                                     {% if detail.status in 'スキップ,申請済' %}
-                                                        <span class="text-muted">{{ result.extracted_data.new_price|default:'-' }}</span>
-                                                        <input type="hidden" name="new_price_{{ result.index }}" value="{{ result.extracted_data.new_price|default:'' }}">
+                                                        <div class="mb-1">
+                                                            <small class="text-muted">新仕切価格</small><br>
+                                                            <span class="text-muted">{{ result.extracted_data.new_price|default:'-' }}</span>
+                                                            <input type="hidden" name="new_price_{{ result.index }}" value="{{ result.extracted_data.new_price|default:'' }}">
+                                                        </div>
+                                                        <div>
+                                                            <small class="text-muted">標準小売価格</small><br>
+                                                            <span class="text-muted">{{ result.extracted_data.retail_price|default:'-' }}</span>
+                                                            <input type="hidden" name="retail_price_{{ result.index }}" value="{{ result.extracted_data.retail_price|default:'' }}">
+                                                        </div>
                                                     {% else %}
-                                                        <input type="number" class="form-control form-control-sm" name="new_price_{{ result.index }}" value="{{ detail.extracted_price|default:'' }}" placeholder="新仕切価格">
+                                                        <div class="mb-2">
+                                                            <label class="form-label form-label-sm mb-1">新仕切価格</label>
+                                                            <input type="number" class="form-control form-control-sm" name="new_price_{{ result.index }}" value="{{ detail.extracted_price|default:'' }}" placeholder="新仕切価格">
+                                                        </div>
+                                                        <div>
+                                                            <label class="form-label form-label-sm mb-1">標準小売価格</label>
+                                                            <input type="number" class="form-control form-control-sm" name="retail_price_{{ result.index }}" value="{{ detail.extracted_retail_price|default:'' }}" placeholder="標準小売価格">
+                                                        </div>
                                                     {% endif %}
                                                 {% endif %}
                                             {% endfor %}
                                         {% else %}
-                                            <input type="number" class="form-control form-control-sm" name="new_price_{{ result.index }}" value="{{ result.extracted_data.new_price|default:'' }}" placeholder="新仕切価格">
+                                            <div class="mb-2">
+                                                <label class="form-label form-label-sm mb-1">新仕切価格</label>
+                                                <input type="number" class="form-control form-control-sm" name="new_price_{{ result.index }}" value="{{ result.extracted_data.new_price|default:'' }}" placeholder="新仕切価格">
+                                            </div>
+                                            <div>
+                                                <label class="form-label form-label-sm mb-1">標準小売価格</label>
+                                                <input type="number" class="form-control form-control-sm" name="retail_price_{{ result.index }}" value="{{ result.extracted_data.retail_price|default:'' }}" placeholder="標準小売価格">
+                                            </div>
                                         {% endif %}
                                     </td>
                                     <td class="align-middle">

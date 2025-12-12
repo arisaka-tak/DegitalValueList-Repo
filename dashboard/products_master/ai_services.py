@@ -188,6 +188,7 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
         
         # マスタ型式網羅チェック（AI抽出の品名・型式・規格のいずれかにマスタ型式が含まれる）
         model_coverage_matched = False
+        master_model_clean = ''
         if product.model_number:
             master_model_stripped = product.model_number.strip()
             # 数字オンリーの場合は6桁以上、それ以外は4桁以上
@@ -197,12 +198,12 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
                 master_model_normalized = normalize_text(product.model_number)
                 ai_all_fields = f"{ai_product_name} {ai_model_number} {ai_specification}"
                 ai_all_normalized = normalize_text(ai_all_fields)
-            
-            # 記号を除去して3文字以上の型式のみチェック
-            def clean_model_text(text):
-                """記号を除去してアルファベット・数字・漢字・ひらがな・カタカナのみにする"""
-                return re.sub(r'[^A-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]', '', text) if text else ''
-            
+                
+                # 記号を除去して3文字以上の型式のみチェック
+                def clean_model_text(text):
+                    """記号を除去してアルファベット・数字・漢字・ひらがな・カタカナのみにする"""
+                    return re.sub(r'[^A-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]', '', text) if text else ''
+                
                 master_model_clean = clean_model_text(master_model_normalized)
                 ai_all_clean = clean_model_text(ai_all_normalized)
                 
@@ -297,8 +298,7 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
         
         # 商品739とNFJ310と220のデバッグ情報を追加出力
         if is_nfj310_debug and (product.pk == 739 or product.model_number == '220' or 'NFJ310' in (product.model_number or '')):
-            clean_model_debug = clean_model_text(master_model_normalized) if 'master_model_normalized' in locals() else ''
-            print(f"商品{product.pk}[型式:{product.model_number}] 最終スコア: {max_score} (閾値:{effective_threshold}) 型式網羅:{model_coverage_matched} 記号除去後:'{clean_model_debug}' マッチキーワード:{matched_keywords}/{total_ai_keywords}")
+            print(f"商品{product.pk}[型式:{product.model_number}] 最終スコア: {max_score} (閾値:{effective_threshold}) 型式網羅:{model_coverage_matched} 記号除去後:'{master_model_clean}' マッチキーワード:{matched_keywords}/{total_ai_keywords}")
         
         # 閾値以上の場合のみ候補に追加
         if max_score >= effective_threshold and max_score > 0:

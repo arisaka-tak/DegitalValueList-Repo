@@ -13,8 +13,8 @@ def main():
     
     print("=== シンプル配布ビルド ===")
     
-    # PyInstallerで直接ビルド
-    cmd = [
+    # PyInstallerで直接ビルド（noconsole版）
+    cmd_noconsole = [
         sys.executable, "-m", "PyInstaller",
         "--onefile",
         "--noconsole",
@@ -26,16 +26,42 @@ def main():
         "--add-data=digital_pricelist_system;digital_pricelist_system",
         "--add-data=manage.py;.",
         "--add-data=dashboard/products_master/pdf_processing;dashboard/products_master/pdf_processing",
+        "--add-data=degital_value_list.xlsx;.",
         "--hidden-import=django",
         "--hidden-import=dashboard.products_master",
         "Django_run.py"
     ]
     
-    print("PyInstallerを実行中...")
-    result = subprocess.run(cmd, cwd=project_root)
+    # PyInstallerでコンソール版もビルド
+    cmd_console = [
+        sys.executable, "-m", "PyInstaller",
+        "--onefile",
+        "--name=DegitalValueList_Console",
+        "--distpath=dist/console",
+        "--add-data=templates;templates",
+        "--add-data=static;static", 
+        "--add-data=dashboard;dashboard",
+        "--add-data=digital_pricelist_system;digital_pricelist_system",
+        "--add-data=manage.py;.",
+        "--add-data=dashboard/products_master/pdf_processing;dashboard/products_master/pdf_processing",
+        "--add-data=degital_value_list.xlsx;.",
+        "--hidden-import=django",
+        "--hidden-import=dashboard.products_master",
+        "Django_run.py"
+    ]
     
-    if result.returncode != 0:
-        print("❌ PyInstallerビルドに失敗しました")
+    print("PyInstaller（noconsole版）を実行中...")
+    result_noconsole = subprocess.run(cmd_noconsole, cwd=project_root)
+    
+    if result_noconsole.returncode != 0:
+        print("❌ PyInstaller（noconsole版）ビルドに失敗しました")
+        return
+    
+    print("PyInstaller（console版）を実行中...")
+    result_console = subprocess.run(cmd_console, cwd=project_root)
+    
+    if result_console.returncode != 0:
+        print("❌ PyInstaller（console版）ビルドに失敗しました")
         return
     
     # バッチ処理用exeをビルド
@@ -67,12 +93,19 @@ def main():
     
     print("配布用フォルダを作成中...")
     
-    # exeファイルをコピー
+    # exeファイルをコピー（noconsole版）
     exe_src = project_root / "dist" / "web" / "DegitalValueList.exe"
     exe_dst = deploy_dir / "DegitalValueList.exe"
     if exe_src.exists():
         shutil.copy2(exe_src, exe_dst)
-        print(f"  ✅ {exe_dst.name} をコピー")
+        print(f"  ✅ {exe_dst.name} をコピー（noconsole版）")
+    
+    # exeファイルをコピー（console版）
+    exe_console_src = project_root / "dist" / "console" / "DegitalValueList_Console.exe"
+    exe_console_dst = deploy_dir / "DegitalValueList_Console.exe"
+    if exe_console_src.exists():
+        shutil.copy2(exe_console_src, exe_console_dst)
+        print(f"  ✅ {exe_console_dst.name} をコピー（console版）")
     
     # バッチ処理用exeをコピー
     batch_exe_src = project_root / "dist" / "batch" / "batch_ai_extract.exe"
@@ -110,21 +143,33 @@ def main():
     ai_extract_dir.mkdir(exist_ok=True)
     print(f"  ✅ {ai_extract_dir.name} フォルダを作成")
     
+    # Excelテンプレートファイルをコピー
+    excel_template_src = project_root / "degital_value_list.xlsx"
+    excel_template_dst = deploy_dir / "degital_value_list.xlsx"
+    if excel_template_src.exists():
+        shutil.copy2(excel_template_src, excel_template_dst)
+        print(f"  ✅ {excel_template_dst.name} をコピー")
+    
     print("")
     print("✅ ビルド完了!")
     print(f"📁 配布フォルダ: {deploy_dir}")
     print("")
     print("📁 配布構成:")
     print("  deploy/")
-    print("  ├── DegitalValueList.exe  # Webアプリ実行ファイル")
+    print("  ├── DegitalValueList.exe  # Webアプリ実行ファイル（noconsole版）")
+    print("  ├── DegitalValueList_Console.exe  # Webアプリ実行ファイル（console版）")
     print("  ├── batch_ai_extract.exe  # バッチ処理実行ファイル")
     print("  ├── config.ini           # 環境設定ファイル")
     print("  ├── db.sqlite3           # データベースファイル")
+    print("  ├── degital_value_list.xlsx # Excelテンプレートファイル")
     print("  └── media/               # ファイル保存フォルダ")
     print("      ├── approval/        # 決裁書PDF")
     print("      └── ai_extract/      # AI抽出PDF")
     print("")
     print("🚀 配布方法: deployフォルダを丸ごとコピーして配布")
+    print("💡 使い分け:")
+    print("   - DegitalValueList.exe: 通常使用（コンソール非表示）")
+    print("   - DegitalValueList_Console.exe: 終了時やトラブル時（コンソール表示）")
     print("🔄 環境切り替え: config.iniを差し替えて再起動")
     print("⏰ バッチ処理: batch_ai_extract.exe をタスクスケジューラで定期実行")
 

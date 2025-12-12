@@ -89,7 +89,11 @@ class AITableAnalyzer:
                     },
                     "price_column": {
                         "type": "integer",
-                        "description": "価格列のインデックス(0から開始)"
+                        "description": "仕切価格列のインデックス(0から開始)"
+                    },
+                    "retail_price_column": {
+                        "type": ["integer", "null"],
+                        "description": "標準小売価格列のインデックス(0から開始)、ない場合はnull"
                     },
                     "model_column": {
                         "type": ["integer", "null"],
@@ -100,7 +104,7 @@ class AITableAnalyzer:
                         "description": "規格列のインデックス(0から開始)、ない場合はnull"
                     }
                 },
-                "required": ["header_row", "product_column", "price_column", "model_column", "spec_column"],
+                "required": ["header_row", "product_column", "price_column", "retail_price_column", "model_column", "spec_column"],
                 "additionalProperties": False
             }
             
@@ -113,7 +117,8 @@ class AITableAnalyzer:
 
 注意事項:
 - 商品名列: 「商品」「品名」「製品」などを含む列
-- 価格列: 「仕切価格」「新価格」「改定後」などを含む列
+- 仕切価格列: 「仕切価格」「新価格」「改定後」などを含む列
+- 標準小売価格列: 「標準小売価格」「小売価格」「定価」などを含む列（ない場合はnull）
 - 型式列: 「コード」「型式」などを含む列（ない場合はnull）
 - 規格列: 「仕様」「規格」などを含む列（ない場合はnull）
 """
@@ -137,11 +142,11 @@ class AITableAnalyzer:
             
             result = json.loads(response.choices[0].message.content)
             return (result["header_row"], result["product_column"], result["price_column"], 
-                    result["model_column"], result["spec_column"])
+                    result["retail_price_column"], result["model_column"], result["spec_column"])
             
         except Exception as e:
             logger.error(f"AI解析エラー: {e}")
-            return None, None, None, None, None
+            return None, None, None, None, None, None
     
     def extract_document_metadata(self, all_text: str) -> dict:
         """文書全体からメタデータを抽出"""
@@ -222,7 +227,11 @@ class AITableAnalyzer:
                                 },
                                 "price": {
                                     "type": "string",
-                                    "description": "価格（数字のみ）"
+                                    "description": "仕切価格（数字のみ）"
+                                },
+                                "retail_price": {
+                                    "type": ["string", "null"],
+                                    "description": "標準小売価格（数字のみ、ない場合はnull）"
                                 },
                                 "model": {
                                     "type": ["string", "null"],
@@ -233,7 +242,7 @@ class AITableAnalyzer:
                                     "description": "規格・仕様（ある場合のみ）"
                                 }
                             },
-                            "required": ["name", "price", "model", "spec"],
+                            "required": ["name", "price", "retail_price", "model", "spec"],
                             "additionalProperties": False
                         }
                     }
@@ -250,7 +259,8 @@ class AITableAnalyzer:
 
 抽出条件:
 - 商品名が明記されているもの（価格がなくても可）
-- 価格は改定後・新価格・変更後の価格を優先
+- 仕切価格は改定後・新価格・変更後の価格を優先
+- 標準小売価格がある場合は抽出（ない場合はnull）
 - 価格は数字のみで抽出（カンマや円マークは除外）
 - 型式やコードがある場合はmodelフィールドに抽出
 - 規格や仕様がある場合はspecフィールドに抽出
@@ -338,11 +348,12 @@ def process_tables_with_ai(input_path: str = None, output_path: str = None):
             if analysis_result[0] is None:
                 continue
             
-            header_row, product_col, price_col, model_col, spec_col = analysis_result
+            header_row, product_col, price_col, retail_price_col, model_col, spec_col = analysis_result
             
             logger.info(f"  ヘッダー行: {header_row}")
             logger.info(f"  商品名列: {product_col}")
-            logger.info(f"  価格列: {price_col}")
+            logger.info(f"  仕切価格列: {price_col}")
+            logger.info(f"  標準小売価格列: {retail_price_col}")
             logger.info(f"  型式列: {model_col}")
             logger.info(f"  規格列: {spec_col}")
             
@@ -354,11 +365,13 @@ def process_tables_with_ai(input_path: str = None, output_path: str = None):
             for row_idx in range(header_row + 1, table.row_count):
                 product_name = table_matrix[row_idx][product_col] if product_col < len(table_matrix[row_idx]) else ""
                 price_value = table_matrix[row_idx][price_col] if price_col < len(table_matrix[row_idx]) else ""
+                retail_price_value = table_matrix[row_idx][retail_price_col] if retail_price_col is not None and retail_price_col < len(table_matrix[row_idx]) else ""
                 model_value = table_matrix[row_idx][model_col] if model_col is not None and model_col < len(table_matrix[row_idx]) else ""
                 spec_value = table_matrix[row_idx][spec_col] if spec_col is not None and spec_col < len(table_matrix[row_idx]) else ""
                 
                 if product_name.strip() and price_value.strip():
                     clean_price = ''.join(filter(str.isdigit, price_value))
+                    clean_retail_price = ''.join(filter(str.isdigit, retail_price_value)) if retail_price_value.strip() else None
                     
                     if clean_price:
                         product_data = {
@@ -366,6 +379,8 @@ def process_tables_with_ai(input_path: str = None, output_path: str = None):
                             'name': product_name.strip(),
                             'price': clean_price
                         }
+                        if clean_retail_price:
+                            product_data['retail_price'] = clean_retail_price
                         if model_value:
                             product_data['model'] = model_value.strip()
                         if spec_value:
@@ -373,7 +388,9 @@ def process_tables_with_ai(input_path: str = None, output_path: str = None):
                         
                         extracted_products.append(product_data)
                         
-                        debug_info = f"  -> 抽出: {product_name.strip()} = {clean_price}円"
+                        debug_info = f"  -> 抽出: {product_name.strip()} = 仕切{clean_price}円"
+                        if clean_retail_price:
+                            debug_info += f", 小売{clean_retail_price}円"
                         if model_value:
                             debug_info += f", 型式: {model_value.strip()}"
                         if spec_value:
@@ -419,7 +436,9 @@ def process_tables_with_ai(input_path: str = None, output_path: str = None):
     logger.info(f"抽出商品: {len(extracted_products)} 件")
     for i, product in enumerate(extracted_products, 1):
         logger.info(f"{i:2d}. 商品名: {product['name']}")
-        logger.info(f"    価格: {product['price']} 円")
+        logger.info(f"    仕切価格: {product['price']} 円")
+        if 'retail_price' in product:
+            logger.info(f"    標準小売価格: {product['retail_price']} 円")
         if 'model' in product:
             logger.info(f"    型式: {product['model']}")
         if 'spec' in product:
