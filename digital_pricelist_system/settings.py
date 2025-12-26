@@ -22,14 +22,16 @@ load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# 設定ファイルパス（一箇所で定義）
+CONFIG_PATH = Path(r"\\128.167.100.10\資材・大家畜事業部\04資材部\★デジタル価格表作成プログラム\config.ini")
+
 def get_config():
     """設定ファイルを読み込み"""
     config = configparser.ConfigParser()
-    config_path = BASE_DIR / "config.ini"
     
-    if config_path.exists():
+    if CONFIG_PATH.exists():
         try:
-            config.read(config_path, encoding='utf-8')
+            config.read(CONFIG_PATH, encoding='utf-8')
             return config
         except Exception:
             pass
@@ -42,25 +44,22 @@ def get_database_path():
     if 'DATABASE_PATH' in os.environ:
         return os.environ['DATABASE_PATH']
     
-    # PyInstaller環境ではexeと同じフォルダのファイルを参照
-    if getattr(sys, 'frozen', False):
-        exe_dir = Path(sys.executable).parent
-        config_path = exe_dir / "config.ini"
-    else:
-        config_path = BASE_DIR / "config.ini"
-    
     # config.iniから直接読み込み
     config = configparser.ConfigParser()
-    if config_path.exists():
+    if CONFIG_PATH.exists():
         try:
-            config.read(config_path, encoding='utf-8')
+            config.read(CONFIG_PATH, encoding='utf-8')
             db_path = config.get('DATABASE', 'path', fallback='db.sqlite3')
-            # PyInstaller環境では相対パスをexeフォルダからの相対パスとして解釈
-            if getattr(sys, 'frozen', False) and not os.path.isabs(db_path):
-                return str(exe_dir / db_path)
-            elif not os.path.isabs(db_path):
-                return str(BASE_DIR / db_path)
-            return db_path
+            # 絶対パスか相対パスか判定
+            if os.path.isabs(db_path):
+                return db_path
+            else:
+                # PyInstaller環境では相対パスをexeフォルダからの相対パスとして解釈
+                if getattr(sys, 'frozen', False):
+                    exe_dir = Path(sys.executable).parent
+                    return str(exe_dir / db_path)
+                else:
+                    return str(BASE_DIR / db_path)
         except Exception:
             pass
     
@@ -71,24 +70,21 @@ def get_database_path():
 
 def get_media_root():
     """メディアファイル保存先を取得"""
-    # PyInstaller環境ではexeと同じフォルダのファイルを参照
-    if getattr(sys, 'frozen', False):
-        exe_dir = Path(sys.executable).parent
-        config_path = exe_dir / "config.ini"
-    else:
-        config_path = BASE_DIR / "config.ini"
-    
     config = configparser.ConfigParser()
-    if config_path.exists():
+    if CONFIG_PATH.exists():
         try:
-            config.read(config_path, encoding='utf-8')
+            config.read(CONFIG_PATH, encoding='utf-8')
             media_path = config.get('FILES', 'media_root', fallback='media')
-            # PyInstaller環境では相対パスをexeフォルダからの相対パスとして解釈
-            if getattr(sys, 'frozen', False) and not os.path.isabs(media_path):
-                return exe_dir / media_path
-            elif not os.path.isabs(media_path):
-                return BASE_DIR / media_path
-            return Path(media_path)
+            # 絶対パスか相対パスか判定
+            if os.path.isabs(media_path):
+                return Path(media_path)
+            else:
+                # PyInstaller環境では相対パスをexeフォルダからの相対パスとして解釈
+                if getattr(sys, 'frozen', False):
+                    exe_dir = Path(sys.executable).parent
+                    return exe_dir / media_path
+                else:
+                    return BASE_DIR / media_path
         except Exception:
             pass
     

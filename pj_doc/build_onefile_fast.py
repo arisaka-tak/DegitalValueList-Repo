@@ -17,8 +17,8 @@ def build_onefile_fast():
     cmd = [
         'pyinstaller',
         '--onefile',
-        '--console',
-        '--name=DigitalValueList_Fast',
+        '--noconsole',
+        '--name=DigitalValueList',
         
         # 高速化オプション
         '--noupx',  # UPX圧縮を無効化（展開時間短縮）

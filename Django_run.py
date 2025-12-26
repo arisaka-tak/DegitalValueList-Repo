@@ -73,6 +73,9 @@ def kill_existing_server():
     except Exception:
         pass
 
+# 設定ファイルパス（一箇所で定義）
+CONFIG_PATH = Path(r"\\128.167.100.10\資材・大家畜事業部\04資材部\★デジタル価格表作成プログラム\config.ini")
+# CONFIG_PATH = Path(r"c:\Project\ZCS_DegitalValueList\config.ini")
 def find_venv_python():
     """仮想環境のPythonを探す"""
     project_root = Path(__file__).parent
@@ -94,8 +97,8 @@ def find_venv_python():
 def load_config():
     """config.iniを読み込み"""
     config = configparser.ConfigParser()
-    config_path = Path(__file__).parent / "config.ini"
-    
+
+
     # デフォルト値
     defaults = {
         'port': 8000,
@@ -103,9 +106,9 @@ def load_config():
         'db_path': 'db.sqlite3'
     }
     
-    if config_path.exists():
+    if CONFIG_PATH.exists():
         try:
-            config.read(config_path, encoding='utf-8')
+            config.read(CONFIG_PATH, encoding='utf-8')
             port = config.getint('SYSTEM', 'port', fallback=defaults['port'])
             auto_browser = config.getboolean('SYSTEM', 'auto_browser', fallback=defaults['auto_browser'])
             db_path = config.get('DATABASE', 'path', fallback=defaults['db_path'])
@@ -147,7 +150,7 @@ def validate_config_paths():
             project_root = Path(__file__).parent
             print(f"開発環境: {project_root}")
         
-        config_path = project_root / "config.ini"
+        config_path = CONFIG_PATH
         print(f"config.iniチェック: {config_path}")
         if not config_path.exists():
             print(f"エラー: config.iniが見つかりません: {config_path}")
@@ -155,7 +158,7 @@ def validate_config_paths():
             sys.exit(1)
         
         config = configparser.ConfigParser()
-        config.read(config_path, encoding='utf-8')
+        config.read(CONFIG_PATH, encoding='utf-8')
         print("config.ini読み込み完了")
         
         # データベースファイルチェック
@@ -221,8 +224,7 @@ def main():
         return
     
     # 設定読み込み
-    config_path = project_root / "config.ini"
-    logger.info(f"設定ファイル: {config_path} {'(存在)' if config_path.exists() else '(デフォルト値使用)'}")
+    logger.info(f"設定ファイル: {CONFIG_PATH} {'(存在)' if CONFIG_PATH.exists() else '(デフォルト値使用)'}")
     
     port, auto_browser, db_path = load_config()
     

@@ -49,6 +49,8 @@ deploy_fast/
 deploy_onedir/
 deploy_onedir_optimized/
 dist/
+build_checker/
+deploy_checker/
 
 # OS
 .DS_Store
