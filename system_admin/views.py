@@ -7,6 +7,7 @@ from django.contrib import messages
 from django.db import transaction
 from dashboard.products_master.models import Product, PriceHistory, LivestockType, Category, Manufacturer, ProductGrossMarginRate, ProductApproval, PriceHistoryApproval
 from datetime import datetime
+from django.http import JsonResponse
 try:
     import openpyxl
     EXCEL_SUPPORT = True
@@ -486,3 +487,30 @@ def status_reset(request):
     return render(request, 'system_admin/status_reset.html', {
         'status_products': status_products
     })
+
+def regenerate_keywords_batch(request):
+    """全商品のキーワード一括再生成"""
+    if request.method == 'POST':
+        try:
+            from dashboard.products_master.product_detail.product_detail_views import generate_search_keywords
+            
+            updated_count = 0
+            for product in Product.objects.all():
+                keywords = generate_search_keywords(product)
+                if product.search_keywords != keywords:
+                    product.search_keywords = keywords
+                    product.save(update_fields=['search_keywords'])
+                    updated_count += 1
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'{updated_count}件の商品のキーワードを更新しました。'
+            })
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            })
+    
+    return JsonResponse({'success': False, 'error': 'POSTメソッドが必要です'})

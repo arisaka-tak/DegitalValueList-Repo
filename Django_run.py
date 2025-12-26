@@ -139,35 +139,70 @@ def setup_logging(project_root):
 
 def validate_config_paths():
     """設定ファイルのパスを検証"""
-    if getattr(sys, 'frozen', False):
-        project_root = Path(sys.executable).parent
-    else:
-        project_root = Path(__file__).parent
-    
-    config_path = project_root / "config.ini"
-    if not config_path.exists():
-        sys.exit(1)
-    
-    config = configparser.ConfigParser()
-    config.read(config_path, encoding='utf-8')
-    
-    # データベースファイルチェック
-    db_path = config.get('DATABASE', 'path', fallback='db.sqlite3')
-    if not Path(db_path).is_absolute():
-        db_path = project_root / db_path
-    if not Path(db_path).exists():
-        sys.exit(1)
-    
-    # MEDIA_ROOTチェック
-    media_root = config.get('FILES', 'media_root', fallback='media')
-    if not Path(media_root).is_absolute():
-        media_root = project_root / media_root
-    if not Path(media_root).exists():
+    try:
+        if getattr(sys, 'frozen', False):
+            project_root = Path(sys.executable).parent
+            print(f"PyInstaller環境: {project_root}")
+        else:
+            project_root = Path(__file__).parent
+            print(f"開発環境: {project_root}")
+        
+        config_path = project_root / "config.ini"
+        print(f"config.iniチェック: {config_path}")
+        if not config_path.exists():
+            print(f"エラー: config.iniが見つかりません: {config_path}")
+            input("何かキーを押して終了...")
+            sys.exit(1)
+        
+        config = configparser.ConfigParser()
+        config.read(config_path, encoding='utf-8')
+        print("config.ini読み込み完了")
+        
+        # データベースファイルチェック
+        db_path = config.get('DATABASE', 'path', fallback='db.sqlite3')
+        if not Path(db_path).is_absolute():
+            db_path = project_root / db_path
+        print(f"DBファイルチェック: {db_path}")
+        if not Path(db_path).exists():
+            print(f"エラー: DBファイルが見つかりません: {db_path}")
+            input("何かキーを押して終了...")
+            sys.exit(1)
+        
+        # MEDIA_ROOTチェック
+        media_root = config.get('FILES', 'media_root', fallback='media')
+        if not Path(media_root).is_absolute():
+            media_root = project_root / media_root
+        print(f"MEDIA_ROOTチェック: {media_root}")
+        if not Path(media_root).exists():
+            print(f"エラー: MEDIA_ROOTが見つかりません: {media_root}")
+            input("何かキーを押して終了...")
+            sys.exit(1)
+        
+        print("設定ファイル検証完了")
+    except Exception as e:
+        print(f"validate_config_pathsエラー: {e}")
+        input("何かキーを押して終了...")
         sys.exit(1)
 
 def main():
-    # 設定ファイル検証
-    validate_config_paths()
+    try:
+        # PyInstaller環境での高速化
+        if getattr(sys, 'frozen', False):
+            print("デジタル価格表システムを起動中...")
+            # プロセス優先度を上げる
+            try:
+                import psutil
+                p = psutil.Process()
+                p.nice(psutil.HIGH_PRIORITY_CLASS)
+            except ImportError:
+                pass
+        
+        # 設定ファイル検証
+        validate_config_paths()
+    except Exception as e:
+        print(f"初期化エラー: {e}")
+        input("何かキーを押して終了...")  # コンソールを開いたままにする
+        return
     
     # PyInstaller環境でのパス設定
     if getattr(sys, 'frozen', False):
@@ -249,28 +284,47 @@ def main():
             os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'digital_pricelist_system.settings')
             django.setup()
             
-            logger.info("ブラウザを起動しています...")
+            logger.info(f"サーバーを起動中: http://127.0.0.1:{port}/")
+            
+            # サーバー起動を別スレッドで実行
+            import threading
+            def start_server():
+                execute_from_command_line(['manage.py', 'runserver', f'127.0.0.1:{port}', '--noreload', '--insecure'])
+            
+            server_thread = threading.Thread(target=start_server, daemon=True)
+            server_thread.start()
+            
+            # サーバーが起動するまで待機
+            for i in range(30):  # 30秒まで待機
+                time.sleep(1)
+                if is_port_in_use(port):
+                    logger.info("サーバー起動完了")
+                    break
+            else:
+                logger.error("サーバー起動タイムアウト")
+                return
+            
+            # サーバー起動後にブラウザを開く
             if auto_browser:
+                logger.info("ブラウザを起動しています...")
                 webbrowser.open(f"http://127.0.0.1:{port}/")
             
             logger.info(f"サーバーが起動しました: http://127.0.0.1:{port}/")
             
-            # 開発環境でのみコンソールメッセージ表示
-            if not getattr(sys, 'frozen', False):
-                logger.info("ブラウザを起動しています...")
-                logger.info(f"サーバーが起動しました: http://127.0.0.1:{port}/")
-                logger.info("終了するには、このウィンドウを閉じるかCtrl+Cを押してください。")
-            
-            # Djangoサーバーを起動
-            execute_from_command_line(['manage.py', 'runserver', f'127.0.0.1:{port}', '--noreload'])
+            # メインスレッドで待機
+            try:
+                while server_thread.is_alive():
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                logger.info("システムを終了しています...")
         else:
             # 開発環境では従来通り
             process = subprocess.Popen([
-                python_executable, "manage.py", "runserver", f"127.0.0.1:{port}"
+                python_executable, "manage.py", "runserver", f"127.0.0.1:{port}", "--insecure"
             ])
             
             # サーバーが起動するまで待機
-            for i in range(10):
+            for i in range(30):  # 30秒まで待機
                 time.sleep(1)
                 if is_port_in_use(port):
                     break
@@ -292,9 +346,15 @@ def main():
             process.terminate()
             process.wait()
     except Exception as e:
-        logger.error(f"システム起動エラー: {e}")
-        if not getattr(sys, 'frozen', False):
-            logger.error(f"エラーが発生しました: {e}")
+        print(f"システム起動エラー: {e}")
+        if getattr(sys, 'frozen', False):
+            input("何かキーを押して終了...")
+        return
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"致命的エラー: {e}")
+        if getattr(sys, 'frozen', False):
+            input("何かキーを押して終了...")

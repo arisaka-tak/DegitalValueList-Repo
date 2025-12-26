@@ -32,3 +32,19 @@ def parse_user_info(user_string):
         return username, hostname
     else:
         return user_string, "unknown"
+
+def is_admin_user():
+    """
+    現在のユーザがデータ管理権限を持つかチェック
+    Returns:
+        bool: BC102131を含むホスト名の場合True
+    """
+    try:
+        # テスト用: 一時的に管理者権限を無効化
+        return False  # この行のコメントを外すと非管理者モードになります
+        
+        current_user = get_current_user()
+        username, hostname = parse_user_info(current_user)
+        return 'BC102131' in hostname
+    except Exception:
+        return False

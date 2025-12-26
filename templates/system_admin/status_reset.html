@@ -16,6 +16,18 @@
         {% endfor %}
     {% endif %}
     
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>キーワード再生成</h5>
+        </div>
+        <div class="card-body">
+            <p>全商品の検索キーワードを再生成します。</p>
+            <button onclick="regenerateKeywords()" class="btn btn-primary">
+                <i class="fas fa-sync-alt"></i> キーワード再生成
+            </button>
+        </div>
+    </div>
+    
     <div class="card">
         <div class="card-header">
             <h5>ステータス強制リセット</h5>
@@ -65,4 +77,32 @@
         <a href="/" class="btn btn-secondary">戻る</a>
     </div>
 </div>
+
+<script>
+function regenerateKeywords() {
+    if (!confirm('全商品のキーワードを再生成します。時間がかかる場合があります。実行しますか？')) {
+        return;
+    }
+    
+    fetch('{% url "system_admin:regenerate_keywords_batch" %}', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+        } else {
+            alert('エラー: ' + data.error);
+        }
+    })
+    .catch(error => {
+        alert('通信エラーが発生しました');
+    });
+}
+</script>
+{% csrf_token %}
 {% endblock %}

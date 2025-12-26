@@ -43,6 +43,19 @@
             </div>
         </a>
     </div>
+    
+    {% if is_admin %}
+    <!-- データ管理 -->
+    <div class="col-md-4">
+        <a href="{% url 'system_admin:status_reset' %}" class="text-decoration-none">
+            <div class="card h-100 card-hover">
+                <div class="card-body text-center">
+                    <h5 class="card-title">⚙️ データ管理</h5>
+                </div>
+            </div>
+        </a>
+    </div>
+    {% endif %}
 </div>
 
 

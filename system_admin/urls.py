@@ -19,6 +19,7 @@ urlpatterns = [
     path('import/', views.import_csv, name='import_csv'),
     path('clear/', views.clear_data, name='clear_data'),
     path('status-reset/', views.status_reset, name='status_reset'),
+    path('regenerate-keywords/', views.regenerate_keywords_batch, name='regenerate_keywords_batch'),
     # 古いURL形式との互換性
     path('export_csv/', redirect_export_csv),
     path('import_csv/', redirect_import_csv),

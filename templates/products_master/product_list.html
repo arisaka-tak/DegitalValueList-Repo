@@ -8,7 +8,7 @@
 
 {% block content %}
     {% url 'products_master:ai_extract' as ai_extract_url %}
-    {% include 'components/page_header.html' with page_title="商品一覧" page_subtitle="登録されている商品の一覧" header_actions='<button onclick="regenerateKeywords()" class="btn btn-secondary me-2">🔄 キーワード再生成</button><a href="'|add:ai_extract_url|add:'" class="btn btn-warning me-2">🤖 AI価格抽出</a><a href="/products/new/" class="btn btn-primary">新規登録</a>' %}
+    {% include 'components/page_header.html' with page_title="商品一覧" page_subtitle="登録されている商品の一覧" header_actions='<a href="'|add:ai_extract_url|add:'" class="btn btn-warning me-2">🤖 AI価格抽出</a><a href="/products/new/" class="btn btn-primary">新規登録</a>' %}
     
     <div class="container">
         {% if messages %}
@@ -38,15 +38,15 @@
                         <table class="table table-hover">
                             <thead>
                                 <tr>
-                                    <th>商品番号</th>
-                                    <th>商品コード</th>
-                                    <th>商品名</th>
-                                    <th>畜種</th>
-                                    <th>分類</th>
-                                    <th>メーカー</th>
-                                    <th>発送単位</th>
-                                    <th>操作</th>
-                                    <th>ステータス</th>
+                                    <th style="min-width: 80px;">商品番号</th>
+                                    <th style="min-width: 100px;">商品コード</th>
+                                    <th style="min-width: 200px;">商品名</th>
+                                    <th style="min-width: 60px;">畜種</th>
+                                    <th style="min-width: 60px;">分類</th>
+                                    <th style="min-width: 120px;">メーカー</th>
+                                    <th style="min-width: 80px;">発送単位</th>
+                                    <th style="min-width: 200px;">操作</th>
+                                    <th style="min-width: 100px;">ステータス</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -129,31 +129,5 @@
     {% load static %}
     <script src="{% static 'js/components/search-form-component.js' %}"></script>
     
-    <script>
-    function regenerateKeywords() {
-        if (!confirm('全商品のキーワードを再生成します。時間がかかる場合があります。実行しますか？')) {
-            return;
-        }
-        
-        fetch('{% url "products_master:regenerate_keywords_batch" %}', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
-                'Content-Type': 'application/json'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert(data.message);
-            } else {
-                alert('エラー: ' + data.error);
-            }
-        })
-        .catch(error => {
-            alert('通信エラーが発生しました');
-        });
-    }
-    </script>
-    {% csrf_token %}
+
 {% endblock %}

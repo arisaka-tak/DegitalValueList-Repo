@@ -24,22 +24,30 @@ wheels/
 venv/
 env/
 ENV/
+.amazonq/
 
 # Django
 *.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
+logs/
 
 # IDE
 .vscode/
 .idea/
+.amazonq/
 *.swp
 *.swo
 
 # PyInstaller
 *.spec
 build/
+build_fast/
+deploy/
+deploy_fast/
+deploy_onedir/
+deploy_onedir_optimized/
 dist/
 
 # OS

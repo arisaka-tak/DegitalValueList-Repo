@@ -421,7 +421,7 @@ def export_excel(request):
     
     # 承認状態をチェック
     is_approved = _check_approval_pdf(selected_month)
-    approval_prefix = '' if is_approved else '【未承認版】'
+    approval_status = '確定版' if is_approved else '未承認版'
     
     # 未承認版の表示（セル結合で目立たせる）
     if not is_approved:
@@ -434,9 +434,9 @@ def export_excel(request):
         warning_cell.alignment = Alignment(horizontal='center', vertical='center')  # 中央揃え
     
     if selected_month:
-        filename = f'{approval_prefix}デジタル価格表_{selected_month.replace("/", "")}.xlsx'
+        filename = f'{selected_month.replace("/", "")}デジタル価格表_{approval_status}.xlsx'
     else:
-        filename = f'{approval_prefix}デジタル価格表_{datetime.now().strftime("%Y%m%d")}.xlsx'
+        filename = f'{datetime.now().strftime("%Y%m")}デジタル価格表_{approval_status}.xlsx'
     
     output = io.BytesIO()
     wb.save(output)
@@ -446,7 +446,10 @@ def export_excel(request):
         output.getvalue(),
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    # UTF-8エンコードでファイル名を設定
+    import urllib.parse
+    encoded_filename = urllib.parse.quote(filename.encode('utf-8'))
+    response['Content-Disposition'] = f'attachment; filename*=UTF-8\'\'{encoded_filename}'
     
     return response
 
