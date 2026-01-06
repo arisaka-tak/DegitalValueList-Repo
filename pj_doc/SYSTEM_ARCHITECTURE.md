@@ -103,35 +103,48 @@ CREATE TABLE products_master_pricehistoryapproval (
 ```
 dashboard/products_master/
 ├── product_list/          # 商品一覧機能
-│   ├── product_list_views.py
-│   └── product_list_urls.py
+│   └── product_list_views.py
 ├── product_detail/        # 商品詳細・承認機能
-│   ├── product_detail_views.py
-│   └── product_detail_urls.py
-├── product_create/        # 商品作成・編集機能
-│   ├── product_create_views.py
-│   └── product_create_urls.py
+│   ├── partials/         # 部分テンプレート
+│   └── product_detail_views.py
+├── product_delete/        # 商品削除機能
+│   └── product_delete_views.py
 ├── integrated_pricelist/  # デジタル価格表機能
-│   ├── integrated_pricelist_views.py
-│   └── integrated_pricelist_urls.py
-├── ai_extract/           # AI価格抽出機能
-│   ├── ai_extract_views.py
-│   └── ai_extract_urls.py
+│   └── integrated_pricelist_views.py
+├── ai_price_extract/     # AI価格抽出機能
+│   ├── ai_price_extract_views.py
+│   └── ai_history_views.py
+├── pdf_processing/       # PDF処理・AI連携
+│   ├── extract_di_only.py
+│   ├── process_ai_only.py
+│   └── process_ai_simple.py
+├── management/           # Django管理コマンド
+│   └── commands/
+│       ├── cleanup_ai_transactions.py
+│       └── create_test_data.py
+├── templatetags/         # カスタムテンプレートタグ
+│   └── price_filters.py
 ├── models.py             # データモデル定義
 ├── ai_extract_models.py  # AI抽出用モデル
 ├── ai_services.py        # AI関連サービス
 ├── product_services.py   # 商品関連サービス
+├── document_intelligence_service.py  # Azure Document Intelligence
+├── keyword_batch_views.py # キーワード一括処理
+├── master_views.py       # マスタ管理
 ├── forms.py              # フォーム定義
 └── urls.py               # URL設定
 ```
 
 ### 機能モジュール分割
 
-1. **product_list**: 商品一覧・検索・ページネーション・キーワード再生成
-2. **product_detail**: 商品詳細・Web Components編集・申請機能
-3. **product_create**: 商品作成・編集・削除申請
-4. **integrated_pricelist**: デジタル価格表表示
-5. **ai_extract**: AI価格抽出・商品マッチング・論理削除管理
+1. **product_list**: 商品一覧・検索・ページネーション
+2. **product_detail**: 商品詳細・Web Components編集・申請機能・承認ワークフロー
+3. **product_delete**: 商品削除申請・論理削除処理
+4. **integrated_pricelist**: デジタル価格表表示・並び順管理・Excel出力
+5. **ai_price_extract**: AI価格抽出・商品マッチング・履歴管理
+6. **pdf_processing**: PDF解析・Azure Document Intelligence連携
+7. **keyword_batch_views**: キーワード一括再生成
+8. **master_views**: メーカー・カテゴリ・畜種マスタ管理
 
 ## Web Components設計パターン
 

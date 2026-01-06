@@ -135,16 +135,27 @@ def submit_approval(request, pk=None):
 ```
 templates/
 ├── base.html                    # ベーステンプレート
+├── dashboard.html               # ダッシュボード
 ├── components/                  # 共通コンポーネント
 │   ├── breadcrumb.html
 │   ├── page_header.html
-│   └── bottom_action_bar.html
-└── products_master/
-    ├── product_list.html        # 商品一覧
-    ├── product_detail.html      # 商品詳細
-    ├── integrated_pricelist.html # デジタル価格表
-    └── partials/               # 部分テンプレート
-        └── price_history_table.html
+│   ├── bottom_action_bar.html
+│   ├── gross_margin_modal.html
+│   ├── manufacturer_modal.html
+│   └── price_history_section.html
+├── products_master/
+│   ├── product_list.html        # 商品一覧
+│   ├── product_detail.html      # 商品詳細
+│   ├── integrated_pricelist.html # デジタル価格表
+│   ├── approval_list.html       # 承認一覧
+│   ├── approval_detail.html     # 承認詳細
+│   ├── ai_extract_*.html        # AI価格抽出関連
+│   └── *_form.html             # マスタ管理フォーム
+└── system_admin/               # システム管理
+    ├── export.html
+    ├── import.html
+    ├── status_reset.html
+    └── clear_data.html
 ```
 
 ### Web Components構成
@@ -163,8 +174,15 @@ products_master/
 │   └── product_list_views.py
 ├── product_detail/
 │   └── product_detail_views.py
-└── integrated_pricelist/
-    └── integrated_pricelist_views.py
+├── integrated_pricelist/
+│   └── integrated_pricelist_views.py
+├── ai_price_extract/
+│   └── ai_price_extract_views.py
+├── pdf_processing/
+│   └── extract_di_only.py
+├── master_views.py              # マスタ管理
+├── keyword_batch_views.py       # キーワード一括処理
+└── ai_services.py              # AI関連サービス
 ```
 
 ## 実装パターン
@@ -245,7 +263,35 @@ products_master/
 - [ ] 命名規則に従っているか？
 - [ ] 余計なコード変更がないか？
 
-## 参考資料
+## 新機能: バージョン管理システム
+
+### バージョンチェッカー
+
+```
+version_checker.py              # バージョンチェッカープログラム
+version.txt                     # バージョン情報
+Django_run.py                   # メインプログラム起動
+```
+
+### 運用フロー
+
+1. **VersionChecker.exe** でバージョンチェック
+2. サーバーから最新版を自動ダウンロード
+3. **DigitalValueList.exe** を起動
+
+### 設定ファイル管理
+
+```python
+# サーバー上の共通設定ファイル
+CONFIG_PATH = Path(r"\\server\path\config.ini")
+
+# 全ての設定読み込みで共通パスを使用
+def get_database_path():
+    config.read(CONFIG_PATH, encoding='utf-8')
+    
+def get_media_root():
+    config.read(CONFIG_PATH, encoding='utf-8')
+```
 
 - [Web Components MDN](https://developer.mozilla.org/ja/docs/Web/Web_Components)
 - [Django 公式ドキュメント](https://docs.djangoproject.com/)
