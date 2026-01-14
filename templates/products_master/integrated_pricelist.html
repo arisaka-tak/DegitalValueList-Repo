@@ -86,7 +86,7 @@
                             </thead>
                             <tbody>
                                 {% for item in page_obj %}
-                                    <tr class="sortable-row{% if not item.has_price %} table-secondary{% endif %}{% if item.is_group_start and not forloop.first %} group-border{% endif %}" 
+                                    <tr class="sortable-row{% if not item.has_price %} table-secondary{% endif %}{% if item.is_group_start and not forloop.first %} group-border{% endif %}{% if item.has_price and item.price_history.get_revision_amount != 0 %} revision-highlight{% endif %}" 
                                         data-product-id="{{ item.product.pk }}" 
                                         data-livestock="{{ item.product.livestock_type }}" 
                                         data-category="{{ item.product.category }}" 
@@ -254,7 +254,7 @@
                     <div class="text-center py-5">
                         <div class="mb-3" style="font-size: 3rem; color: #6c757d;">📊</div>
                         <h5 class="text-muted">価格データがありません</h5>
-                        <p classtext-muted">商品と価格履歴を登録してください。</p>
+                        <p class="text-muted">商品と価格履歴を登録してください。</p>
                         <div class="d-flex gap-2 justify-content-center">
                             <a href="{% url 'products_master:product_new' %}" class="btn btn-primary">商品登録</a>
                             <a href="{% url 'products_master:product_list' %}" class="btn btn-outline-primary">商品一覧</a>
@@ -411,25 +411,90 @@
     .drop-target {
         background-color: #e3f2fd !important;
     }
+    
+    /* 改定額が0ではない行の背景色 */
+    .revision-highlight {
+        background-color: #FFC000 !important;
+    }
+    
+    .revision-highlight:hover {
+        background-color: #E6AC00 !important;
+    }
+    
+    .revision-highlight.table-secondary {
+        background-color: #FFD966 !important;
+    }
+    
+    .revision-highlight.table-secondary:hover {
+        background-color: #E6C200 !important;
+    }
 
     /* ヘッダー固定 */
     .price-table-wrapper #priceTable thead tr:first-child th {
         position: sticky !important;
         top: 0 !important;
-        z-index: 102 !important;
+        z-index: 10 !important;
         background-color: #4472C4 !important;
         color: #fff !important;
         vertical-align: middle !important;
         border: 1px solid #fff !important;
     }
-    
+
     .price-table-wrapper #priceTable thead tr:nth-child(2) th {
         position: sticky !important;
-        z-index: 101 !important;
+        z-index: 10 !important;
         background-color: #4472C4 !important;
         color: #fff !important;
         vertical-align: middle !important;
         border: 1px solid #fff !important;
+    }
+
+    /* №カラム（1列目）と操作カラム（2列目）を横スクロール時に固定 */
+    .price-table-wrapper #priceTable thead th:nth-child(1),
+    .price-table-wrapper #priceTable tbody td:nth-child(1) {
+        position: sticky !important;
+        left: 0 !important;
+        z-index: 5 !important;
+        background-color: #fff !important;
+    }
+    
+    .price-table-wrapper #priceTable thead th:nth-child(2),
+    .price-table-wrapper #priceTable tbody td:nth-child(2) {
+        position: sticky !important;
+        left: 50px !important;
+        z-index: 5 !important;
+        background-color: #fff !important;
+        border-right: 2px solid #dee2e6 !important;
+    }
+
+    /* №カラムと操作カラムのヘッダー部分は他のヘッダーより上に表示（縦横両方の固定） */
+    .price-table-wrapper #priceTable thead tr:first-child th:nth-child(1) {
+        z-index: 20 !important;
+        background-color: #4472C4 !important;
+    }
+    
+    .price-table-wrapper #priceTable thead tr:first-child th:nth-child(2) {
+        z-index: 20 !important;
+        background-color: #4472C4 !important;
+    }
+
+    .price-table-wrapper #priceTable thead tr:nth-child(2) th:nth-child(1) {
+        z-index: 20 !important;
+        background-color: #4472C4 !important;
+    }
+    
+    .price-table-wrapper #priceTable thead tr:nth-child(2) th:nth-child(2) {
+        z-index: 20 !important;
+        background-color: #4472C4 !important;
+    }
+
+    /* グレー背景の行の№カラムと操作カラムもグレーに */
+    .price-table-wrapper #priceTable tbody tr.table-secondary td:nth-child(1) {
+        background-color: #e9ecef !important;
+    }
+    
+    .price-table-wrapper #priceTable tbody tr.table-secondary td:nth-child(2) {
+        background-color: #e9ecef !important;
     }
     </style>
     
@@ -761,7 +826,7 @@
             body: JSON.stringify({
                 product_id: parseInt(productId),
                 direction: direction,
-                current_page: {{ page_obj.number }}
+                current_page: parseInt('{{ page_obj.number }}')
             })
         })
         .then(response => response.json())

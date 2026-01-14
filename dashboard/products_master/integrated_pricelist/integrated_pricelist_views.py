@@ -310,12 +310,42 @@ def export_excel(request):
     
     try:
         wb = openpyxl.load_workbook(template_path)
-        ws = wb.active
+        # [価格表]シートを指定（存在しない場合はアクティブシートを使用）
+        try:
+            ws = wb['価格表']
+        except KeyError:
+            ws = wb.active
+        
+        # 表紙シートの{sysdate}と{effective_date}を置き換え
+        try:
+            cover_sheet = wb['表紙']
+            now = datetime.now()
+            current_date = f'{now.year}年{now.month}月{now.day}日'
+            
+            # 選択した適用月の1日を作成
+            effective_date_str = ''
+            if selected_month:
+                try:
+                    year, month = selected_month.split('/')
+                    effective_date_str = f'{year}年{int(month)}月1日'
+                except:
+                    effective_date_str = ''
+            
+            for row in cover_sheet.iter_rows():
+                for cell in row:
+                    if cell.value and isinstance(cell.value, str):
+                        if '{sysdate}' in cell.value:
+                            cell.value = cell.value.replace('{sysdate}', current_date)
+                        if '{effective_date}' in cell.value and effective_date_str:
+                            cell.value = cell.value.replace('{effective_date}', effective_date_str)
+        except KeyError:
+            pass  # 表紙シートがない場合はスキップ
+        
     except FileNotFoundError:
         # テンプレートがない場合は新規作成
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = 'デジタル価格表'
+        ws.title = '価格表'
         
         headers = [
             '№', '畜種', '分類', 'メーカー', '商品名', '型式', '規格', '発送単位',
@@ -423,9 +453,21 @@ def export_excel(request):
         
         # データ行にスタイルを適用
         gray_fill = PatternFill(start_color='F2F2F2', end_color='F2F2F2', fill_type='solid')
+        yellow_fill = PatternFill(start_color='FFC000', end_color='FFC000', fill_type='solid')  # 改定額0以外の色
         
         for row in range(5, row_num):
             is_gray_row = (row - 4) % 2 == 1  # 奇数行をグレーに
+            
+            # 改定額が0以外かチェック（J列：改定額）
+            revision_cell = ws.cell(row=row, column=10)
+            has_revision = False
+            if revision_cell.value is not None:
+                try:
+                    revision_value = float(str(revision_cell.value).replace(',', ''))
+                    has_revision = revision_value != 0
+                except (ValueError, TypeError):
+                    # 数値変換できない場合（文字列等）は改定ありとみなす
+                    has_revision = str(revision_cell.value).strip() != ''
             
             for col in range(1, 15):
                 cell = ws.cell(row=row, column=col)
@@ -434,10 +476,15 @@ def export_excel(request):
                     cell.font = style['font']
                 if style['border']:
                     cell.border = style['border']
-                if is_gray_row:
+                
+                # 背景色の優先順位：改定額あり > グレー行 > デフォルト
+                if has_revision:
+                    cell.fill = yellow_fill
+                elif is_gray_row:
                     cell.fill = gray_fill
                 elif style['fill']:
                     cell.fill = style['fill']
+                    
                 if style['alignment']:
                     cell.alignment = style['alignment']
                 if style['number_format']:
