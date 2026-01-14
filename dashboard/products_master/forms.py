@@ -85,13 +85,14 @@ class PDFUploadForm(forms.Form):
         help_text='価格表やカタログのPDFファイルをアップロードしてください（最大50MB）'
     )
     transaction_name = forms.CharField(
-        label='処理名',
+        label='処理名（任意）',
         max_length=200,
+        required=False,
         widget=forms.TextInput(attrs={
             'class': 'form-control',
-            'placeholder': '例：2024年12月価格表'
+            'placeholder': '例：2024年12月価格表（空欄可）'
         }),
-        help_text='この処理を識別するための名前を入力してください'
+        help_text='この処理を識別するための名前（任意）'
     )
     
     def clean_pdf_file(self):

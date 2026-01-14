@@ -81,26 +81,35 @@
                                             <td>
                                                 <div class="btn-group" role="group">
                                                     <a href="{% url 'products_master:approval_detail' approval.pk %}" class="btn btn-sm btn-outline-primary">詳細</a>
-                                                    <button type="button" class="btn btn-sm btn-success{% if approval.status == '再申請待ち' %} disabled{% endif %}"
-                                                            {% if approval.status != '再申請待ち' %}
-                                                            hx-post="{% url 'products_master:approve_application' approval.pk %}"
-                                                            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                                                            hx-confirm="承認しますか？"
-                                                            {% else %}
-                                                            disabled
-                                                            {% endif %}>承認</button>
-                                                    <button type="button" class="btn btn-sm btn-warning{% if approval.status == '再申請待ち' %} disabled{% endif %}"
-                                                            {% if approval.status != '再申請待ち' %}
-                                                            hx-post="{% url 'products_master:reject_application' approval.pk %}"
-                                                            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                                                            hx-confirm="申請を却下しますか？（再申請待ちに変更）"
-                                                            {% else %}
-                                                            disabled
-                                                            {% endif %}>却下</button>
-                                                    <button type="button" class="btn btn-sm btn-danger"
-                                                            hx-post="{% url 'products_master:cancel_application' approval.pk %}"
-                                                            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                                                            hx-confirm="申請を取消しますか？">取消</button>
+                                                    
+                                                    <!-- 承認ボタン -->
+                                                    {% if approval.status != '再申請待ち' %}
+                                                    <form method="post" action="{% url 'products_master:approve_application' approval.pk %}" style="display: inline;">
+                                                        {% csrf_token %}
+                                                        <button type="submit" class="btn btn-sm btn-success" 
+                                                                onclick="return confirm('承認しますか？')">承認</button>
+                                                    </form>
+                                                    {% else %}
+                                                    <button type="button" class="btn btn-sm btn-success disabled" disabled>承認</button>
+                                                    {% endif %}
+                                                    
+                                                    <!-- 却下ボタン -->
+                                                    {% if approval.status != '再申請待ち' %}
+                                                    <form method="post" action="{% url 'products_master:reject_application' approval.pk %}" style="display: inline;">
+                                                        {% csrf_token %}
+                                                        <button type="submit" class="btn btn-sm btn-warning" 
+                                                                onclick="return confirm('申請を却下しますか？（再申請待ちに変更）')">却下</button>
+                                                    </form>
+                                                    {% else %}
+                                                    <button type="button" class="btn btn-sm btn-warning disabled" disabled>却下</button>
+                                                    {% endif %}
+                                                    
+                                                    <!-- 取消ボタン -->
+                                                    <form method="post" action="{% url 'products_master:cancel_application' approval.pk %}" style="display: inline;">
+                                                        {% csrf_token %}
+                                                        <button type="submit" class="btn btn-sm btn-danger" 
+                                                                onclick="return confirm('申請を取消しますか？')">取消</button>
+                                                    </form>
                                                 </div>
                                             </td>
                                         </tr>

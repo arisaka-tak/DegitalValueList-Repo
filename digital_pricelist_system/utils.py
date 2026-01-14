@@ -41,7 +41,7 @@ def is_admin_user():
     """
     try:
         # テスト用: 一時的に管理者権限を無効化
-        return False  # この行のコメントを外すと非管理者モードになります
+        # return False  # この行のコメントを外すと非管理者モードになります
         
         current_user = get_current_user()
         username, hostname = parse_user_info(current_user)

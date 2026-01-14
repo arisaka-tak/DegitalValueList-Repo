@@ -330,11 +330,9 @@
         
         let wholesaleInput;
         if (kenrenInput.name.startsWith('new_')) {
-            // 新規行の場合
             const index = kenrenInput.name.split('_').pop();
             wholesaleInput = row.querySelector(`input[name="new_wholesale_price_${index}"]`);
         } else {
-            // 既存行の場合
             const historyId = kenrenInput.name.split('_').pop();
             wholesaleInput = row.querySelector(`input[name="edit_wholesale_price_${historyId}"]`);
         }
@@ -346,18 +344,18 @@
             return;
         }
         
-        // 粗利率を計算
+        // 共通関数で粗利率を計算
         const kenrenNum = parseFloat(kenrenValue.replace(/,/g, ''));
         const wholesaleNum = parseFloat(wholesaleValue.replace(/,/g, ''));
         
-        if (wholesaleNum > 0) {
-            const marginRate = kenrenNum / wholesaleNum;
-            const profitRate = (marginRate - 1) * 100;
+        const marginRate = window.GrossMarginUtils.calculateGrossMarginRate(wholesaleNum, kenrenNum);
+        if (marginRate !== null) {
+            const profitDisplay = window.GrossMarginUtils.formatGrossMarginRate(marginRate);
             
             // 粗利率セルを更新
             const marginCell = row.querySelector('td:nth-child(6)');
             if (marginCell) {
-                marginCell.textContent = profitRate.toFixed(1) + '%';
+                marginCell.textContent = profitDisplay;
                 marginCell.style.color = 'blue';
                 marginCell.style.fontWeight = 'bold';
             }
@@ -397,13 +395,17 @@
             try {
                 const wholesaleNum = parseFloat(wholesaleValue.replace(/,/g, ''));
                 const marginPercent = parseFloat(marginText.replace('%', ''));
-                const marginRate = (marginPercent / 100) + 1;
-                const calculatedKenren = Math.floor(wholesaleNum * marginRate);
+                const marginRate = 1 - (marginPercent / 100);
                 
-                // プレースホルダーとして表示
-                kenrenInput.placeholder = calculatedKenren.toLocaleString();
-                kenrenInput.style.color = 'green';
-                kenrenInput.style.fontWeight = 'bold';
+                // 共通関数で県連価格を計算
+                const calculatedKenren = window.GrossMarginUtils.calculateKenrenPrice(wholesaleNum, marginRate);
+                
+                if (calculatedKenren !== null) {
+                    // プレースホルダーとして表示
+                    kenrenInput.placeholder = calculatedKenren.toLocaleString();
+                    kenrenInput.style.color = 'green';
+                    kenrenInput.style.fontWeight = 'bold';
+                }
                 
             } catch (e) {
                 // エラー時はクリア
@@ -422,6 +424,7 @@
     
     <!-- Webコンポーネント読み込み -->
     {% load static %}
+    <script src="{% static 'js/gross-margin-utils.js' %}"></script>
     <script src="{% static 'js/components/price-history-component.js' %}"></script>
     <script src="{% static 'js/components/product-basic-info-component.js' %}"></script>
 {% endblock %}

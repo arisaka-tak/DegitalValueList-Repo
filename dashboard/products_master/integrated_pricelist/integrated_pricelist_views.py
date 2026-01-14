@@ -3,19 +3,25 @@ from django.core.paginator import Paginator
 from django.http import JsonResponse, HttpResponse
 from django.contrib import messages
 from django.shortcuts import redirect
-from django.db.models import Q
+from django.db.models import Q, OuterRef, Subquery
+from django.db import transaction
+from django.conf import settings
 from dashboard.products_master.models import Product, PriceHistory, ApprovalPdf
 from dashboard.products_master.ai_services import normalize_text
 import unicodedata
 from digital_pricelist_system.utils import get_current_user
 from digital_pricelist_system.breadcrumbs import get_breadcrumbs
+from digital_pricelist_system.config_paths import CONFIG_PATH
 from datetime import datetime, timedelta
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
 import io
 import os
-from django.conf import settings
+import sys
+import json
+import configparser
+import urllib.parse
 
 def _check_approval_pdf(year_month):
     """承認PDFの存在をチェック
@@ -200,10 +206,6 @@ def update_sort_order(request):
         return JsonResponse({'success': False, 'message': 'POSTメソッドが必要です'})
     
     try:
-        import json
-        from django.http import JsonResponse
-        from django.db import transaction
-        
         data = json.loads(request.body)
         updates = data.get('updates', [])
         
@@ -232,12 +234,18 @@ def export_excel(request):
     
     _initialize_sort_numbers()
     
-    # 商品と価格履歴を一括取得（N+1問題を解決）
+    # データ取得を最適化（必要な列のみ取得）
     all_products = Product.objects.filter(is_active=True).select_related(
         'livestock_type', 'category', 'manufacturer'
+    ).only(
+        'id', 'product_name', 'model_number', 'specification', 'shipping_unit', 
+        'shipping_fee', 'remarks', 'sort_num',
+        'livestock_type__name', 'category__name', 'manufacturer__name'
     ).order_by('livestock_type', 'category', 'manufacturer', 'sort_num', 'product_name')
     
-    product_ids = list(all_products.values_list('id', flat=True))
+    # 商品データを即座にリスト化してDBコネクションを解放
+    product_list = list(all_products)
+    product_ids = [p.id for p in product_list]
     
     # 価格履歴を一括取得
     if selected_month:
@@ -264,14 +272,14 @@ def export_excel(request):
             product_id__in=product_ids
         )
     
-    # 価格履歴マップを作成
-    price_histories = {h.product_id: h for h in histories}
+    # 価格履歴も即座にリスト化してDBコネクションを解放
+    price_histories = {h.product_id: h for h in list(histories)}
     
     # 価格ありかつ仕切価格0円以外の商品のみフィルタ
     product_data = []
-    for product in all_products:
+    for product in product_list:
         price_history = price_histories.get(product.id)
-        if price_history and price_history.wholesale_price != 0:  # 価格なしまたは仕切価格0円の商品はExcelに出さない
+        if price_history and price_history.wholesale_price != 0:
             product_data.append({
                 'product': product,
                 'price_history': price_history,
@@ -279,10 +287,26 @@ def export_excel(request):
             })
     
     # テンプレートファイルを読み込み
-    import os
-    from django.conf import settings
+    # config.iniからテンプレートパスを取得
+    config = configparser.ConfigParser()
+    template_path = None
     
-    template_path = os.path.join(settings.BASE_DIR, 'degital_value_list.xlsx')
+    if CONFIG_PATH.exists():
+        try:
+            config.read(CONFIG_PATH, encoding='utf-8')
+            template_path = config.get('FILES', 'excel_template', fallback=None)
+        except Exception:
+            pass
+    
+    # テンプレートパスが設定されていない場合のフォールバック
+    if not template_path:
+        # PyInstaller環境でのテンプレートパス取得
+        if getattr(sys, 'frozen', False):
+            # PyInstaller環境では一時フォルダから取得
+            template_path = os.path.join(sys._MEIPASS, 'degital_value_list.xlsx')
+        else:
+            # 開発環境では従来通り
+            template_path = os.path.join(settings.BASE_DIR, 'degital_value_list.xlsx')
     
     try:
         wb = openpyxl.load_workbook(template_path)
@@ -447,7 +471,6 @@ def export_excel(request):
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
     # UTF-8エンコードでファイル名を設定
-    import urllib.parse
     encoded_filename = urllib.parse.quote(filename.encode('utf-8'))
     response['Content-Disposition'] = f'attachment; filename*=UTF-8\'\'{encoded_filename}'
     
@@ -459,8 +482,6 @@ def reset_sort_order(request):
         return JsonResponse({'success': False, 'message': 'POSTメソッドが必要です'})
     
     try:
-        from django.db import transaction
-        
         # 全商品のsort_numを0にリセット
         with transaction.atomic():
             Product.objects.filter(is_active=True).update(sort_num=0)
@@ -476,10 +497,6 @@ def cross_page_move(request):
         return JsonResponse({'success': False, 'message': 'POSTメソッドが必要です'})
     
     try:
-        import json
-        from django.db import transaction
-        from django.urls import reverse
-        
         data = json.loads(request.body)
         product_id = data.get('product_id')
         direction = data.get('direction')  # 'prev' or 'next'
@@ -527,6 +544,7 @@ def cross_page_move(request):
                 product.save(update_fields=['sort_num'])
         
         # リダイレクトURLを構築
+        from django.urls import reverse
         redirect_page = current_page
         if direction == 'prev' and current_page > 1:
             redirect_page = current_page - 1

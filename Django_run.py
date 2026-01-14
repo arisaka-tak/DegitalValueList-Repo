@@ -73,9 +73,7 @@ def kill_existing_server():
     except Exception:
         pass
 
-# 設定ファイルパス（一箇所で定義）
-CONFIG_PATH = Path(r"\\128.167.100.10\資材・大家畜事業部\04資材部\★デジタル価格表作成プログラム\config.ini")
-# CONFIG_PATH = Path(r"c:\Project\ZCS_DegitalValueList\config.ini")
+from digital_pricelist_system.config_paths import CONFIG_PATH
 def find_venv_python():
     """仮想環境のPythonを探す"""
     project_root = Path(__file__).parent
@@ -144,17 +142,18 @@ def validate_config_paths():
     """設定ファイルのパスを検証"""
     try:
         if getattr(sys, 'frozen', False):
-            project_root = Path(sys.executable).parent
-            print(f"PyInstaller環境: {project_root}")
+            exe_dir = Path(sys.executable).parent
+            print(f"PyInstaller環境: {exe_dir}")
         else:
-            project_root = Path(__file__).parent
-            print(f"開発環境: {project_root}")
+            exe_dir = Path(__file__).parent
+            print(f"開発環境: {exe_dir}")
         
         config_path = CONFIG_PATH
         print(f"config.iniチェック: {config_path}")
         if not config_path.exists():
             print(f"エラー: config.iniが見つかりません: {config_path}")
-            input("何かキーを押して終了...")
+            if not getattr(sys, 'frozen', False):  # 開発環境のみ
+                input("何かキーを押して終了...")
             sys.exit(1)
         
         config = configparser.ConfigParser()
@@ -163,28 +162,27 @@ def validate_config_paths():
         
         # データベースファイルチェック
         db_path = config.get('DATABASE', 'path', fallback='db.sqlite3')
-        if not Path(db_path).is_absolute():
-            db_path = project_root / db_path
         print(f"DBファイルチェック: {db_path}")
         if not Path(db_path).exists():
             print(f"エラー: DBファイルが見つかりません: {db_path}")
-            input("何かキーを押して終了...")
+            if not getattr(sys, 'frozen', False):  # 開発環境のみ
+                input("何かキーを押して終了...")
             sys.exit(1)
         
         # MEDIA_ROOTチェック
         media_root = config.get('FILES', 'media_root', fallback='media')
-        if not Path(media_root).is_absolute():
-            media_root = project_root / media_root
         print(f"MEDIA_ROOTチェック: {media_root}")
         if not Path(media_root).exists():
             print(f"エラー: MEDIA_ROOTが見つかりません: {media_root}")
-            input("何かキーを押して終了...")
+            if not getattr(sys, 'frozen', False):  # 開発環境のみ
+                input("何かキーを押して終了...")
             sys.exit(1)
         
         print("設定ファイル検証完了")
     except Exception as e:
         print(f"validate_config_pathsエラー: {e}")
-        input("何かキーを押して終了...")
+        if not getattr(sys, 'frozen', False):  # 開発環境のみ
+            input("何かキーを押して終了...")
         sys.exit(1)
 
 def main():
@@ -204,23 +202,24 @@ def main():
         validate_config_paths()
     except Exception as e:
         print(f"初期化エラー: {e}")
-        input("何かキーを押して終了...")  # コンソールを開いたままにする
+        if not getattr(sys, 'frozen', False):  # 開発環境のみ
+            input("何かキーを押して終了...")  # コンソールを開いたままにする
         return
     
     # PyInstaller環境でのパス設定
     if getattr(sys, 'frozen', False):
-        project_root = Path(sys.executable).parent
+        exe_dir = Path(sys.executable).parent
     else:
-        project_root = Path(__file__).parent
+        exe_dir = Path(__file__).parent
     
     # ログ設定
-    logger = setup_logging(project_root)
+    logger = setup_logging(exe_dir)
     
     logger.info("デジタル価格表システムを起動しています...")
     
     # manage.pyの存在チェック（PyInstaller環境ではスキップ）
-    if not getattr(sys, 'frozen', False) and not (project_root / "manage.py").exists():
-        logger.error(f"manage.pyが見つかりません: {project_root}")
+    if not getattr(sys, 'frozen', False) and not (exe_dir / "manage.py").exists():
+        logger.error(f"manage.pyが見つかりません: {exe_dir}")
         return
     
     # 設定読み込み
@@ -229,7 +228,7 @@ def main():
     port, auto_browser, db_path = load_config()
     
     # データベースパスを環境変数に設定
-    db_full_path = project_root / db_path
+    db_full_path = exe_dir / db_path
     os.environ['DATABASE_PATH'] = str(db_full_path)
     
     # DBパスを表示
@@ -260,7 +259,7 @@ def main():
             return
     
     # 現在のディレクトリを変更
-    os.chdir(project_root)
+    os.chdir(exe_dir)
     
     # 指定ポートが使用中かチェック
     if is_port_in_use(port):

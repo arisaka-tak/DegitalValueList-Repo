@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 from dashboard.products_master.models import Product, PriceHistory, LivestockType, Category, Manufacturer
 from decimal import Decimal
+from digital_pricelist_system.gross_margin_utils import calculate_gross_margin_rate
 import random
 
 class Command(BaseCommand):
@@ -105,12 +106,14 @@ class Command(BaseCommand):
                 
                 if j == 0:  # 1件目は必ず仕切価格と県連価格を設定
                     kenren_price = int(wholesale_price * random.uniform(1.05, 1.25))  # 5-25%の粗利
-                    # 粗利率を県連価格から算出
-                    gross_margin_rate = Decimal(str(kenren_price / wholesale_price))
+                    # 共通関数で粗利率を算出
+                    gross_margin_rate = calculate_gross_margin_rate(wholesale_price, kenren_price)
+                    if gross_margin_rate is None:
+                        gross_margin_rate = Decimal('0.90')  # デフォルト値
                     kenren_price_str = str(kenren_price)
                 else:
                     # 2件目以降は自動計算
-                    gross_margin_rate = Decimal('1.1')
+                    gross_margin_rate = Decimal('0.90')
                     kenren_price_str = None
                 
                 PriceHistory.objects.create(

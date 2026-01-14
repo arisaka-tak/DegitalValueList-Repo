@@ -30,19 +30,16 @@ from dashboard.products_master.ai_services import process_extraction_results
 from dashboard.products_master.models import Product
 from django.core.files.base import ContentFile
 
+from digital_pricelist_system.config_paths import CONFIG_PATH
+
 def validate_config_paths():
     """設定ファイルのパスを検証"""
-    if getattr(sys, 'frozen', False):
-        config_path = Path(sys.executable).parent / "config.ini"
-    else:
-        config_path = Path(__file__).parent / "config.ini"
-    
-    if not config_path.exists():
-        print(f"❗ エラー: 設定ファイルが見つかりません: {config_path}")
+    if not CONFIG_PATH.exists():
+        print(f"❗ エラー: 設定ファイルが見つかりません: {CONFIG_PATH}")
         sys.exit(1)
     
     config = configparser.ConfigParser()
-    config.read(config_path, encoding='utf-8')
+    config.read(CONFIG_PATH, encoding='utf-8')
     
     # バッチ処理用フォルダチェック
     watch_folder = config.get('AI_BATCH', 'watch_folder', fallback=r'C:\S3\batch_input')
@@ -69,12 +66,6 @@ def load_config():
     """設定ファイルを読み込み"""
     config = configparser.ConfigParser()
     
-    # PyInstaller環境ではexeと同じフォルダのconfig.iniを参照
-    if getattr(sys, 'frozen', False):
-        config_path = Path(sys.executable).parent / "config.ini"
-    else:
-        config_path = Path(__file__).parent / "config.ini"
-    
     # デフォルト値
     defaults = {
         'watch_folder': r'C:\S3\batch_input',
@@ -86,9 +77,9 @@ def load_config():
         'pac_url': ''
     }
     
-    if config_path.exists():
+    if CONFIG_PATH.exists():
         try:
-            config.read(config_path, encoding='utf-8')
+            config.read(CONFIG_PATH, encoding='utf-8')
             watch_folder = config.get('AI_BATCH', 'watch_folder', fallback=defaults['watch_folder'])
             error_folder = config.get('AI_BATCH', 'error_folder', fallback=defaults['error_folder'])
             media_root = config.get('FILES', 'media_root', fallback=defaults['media_root'])
@@ -363,14 +354,8 @@ def main():
     )
     logger = logging.getLogger(__name__)
     
-    # config.iniパスを表示
-    if getattr(sys, 'frozen', False):
-        config_path = Path(sys.executable).parent / "config.ini"
-    else:
-        config_path = Path(__file__).parent / "config.ini"
-    
     logger.info("=== AI抽出バッチ処理開始 ===")
-    logger.info(f"設定ファイル: {config_path} {'(存在)' if config_path.exists() else '(デフォルト値使用)'}")
+    logger.info(f"設定ファイル: {CONFIG_PATH} {'(存在)' if CONFIG_PATH.exists() else '(デフォルト値使用)'}")
     logger.info(f"監視フォルダ: {WATCH_FOLDER}")
     logger.info(f"エラーフォルダ: {ERROR_FOLDER}")
     logger.info(f"DBファイル: {db_path}")

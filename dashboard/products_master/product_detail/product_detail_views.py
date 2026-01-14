@@ -12,6 +12,7 @@ from decimal import Decimal
 from dashboard.products_master.forms import ProductForm
 from digital_pricelist_system.utils import get_current_user
 from digital_pricelist_system.breadcrumbs import get_breadcrumbs
+from digital_pricelist_system.gross_margin_utils import calculate_gross_margin_rate as calc_margin_rate
 
 def is_admin_user(username):
     """管理者ユーザーかどうかを判定"""
@@ -916,19 +917,12 @@ def get_kenren_price_input(request, wholesale_price):
     return None, None
 
 def calculate_margin_from_prices(kenren_price, wholesale_price):
-    """県連価格と仕切価格から粗利率を計算（％表記時に小数点第二位を四捨五入）"""
+    """県連価格と仕切価格から粗利率を計算（共通関数使用）"""
     try:
         wholesale_numeric = float(wholesale_price.replace(',', ''))
-        if wholesale_numeric > 0:
-            # 粗利率を計算（倍率）
-            margin_rate = kenren_price / wholesale_numeric
-            # ％表記に変換して小数点第二位を四捨五入
-            percentage = margin_rate * 100
-            rounded_percentage = round(percentage, 1)  # 小数点第一位まで
-            # 倍率に戻す
-            rounded_rate = rounded_percentage / 100
-            return Decimal(str(rounded_rate))
-    except (ValueError, AttributeError, ZeroDivisionError):
+        kenren_numeric = float(str(kenren_price).replace(',', ''))
+        return calc_margin_rate(wholesale_numeric, kenren_numeric)
+    except (ValueError, AttributeError):
         pass
     return None
 
@@ -950,7 +944,7 @@ def get_margin_from_table(product, period_year):
         return None
 
 def get_margin_from_history(product, period_year, wholesale_price):
-    """過去履歴から粗利率を推定（前年度の最終県連価格÷前年度の最終仕切価格）"""
+    """過去履歴から粗利率を推定（前年度の最終仕切価格÷前年度の最終県連価格）"""
     from dashboard.products_master.models import PriceHistory
     if not product:
         return None
@@ -966,30 +960,25 @@ def get_margin_from_history(product, period_year, wholesale_price):
     
     try:
         # 前年度の最終県連価格を取得
-        if past_history.kenren_price:
-            past_kenren_price = float(str(past_history.kenren_price).replace(',', ''))
-        else:
-            past_wholesale = float(str(past_history.wholesale_price).replace(',', '')) if past_history.wholesale_price != '都度見積' else None
-            if past_wholesale and past_history.gross_margin_rate:
-                past_kenren_price = past_wholesale * float(past_history.gross_margin_rate)
-            else:
-                return None
+        if not past_history.kenren_price:
+            return None
+        
+        past_kenren_price = float(str(past_history.kenren_price).replace(',', ''))
         
         # 前年度の最終仕切価格を取得
         past_wholesale_price = float(str(past_history.wholesale_price).replace(',', '')) if past_history.wholesale_price != '都度見積' else None
         
-        if not past_wholesale_price or past_wholesale_price <= 0:
+        if not past_wholesale_price or past_wholesale_price <= 0 or past_kenren_price <= 0:
             return None
         
-        # 前年度の最終県連価格÷前年度の最終仕切価格で粗利率を算出
-        calculated_rate = past_kenren_price / past_wholesale_price
+        # 新しい計算方式：仕切価格÷県連価格
+        calculated_rate = past_wholesale_price / past_kenren_price
         
-        # ％表記で小数点第二位を四捨五入
-        percentage = calculated_rate * 100
-        rounded_percentage = round(percentage, 1)
-        rounded_rate = rounded_percentage / 100
+        # 小数点第2位まで、3位以下を切り捨て
+        import math
+        truncated_rate = math.floor(calculated_rate * 100) / 100
         
-        return Decimal(str(rounded_rate))
+        return Decimal(str(truncated_rate))
     except (ValueError, TypeError, ZeroDivisionError):
         return None
 
@@ -1035,7 +1024,7 @@ def determine_gross_margin_rate(product, period_year, wholesale_price, request=N
             return latest_margin.gross_margin_rate
     
     # 4. 初回登録時はデフォルト値
-    return Decimal('1.1')
+    return Decimal('0.90')
 
 def approval_list(request):
     """申請一覧画面"""
@@ -1310,11 +1299,12 @@ def _process_approval(approval):
                             try:
                                 wholesale_num = float(str(approval_history.wholesale_price).replace(',', ''))
                                 kenren_num = float(str(approval_history.kenren_price).replace(',', ''))
-                                if wholesale_num > 0:
-                                    calculated_rate = kenren_num / wholesale_num
-                                    percentage = calculated_rate * 100
-                                    rounded_percentage = round(percentage, 1)
-                                    final_rate = Decimal(str(rounded_percentage / 100))
+                                if wholesale_num > 0 and kenren_num > 0:
+                                    # 新しい計算方式：仕切価格÷県連価格
+                                    calculated_rate = wholesale_num / kenren_num
+                                    # 小数点第2位まで、3位以下を切り捨て
+                                    import math
+                                    final_rate = Decimal(str(math.floor(calculated_rate * 100) / 100))
                                     
                                     # 既存レコードを削除してから新規作成
                                     ProductGrossMarginRate.objects.filter(
@@ -1411,11 +1401,12 @@ def _process_approval(approval):
                             try:
                                 wholesale_num = float(str(approval_history.wholesale_price).replace(',', ''))
                                 kenren_num = float(str(approval_history.kenren_price).replace(',', ''))
-                                if wholesale_num > 0:
-                                    calculated_rate = kenren_num / wholesale_num
-                                    percentage = calculated_rate * 100
-                                    rounded_percentage = round(percentage, 1)
-                                    final_rate = Decimal(str(rounded_percentage / 100))
+                                if wholesale_num > 0 and kenren_num > 0:
+                                    # 新しい計算方式：仕切価格÷県連価格
+                                    calculated_rate = wholesale_num / kenren_num
+                                    # 小数点第2位まで、3位以下を切り捨て
+                                    import math
+                                    final_rate = Decimal(str(math.floor(calculated_rate * 100) / 100))
                                     
                                     # 既存レコードを削除してから新規作成
                                     ProductGrossMarginRate.objects.filter(

@@ -137,7 +137,7 @@
                                         </td>
                                         <td class="text-end">
                                             {% if item.has_price %}
-                                                {{ item.price_history.get_revision_amount|floatformat:0 }}
+                                                {{ item.price_history.get_revision_amount|format_revision_amount }}
                                             {% else %}
                                                 <span class="text-muted">-</span>
                                             {% endif %}

@@ -68,6 +68,73 @@ class AITableAnalyzer:
             logger.error(f"✗ Azure OpenAI 初期化エラー: {e}")
             return None
     
+    def is_price_table(self, table_data: List[List[str]]) -> bool:
+        """テーブルが価格表かどうかを判定"""
+        if self.openai_client is None:
+            return False
+        
+        try:
+            sample_data = table_data[:min(5, len(table_data))]
+            
+            schema = {
+                "type": "object",
+                "properties": {
+                    "is_price_table": {
+                        "type": "boolean",
+                        "description": "この表が商品価格表かどうか"
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "判定理由"
+                    }
+                },
+                "required": ["is_price_table", "reason"],
+                "additionalProperties": False
+            }
+            
+            prompt = f"""
+以下の表データが商品価格表かどうかを判定してください。
+
+表データ:
+{sample_data}
+
+商品価格表の特徴:
+- 商品名、型式、価格などの列がある
+- 複数の商品が行として並んでいる
+- 価格情報（仕切価格、小売価格など）が含まれる
+
+価格表ではない例:
+- 件名と内容のみの表
+- 連絡先情報の表
+- 有効期限などの単純な情報表
+- 2列で項目名と値のペアの表
+"""
+            
+            response = self.openai_client.chat.completions.create(
+                model=AZURE_OPENAI_DEPLOYMENT,
+                messages=[
+                    {"role": "system", "content": "あなたは表の種類を判定する専門家です。"},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "table_classification",
+                        "schema": schema,
+                        "strict": True
+                    }
+                }
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            logger.info(f"  価格表判定: {result['is_price_table']} - {result['reason']}")
+            return result["is_price_table"]
+            
+        except Exception as e:
+            logger.error(f"価格表判定エラー: {e}")
+            return False
+    
     def analyze_table_structure(self, table_data: List[List[str]]) -> tuple:
         """表構造をAIで解析"""
         if self.openai_client is None:
@@ -109,13 +176,12 @@ class AITableAnalyzer:
             }
             
             prompt = f"""
-これは商品仕入価格の変更通知書の表データです。
-最初のヘッダー行と各列を特定してください。
+この商品価格表のヘッダー行と各列を特定してください。
 
 表データ:
 {sample_data}
 
-注意事項:
+各列の特徴:
 - 商品名列: 「商品」「品名」「製品」などを含む列
 - 仕切価格列: 「仕切価格」「新価格」「改定後」などを含む列
 - 標準小売価格列: 「標準小売価格」「小売価格」「定価」などを含む列（ない場合はnull）
@@ -338,11 +404,17 @@ def process_tables_with_ai(input_path: str = None, output_path: str = None):
         for cell in table.cells:
             table_matrix[cell.row_index][cell.column_index] = cell.content or ""
         
-        # 表内容表示
-        for row_idx in range(min(table.row_count, 10)):
-            logger.debug(f"  行{row_idx}: {table_matrix[row_idx]}")
+        # ヘッダー行の内容を表示
+        if table.row_count > 0:
+            header_content = table_matrix[0] if table.row_count > 0 else []
+            logger.info(f"  検出ヘッダー行: {header_content}")
         
-        # AI解析実行
+        # 価格表かどうかを先に判定
+        if not analyzer.is_price_table(table_matrix):
+            logger.info("  -> 価格表ではないためスキップ")
+            continue
+        
+        # AI解析実行（価格表と確認済み）
         try:
             analysis_result = analyzer.analyze_table_structure(table_matrix)
             if analysis_result[0] is None:
@@ -350,15 +422,26 @@ def process_tables_with_ai(input_path: str = None, output_path: str = None):
             
             header_row, product_col, price_col, retail_price_col, model_col, spec_col = analysis_result
             
-            logger.info(f"  ヘッダー行: {header_row}")
-            logger.info(f"  商品名列: {product_col}")
-            logger.info(f"  仕切価格列: {price_col}")
-            logger.info(f"  標準小売価格列: {retail_price_col}")
-            logger.info(f"  型式列: {model_col}")
-            logger.info(f"  規格列: {spec_col}")
+            # ヘッダー行とカラム認識結果を詳細表示
+            logger.info(f"  AI認識結果:")
+            logger.info(f"    ヘッダー行インデックス: {header_row}")
+            if header_row < len(table_matrix):
+                logger.info(f"    ヘッダー行内容: {table_matrix[header_row]}")
+            
+            # 各カラムの認識結果を表示
+            if product_col is not None and header_row < len(table_matrix) and product_col < len(table_matrix[header_row]):
+                logger.info(f"    品名カラム[{product_col}]: '{table_matrix[header_row][product_col]}'")
+            if price_col is not None and header_row < len(table_matrix) and price_col < len(table_matrix[header_row]):
+                logger.info(f"    仕切価格カラム[{price_col}]: '{table_matrix[header_row][price_col]}'")
+            if retail_price_col is not None and header_row < len(table_matrix) and retail_price_col < len(table_matrix[header_row]):
+                logger.info(f"    標準小売価格カラム[{retail_price_col}]: '{table_matrix[header_row][retail_price_col]}'")
+            if model_col is not None and header_row < len(table_matrix) and model_col < len(table_matrix[header_row]):
+                logger.info(f"    型式カラム[{model_col}]: '{table_matrix[header_row][model_col]}'")
+            if spec_col is not None and header_row < len(table_matrix) and spec_col < len(table_matrix[header_row]):
+                logger.info(f"    規格カラム[{spec_col}]: '{table_matrix[header_row][spec_col]}'")
             
             if product_col is None or price_col is None:
-                logger.warning("  -> 商品名または価格列が見つかりません")
+                logger.warning("  -> 商品名または価格列が見つかりません（スキップ）")
                 continue
             
             # ヘッダー行以降のデータ行を直接処理

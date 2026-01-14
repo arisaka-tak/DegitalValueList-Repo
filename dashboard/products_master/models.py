@@ -197,8 +197,12 @@ class PriceHistory(models.Model):
             # 県連価格が未設定の場合は自動計算（端数処理済み）
             if self.wholesale_price and self.gross_margin_rate:
                 wholesale_numeric = float(self.wholesale_price.replace(',', ''))
-                calculated_price = wholesale_numeric * float(self.gross_margin_rate)
-                return int(calculated_price)  # 小数点以下切り捨て
+                margin_rate = float(self.gross_margin_rate)
+                if margin_rate > 0:
+                    # 新計算方式：仕切価格 ÷ 粗利率
+                    calculated_price = wholesale_numeric / margin_rate
+                    # 10円単位で四捨五入
+                    return int(round(calculated_price / 10) * 10)
             
             return None
         except (ValueError, TypeError, AttributeError):
@@ -214,7 +218,10 @@ class PriceHistory(models.Model):
             # 県連価格が未設定の場合は自動計算
             if self.wholesale_price and self.gross_margin_rate:
                 wholesale_numeric = float(self.wholesale_price.replace(',', ''))
-                return wholesale_numeric * float(self.gross_margin_rate)
+                margin_rate = float(self.gross_margin_rate)
+                if margin_rate > 0:
+                    # 新計算方式：仕切価格 ÷ 粗利率
+                    return wholesale_numeric / margin_rate
             
             return None
         except (ValueError, TypeError, AttributeError):
@@ -250,8 +257,13 @@ class PriceHistory(models.Model):
         try:
             if self.wholesale_price and self.gross_margin_rate:
                 wholesale_numeric = float(self.wholesale_price.replace(',', ''))
-                calculated_price = wholesale_numeric * float(self.gross_margin_rate)
-                return f"{calculated_price:,.0f}"
+                margin_rate = float(self.gross_margin_rate)
+                if margin_rate > 0:
+                    # 新計算方式：仕切価格 ÷ 粗利率
+                    calculated_price = wholesale_numeric / margin_rate
+                    # 10円単位で四捨五入
+                    rounded_price = int(round(calculated_price / 10) * 10)
+                    return f"{rounded_price:,.0f}"
         except (ValueError, TypeError, AttributeError):
             pass
         
@@ -390,8 +402,13 @@ class PriceHistoryApproval(models.Model):
         try:
             if self.wholesale_price and self.gross_margin_rate:
                 wholesale_numeric = float(self.wholesale_price.replace(',', ''))
-                calculated_price = wholesale_numeric * float(self.gross_margin_rate)
-                return f"{calculated_price:,.0f}"
+                margin_rate = float(self.gross_margin_rate)
+                if margin_rate > 0:
+                    # 新計算方式：仕切価格 ÷ 粗利率
+                    calculated_price = wholesale_numeric / margin_rate
+                    # 10円単位で四捨五入
+                    rounded_price = int(round(calculated_price / 10) * 10)
+                    return f"{rounded_price:,.0f}"
         except (ValueError, TypeError, AttributeError):
             pass
         
@@ -427,8 +444,12 @@ class PriceHistoryApproval(models.Model):
             
             if self.wholesale_price and self.gross_margin_rate:
                 wholesale_numeric = float(self.wholesale_price.replace(',', ''))
-                calculated_price = wholesale_numeric * float(self.gross_margin_rate)
-                return int(calculated_price)
+                margin_rate = float(self.gross_margin_rate)
+                if margin_rate > 0:
+                    # 新計算方式：仕切価格 ÷ 粗利率
+                    calculated_price = wholesale_numeric / margin_rate
+                    # 10円単位で四捨五入
+                    return int(round(calculated_price / 10) * 10)
             
             return None
         except (ValueError, TypeError, AttributeError):

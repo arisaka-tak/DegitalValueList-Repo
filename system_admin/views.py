@@ -239,8 +239,24 @@ def handle_csv_import(request):
                 year_margins = {}  # 年度別の最新粗利率を記録
                 
                 for history_data in price_histories:
-                    # 粗利率計算（数値の場合のみ）
-                    gross_margin_rate = Decimal(str(history_data['kenren_num'])) / Decimal(str(history_data['wholesale_num']))
+                    # 粗利率計算（共通関数使用）
+                    try:
+                        from digital_pricelist_system.gross_margin_utils import calculate_gross_margin_rate
+                        
+                        wholesale_num = float(history_data['wholesale_num'])
+                        kenren_num = float(history_data['kenren_num'])
+                        
+                        if kenren_num > 0:
+                            # 共通関数で粗利率を計算
+                            gross_margin_rate = calculate_gross_margin_rate(wholesale_num, kenren_num)
+                            if gross_margin_rate is None:
+                                gross_margin_rate = Decimal('0.90')
+                        else:
+                            # 県連価格が0の場合はデフォルト値
+                            gross_margin_rate = Decimal('0.90')
+                    except (ValueError, TypeError, ZeroDivisionError):
+                        # エラー時はデフォルト値
+                        gross_margin_rate = Decimal('0.90')
                     
                     # 価格履歴作成
                     PriceHistory.objects.create(
@@ -335,9 +351,9 @@ def parse_csv_row(row, row_num):
         retail_price = str(row[history_start + 3]).strip()
         revision_reason = str(row[history_start + 4]).strip()
         
-        # バリデーション
-        if not wholesale_price or not kenren_price:
-            raise ValueError(f'適用年月{effective_year_month}: 仕切価格と県連価格は必須です')
+        # 空の場合は0として扱う
+        wholesale_price = wholesale_price or '0'
+        kenren_price = kenren_price or '0'
         
         # 日付形式チェック
         if not effective_year_month.count('/') == 1:

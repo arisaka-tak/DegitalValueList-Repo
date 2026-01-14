@@ -14,7 +14,7 @@ def main():
     print("=== 最適化onedir配布ビルド ===")
     cmd_console = [
         sys.executable, "-m", "PyInstaller",
-        "--onedir",
+        "--onefile",
         "--noconsole",
         "--debug=all",
         "--name=DegitalValueList",
@@ -44,6 +44,13 @@ def main():
     deploy_dir = project_root / "deploy"
     deploy_dir.mkdir(exist_ok=True)
     
+    # 実行ファイルをコピー
+    exe_src = project_root / "dist" / "onedir_console" / "DegitalValueList.exe"
+    exe_dst = deploy_dir / "DegitalValueList.exe"
+    if exe_src.exists():
+        shutil.copy2(exe_src, exe_dst)
+        print(f"  ✅ {exe_src.name} をコピー")
+    
     # 設定ファイル等をコピー
     for file_name in ["config.ini", "db.sqlite3", "degital_value_list.xlsx"]:
          src = project_root / file_name
@@ -66,7 +73,6 @@ def main():
     print("📁 console版構成:")
     print("  deploy/")
     print("  ├── DegitalValueList.exe # 実行ファイル")
-    print("  ├── _internal/           # ライブラリ群")
     print("  ├── config.ini")
     print("  ├── db.sqlite3")
     print("  └── media/")

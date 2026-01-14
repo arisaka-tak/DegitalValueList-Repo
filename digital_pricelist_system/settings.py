@@ -23,7 +23,7 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # 設定ファイルパス（一箇所で定義）
-CONFIG_PATH = Path(r"\\128.167.100.10\資材・大家畜事業部\04資材部\★デジタル価格表作成プログラム\config.ini")
+CONFIG_PATH = Path(r"\\zbsfs.local.z-bs.co.jp\605ＤＸ企画部\005ＤＸ・アプリグループ\28_全農畜産サービス\08_【デジタル価格表作成業務効率化検討】\DegitalValueList_Console\config.ini")
 
 def get_config():
     """設定ファイルを読み込み"""
@@ -44,28 +44,16 @@ def get_database_path():
     if 'DATABASE_PATH' in os.environ:
         return os.environ['DATABASE_PATH']
     
-    # config.iniから直接読み込み
+    # config.iniから直接読み込み（フルパスで記載されている）
     config = configparser.ConfigParser()
     if CONFIG_PATH.exists():
         try:
             config.read(CONFIG_PATH, encoding='utf-8')
-            db_path = config.get('DATABASE', 'path', fallback='db.sqlite3')
-            # 絶対パスか相対パスか判定
-            if os.path.isabs(db_path):
-                return db_path
-            else:
-                # PyInstaller環境では相対パスをexeフォルダからの相対パスとして解釈
-                if getattr(sys, 'frozen', False):
-                    exe_dir = Path(sys.executable).parent
-                    return str(exe_dir / db_path)
-                else:
-                    return str(BASE_DIR / db_path)
+            return config.get('DATABASE', 'path', fallback='db.sqlite3')
         except Exception:
             pass
     
     # デフォルト
-    if getattr(sys, 'frozen', False):
-        return str(Path(sys.executable).parent / 'db.sqlite3')
     return str(BASE_DIR / 'db.sqlite3')
 
 def get_media_root():
@@ -74,23 +62,12 @@ def get_media_root():
     if CONFIG_PATH.exists():
         try:
             config.read(CONFIG_PATH, encoding='utf-8')
-            media_path = config.get('FILES', 'media_root', fallback='media')
-            # 絶対パスか相対パスか判定
-            if os.path.isabs(media_path):
-                return Path(media_path)
-            else:
-                # PyInstaller環境では相対パスをexeフォルダからの相対パスとして解釈
-                if getattr(sys, 'frozen', False):
-                    exe_dir = Path(sys.executable).parent
-                    return exe_dir / media_path
-                else:
-                    return BASE_DIR / media_path
+            # config.iniのパスをそのまま使用（フルパスで記載されている）
+            return Path(config.get('FILES', 'media_root', fallback='media'))
         except Exception:
             pass
     
     # デフォルト
-    if getattr(sys, 'frozen', False):
-        return Path(sys.executable).parent / 'media'
     return BASE_DIR / 'media'
 
 
@@ -156,6 +133,9 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': get_database_path(),
+        'OPTIONS': {
+            'init_command': 'PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA cache_size=10000; PRAGMA temp_store=MEMORY; PRAGMA mmap_size=268435456;',
+        },
     }
 }
 

@@ -63,13 +63,44 @@ def update_program():
         # ディレクトリを作成
         LOCAL_DIR.mkdir(parents=True, exist_ok=True)
         
+        # 実行中のプロセスを終了させる
+        if LOCAL_EXE_PATH.exists():
+            print("🔄 実行中のプロセスを終了中...")
+            try:
+                # Windowsで実行中のプロセスを終了
+                subprocess.run([
+                    'taskkill', '/f', '/im', 'DigitalValueList.exe'
+                ], capture_output=True, check=False)
+                time.sleep(2)  # プロセス終了を待つ
+            except Exception:
+                pass
+        
         # バックアップ作成
         if LOCAL_EXE_PATH.exists():
             backup_path = LOCAL_EXE_PATH.with_suffix('.exe.backup')
-            shutil.copy2(LOCAL_EXE_PATH, backup_path)
+            try:
+                shutil.copy2(LOCAL_EXE_PATH, backup_path)
+                print("💾 バックアップ作成完了")
+            except Exception as e:
+                print(f"⚠️ バックアップ作成失敗: {e}")
+        
+        # 既存ファイルを削除（ロックされている場合の対策）
+        if LOCAL_EXE_PATH.exists():
+            try:
+                LOCAL_EXE_PATH.unlink()
+                print("🗑️ 既存ファイルを削除")
+            except Exception as e:
+                print(f"⚠️ 既存ファイル削除失敗: {e}")
+                # 一時ファイル名で更新を試行
+                temp_path = LOCAL_EXE_PATH.with_suffix('.exe.new')
+                shutil.copy2(SERVER_EXE_PATH, temp_path)
+                print(f"📦 一時ファイルとして保存: {temp_path}")
+                print("⚠️ 次回起動時に手動でファイルを置き換えてください")
+                return False
         
         # 新しいファイルをコピー
         shutil.copy2(SERVER_EXE_PATH, LOCAL_EXE_PATH)
+        print("📦 新しいファイルをコピー")
         
         # バージョンファイルもコピー
         if SERVER_VERSION_PATH.exists():

@@ -6,20 +6,42 @@ register = template.Library()
 
 @register.filter
 def calc_kenren_price(wholesale_price, gross_margin_rate):
-    """仕切価格と粗利率から県連価格を計算"""
+    """仕切価格と粗利率から県連価格を計算（新計算方式のみ）"""
     try:
         if wholesale_price and gross_margin_rate:
-            # 数値でない場合（都度見積等）はNoneを返す
             try:
                 wholesale = float(str(wholesale_price).replace(',', ''))
             except (ValueError, AttributeError):
                 return None
             
             margin = float(str(gross_margin_rate))
-            return int(wholesale * margin)
+            if margin > 0:
+                # 共通関数で県連価格を計算
+                calculated = wholesale / margin
+                # 10円単位で四捨五入
+                return int(round(calculated / 10) * 10)
     except (ValueError, TypeError, Exception):
         pass
     return None
+
+@register.filter
+def format_revision_amount(value):
+    """改定額をカンマ区切りでフォーマット"""
+    try:
+        if value is None or value == '':
+            return '-'
+        # 数値の場合
+        if isinstance(value, (int, float, Decimal)):
+            return f"{int(value):,}"
+        # 文字列の場合、数値に変換を試行
+        try:
+            num_value = float(value)
+            return f"{int(num_value):,}"
+        except (ValueError, TypeError):
+            # 数値でない場合はそのまま返す
+            return str(value)
+    except:
+        return str(value) if value else '-'
 
 @register.filter
 def format_price(value):
@@ -73,18 +95,15 @@ def approval_to_json(approval):
 
 @register.filter
 def format_gross_margin_rate(value):
-    """粗利率を％表記に変換（1.1 → 10%）"""
+    """粗利率を％表記に変換（新計算方式のみ）"""
     try:
         if value is None or value == '':
             return '-'
         
-        # Decimalやfloatを数値に変換
         margin_rate = float(str(value))
+        # 新計算方式：(1 - 粗利率) * 100
+        profit_rate = (1 - margin_rate) * 100
         
-        # 粗利率を計算（(1.1 - 1) * 100 = 10%）
-        profit_rate = (margin_rate - 1) * 100
-        
-        # 小数点第一位まで表示
         return f"{profit_rate:.1f}%"
     except (ValueError, TypeError, Exception):
         return str(value) if value else '-'

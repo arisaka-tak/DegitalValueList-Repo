@@ -78,7 +78,7 @@ function renderGrossMarginTable(margins) {
                         <td>${margin.period_year}年度</td>
                         <td>
                             <input type="number" class="form-control form-control-sm gross-margin-input" 
-                                   value="${((margin.gross_margin_rate - 1) * 100).toFixed(1)}" 
+                                   value="${((1 - margin.gross_margin_rate) * 100).toFixed(1)}" 
                                    step="0.1" min="0" max="100"
                                    data-period-year="${margin.period_year}">
                             <small class="text-muted">%</small>
@@ -183,7 +183,7 @@ function saveGrossMargins() {
     document.querySelectorAll('.gross-margin-input').forEach(input => {
         const periodYear = input.dataset.periodYear;
         const grossMarginPercent = parseFloat(input.value);
-        const grossMarginRate = (grossMarginPercent / 100) + 1; // %を倍率に変換
+        const grossMarginRate = 1 - (grossMarginPercent / 100); // %を倍率に変換（正しい式）
         
         margins.push({
             period_year: parseInt(periodYear),

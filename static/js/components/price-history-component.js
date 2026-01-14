@@ -8,10 +8,16 @@ class PriceHistoryComponent extends HTMLElement {
         this.mode = this.getAttribute('mode') || 'edit';
         this.showDiff = this.getAttribute('show-diff') === 'true';
         this.editable = this.getAttribute('editable') !== 'false';
+        
+        console.log('PriceHistoryComponent connected:', {
+            mode: this.mode,
+            showDiff: this.showDiff,
+            editable: this.editable,
+            historiesAttr: this.getAttribute('histories')
+        });
+        
         this.render();
         this.setupEventListeners();
-        
-
     }
 
     render() {
@@ -42,9 +48,13 @@ class PriceHistoryComponent extends HTMLElement {
 
     renderExistingRows() {
         const histories = JSON.parse(this.getAttribute('histories') || '[]');
+        console.log('renderExistingRows histories:', histories);
+        
         const isApprovalMode = this.mode === 'approval';
         
         return histories.map(history => {
+            console.log('Processing history:', history.id, 'gross_margin_rate:', history.gross_margin_rate);
+            
             const isDiffRow = this.showDiff && history.diff_flags;
             const isDeleteRequest = history.is_delete_request;
             
@@ -59,6 +69,9 @@ class PriceHistoryComponent extends HTMLElement {
                 rowStyle = 'color: #6c757d;';
             }
             
+            const grossMarginDisplay = this.getGrossMarginDisplay(history);
+            console.log('Final gross margin display for history', history.id, ':', grossMarginDisplay);
+            
             return `
                 <tr data-id="${history.id}" class="${rowClass}" style="${rowStyle}">
                     <td>${history.period_year}年度</td>
@@ -66,7 +79,7 @@ class PriceHistoryComponent extends HTMLElement {
                     <td class="${this.getCellClass(history, 'wholesale_price', isDiffRow)}" ${this.getCellAttributes(history, 'wholesale_price')}>${this.formatPrice(history.wholesale_price)}</td>
                     <td class="kenren-price-cell ${this.getCellClass(history, 'kenren_price', isDiffRow)}" ${this.getCellAttributes(history, 'kenren_price')} style="${this.getKenrenPriceStyle(history)}">${this.formatPrice(this.getKenrenPriceDisplay(history))}</td>
                     <td class="${this.getCellClass(history, 'retail_price', isDiffRow)}" ${this.getCellAttributes(history, 'retail_price')}>${this.formatPrice(history.retail_price)}</td>
-                    <td>${this.getGrossMarginDisplay(history)}</td>
+                    <td>${grossMarginDisplay}</td>
                     ${!isApprovalMode ? `<td>${history.revision_amount !== null && history.revision_amount !== undefined ? history.revision_amount : '自動算出'}</td>` : ''}
                     <td class="${this.getCellClass(history, 'revision_reason', isDiffRow)}" ${this.getCellAttributes(history, 'revision_reason')}>${history.revision_reason || (isDiffRow ? '' : '-')}</td>
                     ${!isApprovalMode ? `<td>${this.getActionCell(history)}</td>` : ''}
@@ -344,12 +357,15 @@ class PriceHistoryComponent extends HTMLElement {
         const kenrenCell = row.querySelector('.kenren-price-cell');
         if (!kenrenCell) return;
         
-        // 簡易的な計算（実際の粗利率は不明なので1.1を仮定）
+        // 新しい計算方式：仕切価格 ÷ 粗利率（デフォルト0.90）
         try {
             if (wholesalePrice && wholesalePrice !== '都度見積') {
                 const price = parseFloat(wholesalePrice.replace(/,/g, ''));
-                const calculated = Math.floor(price * 1.1);
-                kenrenCell.textContent = calculated.toLocaleString();
+                const defaultMarginRate = 0.90; // デフォルト粗利率
+                const calculated = price / defaultMarginRate;
+                // 1円の位を四捨五入（10円単位）
+                const rounded = Math.round(calculated / 10) * 10;
+                kenrenCell.textContent = rounded.toLocaleString();
                 // 自動計算の場合は緑色で表示
                 kenrenCell.style.color = 'green';
                 kenrenCell.style.fontWeight = 'bold';
@@ -411,17 +427,26 @@ class PriceHistoryComponent extends HTMLElement {
         `;
     }
     
-    // 粗利率の表示値を取得（1.1 → 10%）
+    // 粗利率の表示値を取得（DBの値を正しく％表示に変換）
     getGrossMarginDisplay(history) {
+        console.log('getGrossMarginDisplay input:', {
+            gross_margin_rate: history.gross_margin_rate,
+            type: typeof history.gross_margin_rate,
+            historyId: history.id
+        });
+        
         if (history.gross_margin_rate !== null && history.gross_margin_rate !== undefined && history.gross_margin_rate !== '') {
+            // 数値の場合は％表示に変換
             const rate = parseFloat(history.gross_margin_rate);
-            if (rate === 0.0) {
-                return '0.0%';
+            if (!isNaN(rate)) {
+                const result = window.GrossMarginUtils.formatGrossMarginRate(rate);
+                console.log('Converted to percentage:', result);
+                return result;
             }
-            // 粗利率を計算（(1.1 - 1) * 100 = 10%）
-            const profitRate = (rate - 1) * 100;
-            return profitRate.toFixed(1) + '%';
+            console.log('Returning raw value:', history.gross_margin_rate);
+            return history.gross_margin_rate;
         }
+        console.log('Returning default: 自動算出');
         return '自動算出';
     }
     
@@ -515,15 +540,15 @@ class PriceHistoryComponent extends HTMLElement {
                     .sort((a, b) => b.period_year - a.period_year)[0];
                 
                 if (applicableMargin) {
-                    const profitRate = (applicableMargin.gross_margin_rate - 1) * 100;
-                    marginCell.textContent = profitRate.toFixed(1) + '%';
+                    const profitDisplay = window.GrossMarginUtils.formatGrossMarginRate(applicableMargin.gross_margin_rate);
+                    marginCell.textContent = profitDisplay;
                 } else {
-                    marginCell.textContent = '0.0%'; // デフォルト
+                    marginCell.textContent = '10.0%'; // デフォルト
                 }
             })
             .catch(error => {
                 console.error('Error fetching gross margin:', error);
-                marginCell.textContent = '0.0%'; // エラー時のデフォルト
+                marginCell.textContent = '10.0%'; // エラー時のデフォルト
             });
     }
     

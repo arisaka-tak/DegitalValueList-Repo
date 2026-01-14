@@ -43,6 +43,7 @@ logs/
 # PyInstaller
 *.spec
 build/
+build_batch/
 build_fast/
 deploy/
 deploy_fast/

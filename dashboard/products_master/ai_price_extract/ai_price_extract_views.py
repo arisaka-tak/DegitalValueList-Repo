@@ -569,6 +569,8 @@ def ai_extract_pdf_process(request):
     try:
         pdf_file = pdf_form.cleaned_data['pdf_file']
         transaction_name = pdf_form.cleaned_data['transaction_name']
+        if not transaction_name:
+            transaction_name = f'PDF抽出_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
         print(f"PDF file: {pdf_file.name}, Transaction: {transaction_name}")
         
         # Document Intelligence + AI抽出処理
