@@ -86,7 +86,7 @@
                             </thead>
                             <tbody>
                                 {% for item in page_obj %}
-                                    <tr class="sortable-row{% if not item.has_price %} table-secondary{% endif %}{% if item.is_group_start and not forloop.first %} group-border{% endif %}{% if item.has_price and item.price_history.get_revision_amount != 0 %} revision-highlight{% endif %}" 
+                                    <tr class="sortable-row{% if not item.has_price %} table-secondary{% endif %}{% if item.is_group_start and not forloop.first %} group-border{% endif %}{% if item.is_current_month %} current-month-highlight{% endif %}" 
                                         data-product-id="{{ item.product.pk }}" 
                                         data-livestock="{{ item.product.livestock_type }}" 
                                         data-category="{{ item.product.category }}" 
@@ -412,20 +412,20 @@
         background-color: #e3f2fd !important;
     }
     
-    /* 改定額が0ではない行の背景色 */
-    .revision-highlight {
+    /* 選択月と同じ適用月の価格履歴を持つ行の背景色 */
+    .current-month-highlight {
         background-color: #FFC000 !important;
     }
     
-    .revision-highlight:hover {
+    .current-month-highlight:hover {
         background-color: #E6AC00 !important;
     }
     
-    .revision-highlight.table-secondary {
+    .current-month-highlight.table-secondary {
         background-color: #FFD966 !important;
     }
     
-    .revision-highlight.table-secondary:hover {
+    .current-month-highlight.table-secondary:hover {
         background-color: #E6C200 !important;
     }
 

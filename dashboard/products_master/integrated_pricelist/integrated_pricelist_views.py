@@ -179,11 +179,27 @@ def integrated_pricelist(request):
         has_valid_price = price_history is not None and price_history.wholesale_price != 0
         
         # 商品と価格履歴のペアを作成
+        is_current_month = False
+        if price_history and price_history.effective_year_month == selected_month:
+            # 県連価格と仕切価格が両方とも数値で改定額が0の場合は対象外
+            try:
+                kenren_is_numeric = price_history.kenren_price and str(price_history.kenren_price).replace(',', '').replace('.', '').isdigit()
+                wholesale_is_numeric = price_history.wholesale_price and str(price_history.wholesale_price).replace(',', '').replace('.', '').isdigit()
+                revision_amount = price_history.get_revision_amount()
+                
+                if kenren_is_numeric and wholesale_is_numeric and revision_amount == 0:
+                    is_current_month = False
+                else:
+                    is_current_month = True
+            except:
+                is_current_month = True
+        
         product_data.append({
             'product': product,
             'price_history': price_history,
             'has_price': has_valid_price,
-            'is_group_start': is_group_start
+            'is_group_start': is_group_start,
+            'is_current_month': is_current_month
         })
     
     # ページネーション
@@ -455,19 +471,30 @@ def export_excel(request):
         gray_fill = PatternFill(start_color='F2F2F2', end_color='F2F2F2', fill_type='solid')
         yellow_fill = PatternFill(start_color='FFC000', end_color='FFC000', fill_type='solid')  # 改定額0以外の色
         
-        for row in range(5, row_num):
+        for row in range(4, row_num):
             is_gray_row = (row - 4) % 2 == 1  # 奇数行をグレーに
             
-            # 改定額が0以外かチェック（J列：改定額）
-            revision_cell = ws.cell(row=row, column=10)
-            has_revision = False
-            if revision_cell.value is not None:
-                try:
-                    revision_value = float(str(revision_cell.value).replace(',', ''))
-                    has_revision = revision_value != 0
-                except (ValueError, TypeError):
-                    # 数値変換できない場合（文字列等）は改定ありとみなす
-                    has_revision = str(revision_cell.value).strip() != ''
+            # 該当行の商品データを取得
+            item_index = row - 4  # rowは4から開始、product_dataは0から開始
+            if item_index < len(product_data):
+                item = product_data[item_index]
+                price_history = item['price_history']
+                # 価格履歴の適用月が選択月と同じかチェック
+                has_revision = False
+                if price_history and price_history.effective_year_month == selected_month:
+                    try:
+                        kenren_is_numeric = price_history.kenren_price and str(price_history.kenren_price).replace(',', '').replace('.', '').isdigit()
+                        wholesale_is_numeric = price_history.wholesale_price and str(price_history.wholesale_price).replace(',', '').replace('.', '').isdigit()
+                        revision_amount = price_history.get_revision_amount()
+                        
+                        if kenren_is_numeric and wholesale_is_numeric and revision_amount == 0:
+                            has_revision = False
+                        else:
+                            has_revision = True
+                    except:
+                        has_revision = True
+            else:
+                has_revision = False
             
             for col in range(1, 15):
                 cell = ws.cell(row=row, column=col)
