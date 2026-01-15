@@ -8,8 +8,7 @@
 {% endblock %}
 
 {% block content %}
-    {% url 'products_master:ai_extract' as ai_extract_url %}
-    {% include 'components/page_header.html' with page_title="デジタル価格表" page_subtitle="商品マスタと価格履歴の統合表示" header_actions='<a href="'|add:ai_extract_url|add:'" class="btn btn-warning me-2">🤖 AI価格抽出</a><a href="/products/new/" class="btn btn-primary">新規作成</a>' %}
+    {% include 'components/page_header.html' with page_title="デジタル価格表" page_subtitle="商品マスタと価格履歴の統合表示" header_actions='<a href="/products/new/" class="btn btn-primary">新規作成</a>' %}
     
     <div class="container" style="max-width: none; margin-left: 0; margin-right: 0; padding-left: 1rem; padding-right: 1rem;">
         <!-- フィルター -->

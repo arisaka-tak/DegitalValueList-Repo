@@ -3,8 +3,15 @@ from .product_list import product_list_views as list_views
 from .product_detail import product_detail_views as detail_views
 
 from .integrated_pricelist import integrated_pricelist_views as pricelist_views
-from .ai_price_extract import ai_price_extract_views as ai_views
-from .ai_price_extract import ai_history_views as ai_history_views
+
+# AI価格抽出機能は条件付きインポート（Azure依存関係エラー回避）
+try:
+    from .ai_price_extract import ai_price_extract_views as ai_views
+    from .ai_price_extract import ai_history_views as ai_history_views
+    AI_EXTRACT_AVAILABLE = True
+except ImportError:
+    AI_EXTRACT_AVAILABLE = False
+
 from .product_delete import product_delete_views as delete_views
 from . import master_views
 
@@ -13,6 +20,7 @@ app_name = 'products_master'
 urlpatterns = [
     path('', list_views.product_list, name='product_list'),
     path('regenerate-keywords/', list_views.regenerate_keywords_batch, name='regenerate_keywords_batch'),
+    path('products/<int:pk>/toggle-status/', list_views.toggle_product_status, name='toggle_product_status'),
     path('products/<int:pk>/', detail_views.product_detail, name='product_detail'),
     path('new/', detail_views.product_detail_new, name='product_new'),
     path('products/<int:pk>/copy/', detail_views.product_copy, name='product_copy'),
@@ -42,22 +50,28 @@ urlpatterns = [
     path('integrated-pricelist/cross-page-move/', pricelist_views.cross_page_move, name='cross_page_move'),
     path('upload-approval-pdf/', pricelist_views.upload_approval_pdf, name='upload_approval_pdf'),
     path('download-approval-pdf/<int:pk>/', pricelist_views.download_approval_pdf, name='download_approval_pdf'),
-    
-    # AI価格抽出
-    path('ai-extract/', ai_history_views.ai_extract_history, name='ai_extract'),
-    path('ai-extract/input/', ai_views.ai_extract, name='ai_extract_input'),
-    path('ai-extract/process/', ai_views.ai_extract_process, name='ai_extract_process'),
-    path('ai-extract/pdf-process/', ai_views.ai_extract_pdf_process, name='ai_extract_pdf_process'),
-    path('ai-extract/pdf-api/', ai_views.ai_extract_pdf_api, name='ai_extract_pdf_api'),
-    path('ai-extract/rematch/', ai_views.ai_extract_rematch, name='ai_extract_rematch'),
-    path('ai-extract/get-detail/', ai_views.ai_extract_get_detail, name='ai_extract_get_detail'),
-    path('ai-extract/update-detail/', ai_views.ai_extract_update_detail, name='ai_extract_update_detail'),
-    path('ai-extract/search-products/', ai_views.ai_extract_search_products, name='ai_extract_search_products'),
-    path('ai-extract/get-masters/', ai_views.ai_extract_get_masters, name='ai_extract_get_masters'),
-    path('ai-extract/history/', ai_history_views.ai_extract_history, name='ai_extract_history'),
-    path('ai-extract/history/<int:pk>/', ai_history_views.ai_extract_history_detail, name='ai_extract_history_detail'),
-    path('ai-extract/history/<int:pk>/delete/', ai_history_views.ai_extract_history_delete, name='ai_extract_history_delete'),
-    
+]
+
+# AI価格抽出機能がAzure依存関係で利用可能な場合のみ追加
+if AI_EXTRACT_AVAILABLE:
+    urlpatterns += [
+        # AI価格抽出
+        path('ai-extract/', ai_history_views.ai_extract_history, name='ai_extract'),
+        path('ai-extract/input/', ai_views.ai_extract, name='ai_extract_input'),
+        path('ai-extract/process/', ai_views.ai_extract_process, name='ai_extract_process'),
+        path('ai-extract/pdf-process/', ai_views.ai_extract_pdf_process, name='ai_extract_pdf_process'),
+        path('ai-extract/pdf-api/', ai_views.ai_extract_pdf_api, name='ai_extract_pdf_api'),
+        path('ai-extract/rematch/', ai_views.ai_extract_rematch, name='ai_extract_rematch'),
+        path('ai-extract/get-detail/', ai_views.ai_extract_get_detail, name='ai_extract_get_detail'),
+        path('ai-extract/update-detail/', ai_views.ai_extract_update_detail, name='ai_extract_update_detail'),
+        path('ai-extract/search-products/', ai_views.ai_extract_search_products, name='ai_extract_search_products'),
+        path('ai-extract/get-masters/', ai_views.ai_extract_get_masters, name='ai_extract_get_masters'),
+        path('ai-extract/history/', ai_history_views.ai_extract_history, name='ai_extract_history'),
+        path('ai-extract/history/<int:pk>/', ai_history_views.ai_extract_history_detail, name='ai_extract_history_detail'),
+        path('ai-extract/history/<int:pk>/delete/', ai_history_views.ai_extract_history_delete, name='ai_extract_history_delete'),
+    ]
+
+urlpatterns += [
     # 商品削除
     path('products/<int:pk>/delete/', delete_views.product_delete, name='product_delete'),
     

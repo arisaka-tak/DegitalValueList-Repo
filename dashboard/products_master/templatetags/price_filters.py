@@ -133,6 +133,7 @@ def approval_histories_to_json(price_histories):
                 'retail_price': history.retail_price,
                 'gross_margin_rate': str(history.gross_margin_rate) if history.gross_margin_rate is not None else None,
                 'revision_reason': history.revision_reason or '',
+                'memo': history.memo or '',
                 'is_delete_request': getattr(history, 'is_delete_request', False),
                 'diff_flags': getattr(history, 'diff_flags', {}),
                 'is_editable': history.is_editable()  # 実際の編集可能性を使用

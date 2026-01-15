@@ -50,6 +50,7 @@ def product_detail(request, pk):
             'gross_margin_rate': str(history.gross_margin_rate) if history.gross_margin_rate is not None else None,
             'revision_amount': history.get_revision_amount(),
             'revision_reason': history.revision_reason or '',
+            'memo': history.memo or '',
             'is_editable': history.is_editable()
         }
         for history in price_histories
@@ -343,6 +344,8 @@ def price_history_update(request, pk):
             price_history.kenren_price = value if value else None
         elif field == 'revision_reason':
             price_history.revision_reason = value if value else None
+        elif field == 'memo':
+            price_history.memo = value if value else None
         
         price_history.save()
         
@@ -382,6 +385,7 @@ def price_history_create(request, product_pk):
             wholesale_price = request.POST.get('wholesale_price', '').strip()
             kenren_price = request.POST.get('kenren_price', '').strip()
             revision_reason = request.POST.get('revision_reason', '').strip()
+            memo = request.POST.get('memo', '').strip()
             
             if not effective_year_month:
                 return HttpResponse('Missing effective_year_month', status=400)
@@ -409,6 +413,7 @@ def price_history_create(request, product_pk):
                 wholesale_price=wholesale_price,
                 kenren_price=kenren_price if kenren_price else None,
                 revision_reason=revision_reason if revision_reason else None,
+                memo=memo if memo else None,
                 gross_margin_rate=gross_margin_rate,
                 revision_amount=0
             )
@@ -654,6 +659,7 @@ def submit_approval_core(request, pk=None, is_reapplication=False):
             kenren_price = request.POST.get(f'edit_kenren_price_{history.pk}', '').strip()
             retail_price = request.POST.get(f'edit_retail_price_{history.pk}', '').strip()
             revision_reason = request.POST.get(f'edit_revision_reason_{history.pk}', '').strip()
+            memo = request.POST.get(f'edit_memo_{history.pk}', '').strip()
             delete_flag = request.POST.get(f'delete_{history.pk}', 'false')
             
             # 既存履歴を申請テーブルにコピー（元の粗利率を保持）
@@ -667,6 +673,7 @@ def submit_approval_core(request, pk=None, is_reapplication=False):
                 retail_price=retail_price if retail_price else history.retail_price,
                 revision_amount=0,
                 revision_reason=revision_reason if revision_reason else history.revision_reason,
+                memo=memo if memo else history.memo,
                 is_delete_request=(delete_flag == 'true'),
                 applicant=get_current_user()
             )
@@ -697,6 +704,7 @@ def submit_approval_core(request, pk=None, is_reapplication=False):
             retail_price=history['retail_price'] if history['retail_price'] else None,
             revision_amount=0,
             revision_reason=history['revision_reason'],
+            memo=history['memo'],
             applicant=get_current_user()
         )
     
@@ -1171,6 +1179,16 @@ def _process_approval(approval):
                 # 削除申請の場合は論理削除
                 if approval.status == '削除申請':
                     product.soft_delete()
+                    product.status = ''  # ステータスをクリア
+                    product.save()
+                    approval.delete()
+                    return
+                
+                # 復元申請の場合は復元
+                if approval.status == '復元申請':
+                    product.restore()
+                    product.status = ''  # ステータスをクリア
+                    product.save()
                     approval.delete()
                     return
         
@@ -1279,6 +1297,7 @@ def _process_approval(approval):
                                 'retail_price': approval_history.retail_price,
                                 'revision_amount': approval_history.revision_amount,
                                 'revision_reason': approval_history.revision_reason,
+                                'memo': approval_history.memo,
                             }
                         )
                         if not created:
@@ -1290,6 +1309,11 @@ def _process_approval(approval):
                             history.retail_price = approval_history.retail_price
                             history.revision_amount = approval_history.revision_amount
                             history.revision_reason = approval_history.revision_reason
+                            history.memo = approval_history.memo
+                            history.save()
+                        else:
+                            # 新規作成の場合もメモを設定
+                            history.memo = approval_history.memo
                             history.save()
                         
                         # 今回申請したレコードで仕切金額と県連金額の両方がある場合のみ粗利率を再計算
@@ -1393,6 +1417,7 @@ def _process_approval(approval):
                             retail_price=approval_history.retail_price,
                             revision_amount=approval_history.revision_amount,
                             revision_reason=approval_history.revision_reason,
+                            memo=approval_history.memo,
                         )
                         
                         # 申請データに仕切金額と県連金額の両方がある場合は粗利率を再計算してテーブル更新
@@ -1531,13 +1556,15 @@ def validate_form_data(request, product=None):
             kenren_price = request.POST.get(f'new_kenren_price_{index}', '').strip()
             retail_price = request.POST.get(f'new_retail_price_{index}', '').strip()
             revision_reason = request.POST.get(f'new_revision_reason_{index}', '').strip()
+            memo = request.POST.get(f'new_memo_{index}', '').strip()
             
             new_histories.append({
                 'effective_year_month': effective_year_month,
                 'wholesale_price': wholesale_price,
                 'kenren_price': kenren_price,
                 'retail_price': retail_price,
-                'revision_reason': revision_reason
+                'revision_reason': revision_reason,
+                'memo': memo
             })
     
     # バリデーション実行
@@ -1607,6 +1634,17 @@ def _update_reapplication(request, approval):
                 for field, value in product_data.items():
                     setattr(approval, field, value)
                 
+                # 既存価格履歴のメモを保持
+                for key, value in request.POST.items():
+                    if key.startswith('edit_memo_') and value.strip():
+                        history_id = key.split('_')[-1]
+                        try:
+                            history = approval.price_histories.get(pk=history_id)
+                            history.memo = value.strip()
+                            history.save()
+                        except Exception:
+                            pass
+                
                 # 新規履歴を追加
                 existing_approval_dates = list(approval.price_histories.values_list('effective_year_month', flat=True))
                 for history in new_histories:
@@ -1627,6 +1665,7 @@ def _update_reapplication(request, approval):
                         wholesale_price=history['wholesale_price'] or '都度見積',
                         kenren_price=history['kenren_price'] if history['kenren_price'] else None,
                         revision_reason=history['revision_reason'],
+                        memo=history['memo'],
                         applicant=get_current_user()
                     )
                 
@@ -1677,8 +1716,8 @@ def _update_reapplication(request, approval):
                         
                         try:
                             history = approval.price_histories.get(pk=history_id)
-                            if field == 'kenren_price':
-                                history.kenren_price = value.strip()
+                            if field in ['kenren_price', 'memo', 'revision_reason', 'wholesale_price', 'retail_price']:
+                                setattr(history, field, value.strip())
                                 history.save()
                                 print(f"Updated price history {history_id}: {field} = {value.strip()}")
                         except Exception as e:
@@ -1739,6 +1778,7 @@ def _update_reapplication(request, approval):
                         wholesale_price=history['wholesale_price'] or '都度見積',
                         kenren_price=history['kenren_price'] if history['kenren_price'] else None,
                         revision_reason=history['revision_reason'],
+                        memo=history['memo'],
                         applicant=get_current_user()
                     )
                     print(f"Added new price history: {effective_year_month}")

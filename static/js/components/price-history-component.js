@@ -35,6 +35,7 @@ class PriceHistoryComponent extends HTMLElement {
                             <th class="text-nowrap">粗利率<button type="button" class="btn btn-sm btn-link p-0 text-primary ms-1" data-bs-toggle="modal" data-bs-target="#grossMarginModal" title="粗利率管理">⚙️</button></th>
                             ${!isApprovalMode ? '<th>改定額</th>' : ''}
                             <th>改定理由</th>
+                            <th>メモ</th>
                             ${!isApprovalMode ? '<th>操作</th>' : ''}
                         </tr>
                     </thead>
@@ -82,6 +83,7 @@ class PriceHistoryComponent extends HTMLElement {
                     <td>${grossMarginDisplay}</td>
                     ${!isApprovalMode ? `<td>${history.revision_amount !== null && history.revision_amount !== undefined ? history.revision_amount : '自動算出'}</td>` : ''}
                     <td class="${this.getCellClass(history, 'revision_reason', isDiffRow)}" ${this.getCellAttributes(history, 'revision_reason')}>${history.revision_reason || (isDiffRow ? '' : '-')}</td>
+                    <td class="${this.getCellClass(history, 'memo', isDiffRow)}" ${this.getCellAttributes(history, 'memo')}>${history.memo || (isDiffRow ? '' : '-')}</td>
                     ${!isApprovalMode ? `<td>${this.getActionCell(history)}</td>` : ''}
                 </tr>
             `;
@@ -173,6 +175,7 @@ class PriceHistoryComponent extends HTMLElement {
             <td class="text-muted gross-margin-${this.rowIndex}">自動算定</td>
             <td class="text-muted">自動算出</td>
             <td><input type="text" class="form-control form-control-sm" name="new_revision_reason_${this.rowIndex}" form="productForm" placeholder="改定理由"></td>
+            <td><input type="text" class="form-control form-control-sm" name="new_memo_${this.rowIndex}" form="productForm" placeholder="メモ"></td>
             <td><button type="button" class="btn btn-sm btn-outline-secondary" data-action="remove-new-row">取消</button></td>
         `;
         tbody.insertBefore(newRow, tbody.firstChild);

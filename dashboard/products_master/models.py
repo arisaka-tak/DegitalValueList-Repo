@@ -139,6 +139,9 @@ class PriceHistory(models.Model):
     # 改定理由
     revision_reason = models.TextField('改定理由', blank=True, null=True)
     
+    # メモ欄（作業者と申請者間のコミュニケーション用）
+    memo = models.TextField('メモ', blank=True, null=True, help_text='作業者と申請者間のコミュニケーション用')
+    
     # ワークフロー用フィールド
     applicant = models.CharField('申請者', max_length=100, blank=True, null=True)
     status = models.CharField('ステータス', max_length=20, default='申請なし', choices=[('申請なし', '申請なし'), ('申請中', '申請中')])
@@ -345,6 +348,9 @@ class PriceHistoryApproval(models.Model):
     retail_price = models.CharField('参考小売価格', max_length=50, blank=True, null=True)
     revision_amount = models.DecimalField('改定額', max_digits=12, decimal_places=0, default=0)
     revision_reason = models.TextField('改定理由', blank=True, null=True)
+    
+    # メモ欄（作業者と申請者間のコミュニケーション用）
+    memo = models.TextField('メモ', blank=True, null=True, help_text='作業者と申請者間のコミュニケーション用')
     
     # 削除フラグ
     is_delete_request = models.BooleanField('削除申請', default=False, help_text='この履歴を削除する申請かどうか')
