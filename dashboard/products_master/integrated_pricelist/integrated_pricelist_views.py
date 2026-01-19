@@ -133,6 +133,21 @@ def integrated_pricelist(request):
     
     # 価格履歴を一括取得してマッピング
     price_histories = {}
+    previous_month_prices = {}
+    
+    # 前月を計算
+    previous_month = None
+    if selected_month:
+        try:
+            year, month = selected_month.split('/')
+            year, month = int(year), int(month)
+            if month == 1:
+                previous_month = f'{year-1}/12'
+            else:
+                previous_month = f'{year}/{month-1:02d}'
+        except:
+            pass
+    
     if selected_month:
         # サブクエリで各商品の最新価格履歴IDを取得
         from django.db.models import OuterRef, Subquery
@@ -146,6 +161,31 @@ def integrated_pricelist(request):
             id__in=Subquery(latest_histories),
             product_id__in=product_ids
         ).select_related('product')
+        
+        # 前月価格履歴も取得
+        if previous_month:
+            prev_latest_histories = PriceHistory.objects.filter(
+                product=OuterRef('product'),
+                is_active=True,
+                effective_year_month__lte=previous_month
+            ).order_by('-effective_year_month').values('id')[:1]
+            
+            prev_histories = PriceHistory.objects.filter(
+                id__in=Subquery(prev_latest_histories),
+                product_id__in=product_ids
+            ).select_related('product')
+            
+            # 前月価格履歴マップを作成
+            for prev_history in prev_histories:
+                kenren_price = prev_history.kenren_price
+                if not kenren_price and prev_history.wholesale_price and prev_history.wholesale_price != '都度見積':
+                    try:
+                        wholesale = float(str(prev_history.wholesale_price).replace(',', ''))
+                        margin = float(prev_history.gross_margin_rate)
+                        kenren_price = int(wholesale * margin)
+                    except:
+                        kenren_price = '都度見積'
+                previous_month_prices[prev_history.product_id] = kenren_price
     else:
         # 最新の価格履歴を取得
         from django.db.models import OuterRef, Subquery
@@ -180,18 +220,21 @@ def integrated_pricelist(request):
         
         # 商品と価格履歴のペアを作成
         is_current_month = False
-        if price_history and price_history.effective_year_month == selected_month:
-            # 県連価格と仕切価格が両方とも数値で改定額が0の場合は対象外
-            try:
-                kenren_is_numeric = price_history.kenren_price and str(price_history.kenren_price).replace(',', '').replace('.', '').isdigit()
-                wholesale_is_numeric = price_history.wholesale_price and str(price_history.wholesale_price).replace(',', '').replace('.', '').isdigit()
-                revision_amount = price_history.get_revision_amount()
-                
-                if kenren_is_numeric and wholesale_is_numeric and revision_amount == 0:
-                    is_current_month = False
-                else:
-                    is_current_month = True
-            except:
+        if price_history and previous_month_prices.get(product.id) is not None:
+            # 前月価格と現在価格を比較
+            current_price = price_history.kenren_price
+            if not current_price and price_history.wholesale_price and price_history.wholesale_price != '都度見積':
+                try:
+                    wholesale = float(str(price_history.wholesale_price).replace(',', ''))
+                    margin = float(price_history.gross_margin_rate)
+                    current_price = int(wholesale * margin)
+                except:
+                    current_price = '都度見積'
+            
+            prev_price = previous_month_prices.get(product.id)
+            
+            # 価格変動があった場合のみ色付け
+            if current_price != prev_price:
                 is_current_month = True
         
         product_data.append({
@@ -199,7 +242,8 @@ def integrated_pricelist(request):
             'price_history': price_history,
             'has_price': has_valid_price,
             'is_group_start': is_group_start,
-            'is_current_month': is_current_month
+            'is_current_month': is_current_month,
+            'previous_month_price': previous_month_prices.get(product.id)
         })
     
     # ページネーション
@@ -244,9 +288,15 @@ def update_sort_order(request):
 
 def export_excel(request):
     """デジタル価格表のExcel出力"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     selected_month = request.GET.get('month', '')
+    logger.info(f"Excel出力開始 - selected_month: {selected_month}")
+    
     if selected_month and '-' in selected_month:
         selected_month = selected_month.replace('-', '/')
+        logger.info(f"selected_month変換後: {selected_month}")
     
     _initialize_sort_numbers()
     
@@ -291,6 +341,43 @@ def export_excel(request):
     # 価格履歴も即座にリスト化してDBコネクションを解放
     price_histories = {h.product_id: h for h in list(histories)}
     
+    # 前月価格履歴を取得
+    previous_month_prices = {}
+    previous_month = None
+    if selected_month:
+        try:
+            year, month = selected_month.split('/')
+            year, month = int(year), int(month)
+            if month == 1:
+                previous_month = f'{year-1}/12'
+            else:
+                previous_month = f'{year}/{month-1:02d}'
+        except:
+            pass
+    
+    if previous_month:
+        prev_latest_histories = PriceHistory.objects.filter(
+            product=OuterRef('product'),
+            is_active=True,
+            effective_year_month__lte=previous_month
+        ).order_by('-effective_year_month').values('id')[:1]
+        
+        prev_histories = PriceHistory.objects.filter(
+            id__in=Subquery(prev_latest_histories),
+            product_id__in=product_ids
+        )
+        
+        for prev_history in prev_histories:
+            kenren_price = prev_history.kenren_price
+            if not kenren_price and prev_history.wholesale_price and prev_history.wholesale_price != '都度見積':
+                try:
+                    wholesale = float(str(prev_history.wholesale_price).replace(',', ''))
+                    margin = float(prev_history.gross_margin_rate)
+                    kenren_price = int(wholesale * margin)
+                except:
+                    kenren_price = '都度見積'
+            previous_month_prices[prev_history.product_id] = kenren_price
+    
     # 価格ありかつ仕切価格0円以外の商品のみフィルタ
     product_data = []
     for product in product_list:
@@ -299,7 +386,8 @@ def export_excel(request):
             product_data.append({
                 'product': product,
                 'price_history': price_history,
-                'has_price': True
+                'has_price': True,
+                'previous_month_price': previous_month_prices.get(product.id)
             })
     
     # テンプレートファイルを読み込み
@@ -332,7 +420,7 @@ def export_excel(request):
         except KeyError:
             ws = wb.active
         
-        # 表紙シートの{sysdate}と{effective_date}を置き換え
+        # 表紙シートの{sysdate}、{effective_date}、{status}を置き換え
         try:
             cover_sheet = wb['表紙']
             now = datetime.now()
@@ -347,6 +435,10 @@ def export_excel(request):
                 except:
                     effective_date_str = ''
             
+            # 承認状態を取得
+            is_approved = _check_approval_pdf(selected_month)
+            status_str = '' if is_approved else '(未承認版)'
+            
             for row in cover_sheet.iter_rows():
                 for cell in row:
                     if cell.value and isinstance(cell.value, str):
@@ -354,6 +446,8 @@ def export_excel(request):
                             cell.value = cell.value.replace('{sysdate}', current_date)
                         if '{effective_date}' in cell.value and effective_date_str:
                             cell.value = cell.value.replace('{effective_date}', effective_date_str)
+                        if '{status}' in cell.value:
+                            cell.value = cell.value.replace('{status}', status_str)
         except KeyError:
             pass  # 表紙シートがない場合はスキップ
         
@@ -375,7 +469,7 @@ def export_excel(request):
     
     # 既存データをクリア（5行目以降のデータ行）
     for row in range(5, ws.max_row + 1):
-        for col in range(1, 15):
+        for col in range(1, 16):  # 15列目までクリア
             ws.cell(row=row, column=col).value = None
     
     # ヘッダーの年月を更新
@@ -383,15 +477,20 @@ def export_excel(request):
         # yyyy/mm形式をyyyy.mm形式に変換
         display_month = selected_month.replace('/', '.')
         
-        # I3セル（県連価格）の年月を更新
-        kenren_header = ws.cell(row=3, column=9)
-        if kenren_header.value:
-            kenren_header.value = str(kenren_header.value).replace('{yyyy.mm}', display_month)
+        # 前月をyyyy.mm形式に変換
+        prev_display_month = ''
+        if previous_month:
+            prev_display_month = previous_month.replace('/', '.')
         
-        # K3セル（参考小売価格）の年月を更新
-        retail_header = ws.cell(row=3, column=11)
-        if retail_header.value:
-            retail_header.value = str(retail_header.value).replace('{yyyy.mm}', display_month)
+        # 全シートの{prev_month}を置き換え
+        for sheet in wb.worksheets:
+            for row in sheet.iter_rows():
+                for cell in row:
+                    if cell.value and isinstance(cell.value, str):
+                        if '{prev_month}' in cell.value and prev_display_month:
+                            cell.value = cell.value.replace('{prev_month}', prev_display_month)
+                        if '{yyyy.mm}' in cell.value:
+                            cell.value = cell.value.replace('{yyyy.mm}', display_month)
     
     # テンプレート行（4行目）の書式を取得
     template_row = 4
@@ -440,10 +539,23 @@ def export_excel(request):
         except:
             revision_amount = 0
         
+        # 前月価格を取得
+        previous_month_price = ''
+        if item.get('previous_month_price'):
+            try:
+                if isinstance(item['previous_month_price'], (int, float)):
+                    previous_month_price = int(item['previous_month_price'])
+                else:
+                    previous_month_price = item['previous_month_price']
+            except:
+                previous_month_price = item['previous_month_price']
+        else:
+            previous_month_price = '-'
+        
         data = [
             excel_row_num - 1, str(product.livestock_type or ''), str(product.category or ''), str(product.manufacturer or ''),
             product.product_name or '', product.model_number or '', product.specification or '',
-            product.shipping_unit or '', kenren_price, revision_amount, retail_price,
+            product.shipping_unit or '', previous_month_price, kenren_price, revision_amount, retail_price,
             product.shipping_fee or '', product.remarks or '',
             price_history.revision_reason if price_history.revision_reason else ''
         ]
@@ -457,7 +569,7 @@ def export_excel(request):
     # テンプレート行（4行目）の書式をコピー
     if row_num > 4:
         template_styles = []
-        for col in range(1, 15):
+        for col in range(1, 16):  # 15列目まで拡張
             template_cell = ws.cell(row=4, column=col)
             template_styles.append({
                 'font': template_cell.font.copy() if template_cell.font else None,
@@ -479,24 +591,27 @@ def export_excel(request):
             if item_index < len(product_data):
                 item = product_data[item_index]
                 price_history = item['price_history']
-                # 価格履歴の適用月が選択月と同じかチェック
+                prev_price = item.get('previous_month_price')
+                
+                # 前月価格と現在価格を比較
                 has_revision = False
-                if price_history and price_history.effective_year_month == selected_month:
-                    try:
-                        kenren_is_numeric = price_history.kenren_price and str(price_history.kenren_price).replace(',', '').replace('.', '').isdigit()
-                        wholesale_is_numeric = price_history.wholesale_price and str(price_history.wholesale_price).replace(',', '').replace('.', '').isdigit()
-                        revision_amount = price_history.get_revision_amount()
-                        
-                        if kenren_is_numeric and wholesale_is_numeric and revision_amount == 0:
-                            has_revision = False
-                        else:
-                            has_revision = True
-                    except:
+                if price_history and prev_price is not None:
+                    current_price = price_history.kenren_price
+                    if not current_price and price_history.wholesale_price and price_history.wholesale_price != '都度見積':
+                        try:
+                            wholesale = float(str(price_history.wholesale_price).replace(',', ''))
+                            margin = float(price_history.gross_margin_rate)
+                            current_price = int(wholesale * margin)
+                        except:
+                            current_price = '都度見積'
+                    
+                    # 価格変動があった場合のみ色付け
+                    if current_price != prev_price:
                         has_revision = True
             else:
                 has_revision = False
             
-            for col in range(1, 15):
+            for col in range(1, 16):  # 15列目までスタイル適用
                 cell = ws.cell(row=row, column=col)
                 style = template_styles[col-1]
                 if style['font']:

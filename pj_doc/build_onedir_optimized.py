@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-最適化onedir版ビルドスクリプト（_internal共有）
+最適化onefile版ビルドスクリプト（_internal共有）
 """
 import subprocess
 import sys
@@ -8,16 +8,16 @@ import shutil
 from pathlib import Path
 
 def main():
-    """最適化onedirビルド"""
+    """最適化onefileビルド"""
     project_root = Path(__file__).parent.parent
     
-    print("=== 最適化onedir配布ビルド ===")
+    print("=== 最適化onefile配布ビルド ===")
     cmd_console = [
         sys.executable, "-m", "PyInstaller",
         "--onefile",
         "--noconsole",
         "--debug=all",
-        "--name=DegitalValueList",
+        "--name=DigitalValueList",
         "--distpath=dist/onedir_console",
         "--workpath=build/onedir_console",
         "--noconfirm",
@@ -33,11 +33,11 @@ def main():
     ]
     
     
-    print("console版をビルド中...")
+    print("ビルド中...")
     result_console = subprocess.run(cmd_console, cwd=project_root)
     
     if result_console.returncode != 0:
-        print("❌ console版ビルドに失敗しました")
+        print("❌ ビルドに失敗しました")
         return
     
     # 配布用フォルダを作成
@@ -45,14 +45,14 @@ def main():
     deploy_dir.mkdir(exist_ok=True)
     
     # 実行ファイルをコピー
-    exe_src = project_root / "dist" / "onedir_console" / "DegitalValueList.exe"
-    exe_dst = deploy_dir / "DegitalValueList.exe"
+    exe_src = project_root / "dist" / "onedir_console" / "DigitalValueList.exe"
+    exe_dst = deploy_dir / "DigitalValueList.exe"
     if exe_src.exists():
         shutil.copy2(exe_src, exe_dst)
         print(f"  ✅ {exe_src.name} をコピー")
     
     # 設定ファイル等をコピー
-    for file_name in ["config.ini", "db.sqlite3", "degital_value_list.xlsx"]:
+    for file_name in ["config.ini", "db.sqlite3", "digital_value_list.xlsx"]:
          src = project_root / file_name
          dst = deploy_dir / file_name
          if src.exists():
@@ -67,12 +67,12 @@ def main():
     print("  ✅ media/ フォルダを作成")
     
     print("")
-    print("✅ console版onedirビルド完了!")
+    print("✅ ビルド完了!")
     print(f"📁 配布フォルダ: {deploy_dir}")
     print("")
-    print("📁 console版構成:")
+    print("📁 構成:")
     print("  deploy/")
-    print("  ├── DegitalValueList.exe # 実行ファイル")
+    print("  ├── DigitalValueList.exe # 実行ファイル")
     print("  ├── config.ini")
     print("  ├── db.sqlite3")
     print("  └── media/")
