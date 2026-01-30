@@ -17,7 +17,7 @@ def build_version_checker():
         'pyinstaller',
         '--onefile',
         '--console',
-        '--name=VersionChecker',
+        '--name=デジタル価格表',
         
         # 軽量化オプション
         '--noupx',
@@ -56,7 +56,7 @@ def build_version_checker():
         '--exclude-module=timeit',
         
         # 出力ディレクトリ
-        '--distpath=deploy_checker',
+        '--distpath=dist',
         '--workpath=build_checker',
         '--specpath=.',
         
@@ -70,10 +70,10 @@ def build_version_checker():
     try:
         result = subprocess.run(cmd, cwd=project_root, check=True)
         print("✅ ビルド完了")
-        print(f"📁 出力先: {project_root / 'deploy_checker'}")
+        print(f"📁 出力先: {project_root / 'dist'}")
         
         # ファイルサイズを表示
-        exe_path = project_root / 'deploy_checker' / 'VersionChecker.exe'
+        exe_path = project_root / 'dist' / 'デジタル価格表.exe'
         if exe_path.exists():
             size_mb = exe_path.stat().st_size / (1024 * 1024)
             print(f"📊 ファイルサイズ: {size_mb:.1f} MB")

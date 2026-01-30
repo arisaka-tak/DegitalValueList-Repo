@@ -19,7 +19,7 @@ def main():
     
     # ビルド用の一時フォルダ
     build_dir = project_root / "build_batch"
-    dist_dir = build_dir / "dist"
+    dist_dir = project_root / "dist"
     
     # 既存のビルドフォルダを削除
     if build_dir.exists():
