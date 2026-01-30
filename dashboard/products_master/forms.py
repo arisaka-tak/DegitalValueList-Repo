@@ -27,7 +27,7 @@ class ProductForm(forms.ModelForm):
         fields = [
             'product_code', 'livestock_type', 'category', 'manufacturer',
             'product_name', 'model_number', 'specification', 'shipping_unit',
-            'shipping_fee', 'remarks'
+            'remarks'
         ]
         widgets = {
             'product_code': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '9桁の数字または空欄'}),
@@ -38,7 +38,6 @@ class ProductForm(forms.ModelForm):
             'model_number': forms.TextInput(attrs={'class': 'form-control'}),
             'specification': forms.TextInput(attrs={'class': 'form-control'}),
             'shipping_unit': forms.TextInput(attrs={'class': 'form-control'}),
-            'shipping_fee': forms.TextInput(attrs={'class': 'form-control'}),
             'remarks': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
 
@@ -50,7 +49,7 @@ class PriceHistoryForm(forms.ModelForm):
         fields = [
             'period_year', 'effective_year_month',
             'gross_margin_rate', 'wholesale_price', 'kenren_price',
-            'retail_price', 'revision_amount', 'revision_reason'
+            'retail_price', 'shipping_fee', 'revision_amount', 'revision_reason'
         ]
         widgets = {
             'period_year': forms.NumberInput(attrs={'class': 'form-control', 'min': 2020, 'max': 2030}),
@@ -59,6 +58,7 @@ class PriceHistoryForm(forms.ModelForm):
             'wholesale_price': forms.TextInput(attrs={'class': 'form-control'}),
             'kenren_price': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '空欄で自動計算'}),
             'retail_price': forms.TextInput(attrs={'class': 'form-control'}),
+            'shipping_fee': forms.TextInput(attrs={'class': 'form-control'}),
             'revision_amount': forms.NumberInput(attrs={'class': 'form-control'}),
             'revision_reason': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
         }

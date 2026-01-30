@@ -64,7 +64,7 @@ def kill_existing_server():
                              capture_output=True, check=False)
         
         # 停止を待つ
-        port, _, _ = load_config()
+        port, _, _, _ = load_config()
         for _ in range(5):
             time.sleep(1)
             if not is_port_in_use(port):
@@ -100,6 +100,8 @@ def load_config():
     # デフォルト値
     defaults = {
         'port': 8000,
+        # 'host': '0.0.0.0',  # 全てのIPアドレスからアクセス可能
+        'host': '127.0.0.1',  # ローカルのみアクセス可能
         'auto_browser': True,
         'db_path': 'db.sqlite3'
     }
@@ -108,13 +110,14 @@ def load_config():
         try:
             config.read(CONFIG_PATH, encoding='utf-8')
             port = config.getint('SYSTEM', 'port', fallback=defaults['port'])
+            host = config.get('SYSTEM', 'host', fallback=defaults['host'])
             auto_browser = config.getboolean('SYSTEM', 'auto_browser', fallback=defaults['auto_browser'])
             db_path = config.get('DATABASE', 'path', fallback=defaults['db_path'])
-            return port, auto_browser, db_path
+            return port, host, auto_browser, db_path
         except Exception:
             pass
     
-    return defaults['port'], defaults['auto_browser'], defaults['db_path']
+    return defaults['port'], defaults['host'], defaults['auto_browser'], defaults['db_path']
 
 def setup_logging(project_root):
     """ログ設定"""
@@ -192,7 +195,7 @@ def main():
             print("デジタル価格表システムを起動中...")
             # プロセス優先度を上げる
             try:
-                import psutil
+                import psutil  # type: ignore
                 p = psutil.Process()
                 p.nice(psutil.HIGH_PRIORITY_CLASS)
             except ImportError:
@@ -225,7 +228,16 @@ def main():
     # 設定読み込み
     logger.info(f"設定ファイル: {CONFIG_PATH} {'(存在)' if CONFIG_PATH.exists() else '(デフォルト値使用)'}")
     
-    port, auto_browser, db_path = load_config()
+    port, host, auto_browser, db_path = load_config()
+    
+    # サーバー情報を表示
+    logger.info(f"サーバー設定: {host}:{port}")
+    # if host == '0.0.0.0':
+    #     import socket
+    #     hostname = socket.gethostname()
+    #     local_ip = socket.gethostbyname(hostname)
+    #     logger.info(f"他のPCからアクセスする場合: http://{local_ip}:{port}/")
+    #     logger.info(f"ホスト名でアクセスする場合: http://{hostname}:{port}/")
     
     # データベースパスを環境変数に設定
     db_full_path = exe_dir / db_path
@@ -239,6 +251,7 @@ def main():
     from digital_pricelist_system.settings import get_media_root
     media_root = get_media_root()
     logger.info(f"MEDIA_ROOT: {media_root}")
+    logger.info(f"PDF保管先: {media_root / 'ai_extract'}")
     
     # Python実行ファイルを取得
     if getattr(sys, 'frozen', False):
@@ -285,21 +298,20 @@ def main():
             os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'digital_pricelist_system.settings')
             django.setup()
             
-            logger.info(f"サーバーを起動中: http://127.0.0.1:{port}/")
-            
-            # サーバー起動を別スレッドで実行
+            # Djangoサーバーを別スレッドで起動
             import threading
             def start_server():
-                execute_from_command_line(['manage.py', 'runserver', f'127.0.0.1:{port}', '--noreload', '--insecure'])
+                execute_from_command_line(['manage.py', 'runserver', f'{host}:{port}', '--noreload'])
             
             server_thread = threading.Thread(target=start_server, daemon=True)
             server_thread.start()
             
-            # サーバーが起動するまで待機
-            for i in range(30):  # 30秒まで待機
+            # サーバーが起動するまで待機（30秒まで）
+            logger.info("サーバー起動を待機中...")
+            for i in range(30):
                 time.sleep(1)
                 if is_port_in_use(port):
-                    logger.info("サーバー起動完了")
+                    logger.info(f"サーバー起動完了: http://127.0.0.1:{port}/")
                     break
             else:
                 logger.error("サーバー起動タイムアウト")
@@ -307,38 +319,45 @@ def main():
             
             # サーバー起動後にブラウザを開く
             if auto_browser:
-                logger.info("ブラウザを起動しています...")
-                webbrowser.open(f"http://127.0.0.1:{port}/")
-            
-            logger.info(f"サーバーが起動しました: http://127.0.0.1:{port}/")
+                logger.info("ブラウザを起動中...")
+                webbrowser.open(f'http://127.0.0.1:{port}/')
             
             # メインスレッドで待機
             try:
                 while server_thread.is_alive():
                     time.sleep(1)
             except KeyboardInterrupt:
-                logger.info("システムを終了しています...")
+                logger.info("システムを終了中...")
         else:
-            # 開発環境では従来通り
+            # 開発環境ではサブプロセスで起動
             process = subprocess.Popen([
-                python_executable, "manage.py", "runserver", f"127.0.0.1:{port}", "--insecure"
+                python_executable, 'manage.py', 'runserver', f'{host}:{port}'
             ])
             
-            # サーバーが起動するまで待機
-            for i in range(30):  # 30秒まで待機
+            # サーバーが起動するまで待機（30秒まで）
+            logger.info("サーバー起動を待機中...")
+            for i in range(30):
                 time.sleep(1)
                 if is_port_in_use(port):
+                    logger.info(f"サーバー起動完了: http://127.0.0.1:{port}/")
                     break
+            else:
+                logger.error("サーバー起動タイムアウト")
+                process.terminate()
+                return
             
-            # ブラウザを開く（設定で有効な場合のみ）
+            # サーバー起動後にブラウザを開く
             if auto_browser:
-                webbrowser.open(f"http://127.0.0.1:{port}/")
+                logger.info("ブラウザを起動中...")
+                webbrowser.open(f'http://127.0.0.1:{port}/')
             
             # プロセスの終了を待つ
             try:
                 process.wait()
             except KeyboardInterrupt:
-                raise
+                logger.info("システムを終了中...")
+                process.terminate()
+                process.wait()
         
         
     except KeyboardInterrupt:

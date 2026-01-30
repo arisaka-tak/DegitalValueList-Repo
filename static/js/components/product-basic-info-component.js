@@ -37,10 +37,6 @@ class ProductBasicInfoComponent extends HTMLElement {
                         <label class="form-label" for="id_category">分類</label>
                         ${this.renderSelectField('category', productData, formData, isEditable, diffFlags, errorFields, categories)}
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="id_shipping_fee">送料</label>
-                        ${this.renderTextareaField('shipping_fee', productData, formData, isEditable, diffFlags, errorFields)}
-                    </div>
                 </div>
                 <div class="col-md-6">
                     <div class="mb-3">
@@ -131,7 +127,8 @@ class ProductBasicInfoComponent extends HTMLElement {
             let optionsHtml = '<option value="">選択してください</option>';
             
             options.forEach(option => {
-                const selected = formValue == option.id ? ' selected' : '';
+                // 文字列と数値の比較を確実にするため、両方を文字列に変換
+                const selected = String(formValue) === String(option.id) ? ' selected' : '';
                 optionsHtml += `<option value="${option.id}"${selected}>${this.escapeHtml(option.name)}</option>`;
             });
             
@@ -139,7 +136,7 @@ class ProductBasicInfoComponent extends HTMLElement {
         } else {
             const diffClass = isDiff ? ' text-danger fw-bold' : '';
             // IDから名前を取得して表示
-            const selectedOption = options.find(option => option.id == value);
+            const selectedOption = options.find(option => String(option.id) === String(value));
             const displayValue = selectedOption ? selectedOption.name : (value || '-');
             return `<div class="form-control-plaintext${diffClass}">${this.escapeHtml(displayValue)}</div>`;
         }
@@ -169,7 +166,7 @@ class ProductBasicInfoComponent extends HTMLElement {
         } else {
             const diffClass = isDiff ? ' text-danger fw-bold' : '';
             // IDから名前を取得して表示
-            const selectedManufacturer = manufacturers.find(m => m.id == value);
+            const selectedManufacturer = manufacturers.find(m => String(m.id) === String(value));
             const displayValue = selectedManufacturer ? selectedManufacturer.name : (value || '-');
             return `<div class="form-control-plaintext${diffClass}">${this.escapeHtml(displayValue)}</div>`;
         }
@@ -206,7 +203,7 @@ class ProductBasicInfoComponent extends HTMLElement {
             try {
                 const response = await fetch('/products/api/manufacturers/');
                 const manufacturers = await response.json();
-                const manufacturer = manufacturers.find(m => m.id == manufacturerId);
+                const manufacturer = manufacturers.find(m => String(m.id) === String(manufacturerId));
                 if (manufacturer) {
                     displayInput.value = manufacturer.name;
                 }
@@ -220,7 +217,7 @@ class ProductBasicInfoComponent extends HTMLElement {
         try {
             const response = await fetch('/products/api/manufacturers/');
             const manufacturers = await response.json();
-            const manufacturer = manufacturers.find(m => m.id == manufacturerId);
+            const manufacturer = manufacturers.find(m => String(m.id) === String(manufacturerId));
             if (manufacturer) {
                 const displayElement = document.getElementById(`display_${fieldName}`);
                 if (displayElement) {

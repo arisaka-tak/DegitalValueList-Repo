@@ -326,6 +326,8 @@ def main():
     
     # 設定ファイル検証
     validate_config_paths()
+    print(f"[バッチ] config.iniパス: {CONFIG_PATH}")
+    print(f"[バッチ] config.ini存在: {CONFIG_PATH.exists()}")
     print(f"監視フォルダ: {WATCH_FOLDER}")
     print(f"エラーフォルダ: {ERROR_FOLDER}")
     print(f"PDF保存先: {MEDIA_ROOT} (画面と同じ場所)")

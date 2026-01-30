@@ -1,9 +1,10 @@
 from django.db import models
 from dashboard.products_master.models import Product, ProductApproval
 import os
+from digital_pricelist_system.settings import get_media_root
 
 def ai_extract_pdf_upload_path(instance, filename):
-    """トランザクションIDを付けたユニークなファイル名を生成"""
+    """config.iniで指定されたmedia_rootを使用してファイルパスを生成"""
     name, ext = os.path.splitext(filename)
     return f'ai_extract/{instance.transaction_id}_{filename}'
 

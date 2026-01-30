@@ -35,12 +35,43 @@ DOCUMENT_INTELLIGENCE_ENDPOINT = "https://digital-valuelist-prd.cognitiveservice
 DOCUMENT_INTELLIGENCE_API_KEY = "397a72600d7e45f6b2462d5b99edc38a"
 
 def get_proxy_settings():
-    """プロキシ設定を自動検出（PACファイル対応）"""
+    """プロキシ設定をconfig.iniから取得、なければ自動検出"""
     try:
+        # まずconfig.iniからプロキシ設定を取得
+        try:
+            import configparser
+            from digital_pricelist_system.config_paths import CONFIG_PATH
+            
+            logger.info(f"[DI処理] config.iniパス: {CONFIG_PATH}")
+            logger.info(f"[DI処理] config.ini存在: {CONFIG_PATH.exists()}")
+            
+            config = configparser.ConfigParser()
+            if CONFIG_PATH.exists():
+                config.read(CONFIG_PATH, encoding='utf-8')
+                http_proxy = config.get('PROXY', 'http_proxy', fallback='')
+                proxy_auth = config.get('PROXY', 'proxy_auth', fallback='')
+                
+                logger.info(f"[DI処理] プロキシ設定読み込み: http_proxy={bool(http_proxy)}, auth={bool(proxy_auth)}")
+                
+                if http_proxy:
+                    clean_proxy = http_proxy.replace('http://', '').replace('https://', '')
+                    if proxy_auth:
+                        proxy_url = f"http://{proxy_auth}@{clean_proxy}"
+                    else:
+                        proxy_url = f"http://{clean_proxy}"
+                    logger.info(f"[DI処理] config.iniからプロキシ設定: {clean_proxy}")
+                    return proxy_url
+            else:
+                logger.warning(f"[DI処理] config.iniが見つかりません")
+        except Exception as e:
+            logger.warning(f"[DI処理] config.ini読み込みエラー: {e}")
+        
+        # config.iniに設定がない場合は自動検出
+        logger.info(f"[DI処理] 自動プロキシ検出を実行")
         # 環境変数からプロキシを取得
         proxies = urllib.request.getproxies()
         if proxies:
-            logger.info(f"検出されたプロキシ設定: {proxies}")
+            logger.info(f"[DI処理] 検出されたプロキシ設定: {proxies}")
             return proxies.get('https') or proxies.get('http')
         
         # Windows レジストリからプロキシ設定を取得
@@ -53,7 +84,7 @@ def get_proxy_settings():
                 try:
                     auto_config_url, _ = winreg.QueryValueEx(key, "AutoConfigURL")
                     if auto_config_url:
-                        logger.info(f"PACファイル検出: {auto_config_url}")
+                        logger.info(f"[DI処理] PACファイル検出: {auto_config_url}")
                         # PACファイルからプロキシを解析
                         proxy = parse_pac_file(auto_config_url)
                         if proxy:
@@ -67,7 +98,7 @@ def get_proxy_settings():
                     proxy_enable, _ = winreg.QueryValueEx(key, "ProxyEnable")
                     if proxy_enable:
                         proxy_server, _ = winreg.QueryValueEx(key, "ProxyServer")
-                        logger.info(f"Windows 直接プロキシ: {proxy_server}")
+                        logger.info(f"[DI処理] Windows 直接プロキシ: {proxy_server}")
                         winreg.CloseKey(key)
                         return f"http://{proxy_server}"
                 except FileNotFoundError:
@@ -75,11 +106,12 @@ def get_proxy_settings():
                 
                 winreg.CloseKey(key)
             except Exception as e:
-                logger.error(f"Windowsレジストリエラー: {e}")
+                logger.error(f"[DI処理] Windowsレジストリエラー: {e}")
         
+        logger.info(f"[DI処理] プロキシ設定が見つかりません")
         return None
     except Exception as e:
-        logger.error(f"プロキシ検出エラー: {e}")
+        logger.error(f"[DI処理] プロキシ検出エラー: {e}")
         return None
 
 def parse_pac_file(pac_url):

@@ -66,7 +66,6 @@ class Product(models.Model):
     model_number = models.CharField('型式', max_length=100, blank=True, null=True)
     specification = models.CharField('規格', max_length=100, blank=True, null=True)
     shipping_unit = models.CharField('発送単位', max_length=50, blank=True, null=True)
-    shipping_fee = models.CharField('送料', max_length=100, blank=True, null=True)
     remarks = models.TextField('備考', blank=True, null=True)
     
     # 表示順序用フィールド
@@ -118,20 +117,23 @@ class Product(models.Model):
 class PriceHistory(models.Model):
     """価格改定履歴"""
     product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name='商品', related_name='price_histories')
-    period_year = models.IntegerField('年度', help_text='2025年度 = 2025/04～2026/03')
-    effective_year_month = models.CharField('適用年月', max_length=7, help_text='YYYY/MM形式')  # 2025/03
+    period_year = models.IntegerField('年度', default=2025, help_text='2025年度 = 2025/04～2026/03')
+    effective_year_month = models.CharField('適用年月', max_length=7, default='2025/01', help_text='YYYY/MM形式')  # 2025/03
     
     # 粗利率（年度ごと）
-    gross_margin_rate = models.DecimalField('粗利率', max_digits=10, decimal_places=6, validators=[MinValueValidator(Decimal('0'))], help_text='前年度最終県連価格÷年度初め仕切価格（年度初めに1度計算、年度中は固定）')
+    gross_margin_rate = models.DecimalField('粗利率', max_digits=10, decimal_places=6, default=Decimal('0.90'), validators=[MinValueValidator(Decimal('0'))], help_text='前年度最終県連価格÷年度初め仕切価格（年度初めに1度計算、年度中は固定）')
     
     # 仕切価格（仕入価格）
-    wholesale_price = models.CharField('仕切価格', max_length=50, help_text='メーカーからの仕入価格（"都度見積"等の文字列含む）')
+    wholesale_price = models.CharField('仕切価格', max_length=50, default='都度見積', help_text='メーカーからの仕入価格（"都度見積"等の文字列含む）')
     
     # 県連価格（販売価格）
     kenren_price = models.CharField('県連価格', max_length=50, blank=True, null=True, help_text='nullなら粗利率×仕切価格で自動計算、値があるならその値を表示（"都度見積"等の文字列含む）')
     
     # 参考小売価格（一般市場価格）
     retail_price = models.CharField('参考小売価格', max_length=50, blank=True, null=True, help_text='一般商流での参考価格（"オープン"等の文字列含む）')
+    
+    # 送料
+    shipping_fee = models.CharField('送料', max_length=100, blank=True, null=True, help_text='送料情報')
     
     # 改定額（非使用：動的計算に変更）
     revision_amount = models.DecimalField('改定額', max_digits=12, decimal_places=0, default=0, help_text='非使用：get_revision_amount()で動的計算')
@@ -281,15 +283,15 @@ class PriceHistory(models.Model):
 class ProductGrossMarginRate(models.Model):
     """商品別年度別粗利率マスタ"""
     product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name='商品', related_name='gross_margin_rates')
-    period_year = models.IntegerField('年度', help_text='2025年度 = 2025/04～2026/03')
-    gross_margin_rate = models.DecimalField('粗利率', max_digits=10, decimal_places=6, validators=[MinValueValidator(Decimal('0'))], help_text='県連価格÷仕切価格')
+    period_year = models.IntegerField('年度', default=2025, help_text='2025年度 = 2025/04～2026/03')
+    gross_margin_rate = models.DecimalField('粗利率', max_digits=10, decimal_places=6, default=Decimal('0.90'), validators=[MinValueValidator(Decimal('0'))], help_text='県連価格÷仕切価格')
     
     # 算定根拠（参考情報）
     base_kenren_price = models.DecimalField('算定基準県連価格', max_digits=12, decimal_places=0, null=True, blank=True, help_text='粗利率算定に使用した県連価格')
     base_wholesale_price = models.DecimalField('算定基準仕切価格', max_digits=12, decimal_places=0, null=True, blank=True, help_text='粗利率算定に使用した仕切価格')
     calculation_note = models.TextField('算定メモ', blank=True, null=True, help_text='粗利率の算定根拠や備考')
     
-    created_at = models.DateTimeField('作成日時', auto_now_add=True)
+    created_at = models.DateTimeField('作成日時', default=timezone.now)
     updated_at = models.DateTimeField('更新日時', auto_now=True)
     
     class Meta:
@@ -308,24 +310,23 @@ class ProductApproval(models.Model):
     """商品マスタ承認テーブル"""
     product_number = models.IntegerField('元商品のpk', default=-999, help_text='元になった商品マスタのpk（新規の場合は負の値）')
     product_code = models.CharField('商品コード', max_length=50, blank=True, null=True, help_text='ユーザー管理用の商品コード')
-    livestock_type = models.CharField('畜種', max_length=50, blank=True, null=True)
-    category = models.CharField('分類', max_length=100, blank=True, null=True)
-    manufacturer = models.CharField('メーカー', max_length=100, blank=True, null=True)
-    product_name = models.CharField('商品名', max_length=200)
+    livestock_type = models.CharField('畜種', max_length=50, default='', blank=True, null=True)
+    category = models.CharField('分類', max_length=100, default='', blank=True, null=True)
+    manufacturer = models.CharField('メーカー', max_length=100, default='', blank=True, null=True)
+    product_name = models.CharField('商品名', max_length=200, default='')
     model_number = models.CharField('型式', max_length=100, blank=True, null=True)
     specification = models.CharField('規格', max_length=100, blank=True, null=True)
     shipping_unit = models.CharField('発送単位', max_length=50, blank=True, null=True)
-    shipping_fee = models.CharField('送料', max_length=100, blank=True, null=True)
     remarks = models.TextField('備考', blank=True, null=True)
     
     # ワークフロー用フィールド
-    applicant = models.CharField('申請者', max_length=100, blank=True, null=True)
+    applicant = models.CharField('申請者', max_length=100, default='system', blank=True, null=True)
     status = models.CharField('ステータス', max_length=20, default='申請中')
     approver = models.CharField('承認者', max_length=100, blank=True, null=True)
     
     is_active = models.BooleanField('有効', default=True)
     deleted_at = models.DateTimeField('削除日時', null=True, blank=True)
-    created_at = models.DateTimeField('作成日時', auto_now_add=True)
+    created_at = models.DateTimeField('作成日時', default=timezone.now)
     updated_at = models.DateTimeField('更新日時', auto_now=True)
     
     class Meta:
@@ -339,13 +340,14 @@ class ProductApproval(models.Model):
 class PriceHistoryApproval(models.Model):
     """価格改定履歴承認テーブル"""
     product = models.ForeignKey(ProductApproval, on_delete=models.CASCADE, verbose_name='商品', related_name='price_histories')
-    period_year = models.IntegerField('年度', help_text='2025年度 = 2025/04～2026/03')
-    effective_year_month = models.CharField('適用年月', max_length=7, help_text='YYYY/MM形式')
+    period_year = models.IntegerField('年度', default=2025, help_text='2025年度 = 2025/04～2026/03')
+    effective_year_month = models.CharField('適用年月', max_length=7, default='2025/01', help_text='YYYY/MM形式')
     
-    gross_margin_rate = models.DecimalField('粗利率', max_digits=10, decimal_places=6, validators=[MinValueValidator(Decimal('0'))], null=True, blank=True)
-    wholesale_price = models.CharField('仕切価格', max_length=50, blank=True, null=True)
+    gross_margin_rate = models.DecimalField('粗利率', max_digits=10, decimal_places=6, default=Decimal('0.90'), validators=[MinValueValidator(Decimal('0'))], null=True, blank=True)
+    wholesale_price = models.CharField('仕切価格', max_length=50, default='都度見積', blank=True, null=True)
     kenren_price = models.CharField('県連価格', max_length=50, blank=True, null=True)
     retail_price = models.CharField('参考小売価格', max_length=50, blank=True, null=True)
+    shipping_fee = models.CharField('送料', max_length=100, blank=True, null=True, help_text='送料情報')
     revision_amount = models.DecimalField('改定額', max_digits=12, decimal_places=0, default=0)
     revision_reason = models.TextField('改定理由', blank=True, null=True)
     
@@ -356,13 +358,13 @@ class PriceHistoryApproval(models.Model):
     is_delete_request = models.BooleanField('削除申請', default=False, help_text='この履歴を削除する申請かどうか')
     
     # ワークフロー用フィールド
-    applicant = models.CharField('申請者', max_length=100, blank=True, null=True)
+    applicant = models.CharField('申請者', max_length=100, default='system', blank=True, null=True)
     status = models.CharField('ステータス', max_length=20, default='申請中')
     approver = models.CharField('承認者', max_length=100, blank=True, null=True)
     
     is_active = models.BooleanField('有効', default=True)
     deleted_at = models.DateTimeField('削除日時', null=True, blank=True)
-    created_at = models.DateTimeField('作成日時', auto_now_add=True)
+    created_at = models.DateTimeField('作成日時', default=timezone.now)
     updated_at = models.DateTimeField('更新日時', auto_now=True)
     
     class Meta:

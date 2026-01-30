@@ -80,7 +80,9 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-cu8ryq2pn^2_oc(-852@nyb6#3
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = []
+# ローカルのみアクセス許可
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+# ALLOWED_HOSTS = ['*']  # 他PCからアクセスする場合はこちらを使用
 
 
 # Application definition

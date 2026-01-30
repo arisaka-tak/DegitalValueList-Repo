@@ -8,6 +8,7 @@ from django.db import transaction
 from dashboard.products_master.models import Product, PriceHistory, LivestockType, Category, Manufacturer, ProductGrossMarginRate, ProductApproval, PriceHistoryApproval
 from datetime import datetime
 from django.http import JsonResponse
+from digital_pricelist_system.text_utils import normalize_product_name
 try:
     import openpyxl
     EXCEL_SUPPORT = True
@@ -37,6 +38,10 @@ def export_products_csv():
     writer.writerow(['ID', '商品コード', '畜種', 'カテゴリ', 'メーカー', '商品名', '型式', '規格', '発送単位', '送料', '備考', '有効', '作成日時', '更新日時'])
     
     for product in Product.objects.all():
+        # 最新の価格履歴から送料を取得
+        latest_history = product.price_histories.order_by('-effective_year_month').first()
+        shipping_fee = latest_history.shipping_fee if latest_history else ''
+        
         writer.writerow([
             product.pk,
             product.product_code or '',
@@ -47,7 +52,7 @@ def export_products_csv():
             product.model_number or '',
             product.specification or '',
             product.shipping_unit or '',
-            product.shipping_fee or '',
+            shipping_fee or '',
             product.remarks or '',
             product.is_active,
             product.created_at.strftime('%Y-%m-%d %H:%M:%S'),
@@ -230,7 +235,6 @@ def handle_csv_import(request):
                     model_number=product_data['model_number'] or None,
                     specification=product_data['specification'] or None,
                     shipping_unit=product_data['shipping_unit'] or None,
-                    shipping_fee=product_data['shipping_fee'] or None,
                     remarks=product_data['remarks'] or None
                 )
                 created_products += 1
@@ -267,6 +271,7 @@ def handle_csv_import(request):
                         wholesale_price=history_data['wholesale_price'],  # 文字列
                         kenren_price=history_data['kenren_price'],  # 文字列
                         retail_price=history_data['retail_price'],  # 文字列
+                        shipping_fee=product_data['shipping_fee'] or '',  # 送料を価格履歴に保存
                         revision_reason=history_data['revision_reason'] or None
                     )
                     created_histories += 1
@@ -319,7 +324,7 @@ def parse_csv_row(row, row_num):
         'livestock_type': str(row[1]).strip(),
         'category': str(row[2]).strip(),
         'manufacturer': str(row[3]).strip(),
-        'product_name': str(row[4]).strip(),
+        'product_name': normalize_product_name(str(row[4]).strip()),
         'model_number': str(row[5]).strip() if str(row[5]).strip() else None,
         'specification': str(row[6]).strip() if str(row[6]).strip() else None,
         'shipping_unit': str(row[7]).strip() if str(row[7]).strip() else None,

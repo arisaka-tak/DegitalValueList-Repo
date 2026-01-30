@@ -22,6 +22,7 @@ import sys
 import json
 import configparser
 import urllib.parse
+import tempfile
 
 def _check_approval_pdf(year_month):
     """承認PDFの存在をチェック
@@ -185,7 +186,10 @@ def integrated_pricelist(request):
                         kenren_price = int(wholesale * margin)
                     except:
                         kenren_price = '都度見積'
-                previous_month_prices[prev_history.product_id] = kenren_price
+                previous_month_prices[prev_history.product_id] = {
+                    'kenren_price': kenren_price,
+                    'wholesale_price': prev_history.wholesale_price
+                }
     else:
         # 最新の価格履歴を取得
         from django.db.models import OuterRef, Subquery
@@ -232,9 +236,11 @@ def integrated_pricelist(request):
                     current_price = '都度見積'
             
             prev_price = previous_month_prices.get(product.id)
+            if prev_price:
+                prev_kenren = prev_price.get('kenren_price') if isinstance(prev_price, dict) else prev_price
             
             # 価格変動があった場合のみ色付け
-            if current_price != prev_price:
+            if current_price != prev_kenren:
                 is_current_month = True
         
         product_data.append({
@@ -287,25 +293,66 @@ def update_sort_order(request):
         return JsonResponse({'success': False, 'message': f'エラー: {str(e)}'})
 
 def export_excel(request):
-    """デジタル価格表のExcel出力"""
+    """デジタル価格表のExcel出力（フィルタリング対応）"""
     import logging
     logger = logging.getLogger(__name__)
     
+    def format_price_for_excel(value):
+        """価格をExcel用にフォーマット（数値のみ3桁区切り）"""
+        if not value or value == '-' or value == '都度見積':
+            return value
+        try:
+            # 数値に変換できる場合は3桁区切りを追加
+            num_value = float(str(value).replace(',', ''))
+            if num_value == int(num_value):
+                return f'{int(num_value):,}'
+            else:
+                return f'{num_value:,.0f}'
+        except (ValueError, TypeError):
+            # 数値でない場合はそのまま返す
+            return str(value)
+    
     selected_month = request.GET.get('month', '')
-    logger.info(f"Excel出力開始 - selected_month: {selected_month}")
+    manufacturer_filter = request.GET.get('manufacturer', '').strip()
+    product_name_filter = request.GET.get('product_name', '').strip()
+    exclude_wholesale = request.GET.get('exclude_wholesale') == '1'
+    
+    logger.info(f"Excel出力開始 - selected_month: {selected_month}, manufacturer: {manufacturer_filter}, product_name: {product_name_filter}, exclude_wholesale: {exclude_wholesale}")
     
     if selected_month and '-' in selected_month:
         selected_month = selected_month.replace('-', '/')
-        logger.info(f"selected_month変換後: {selected_month}")
     
     _initialize_sort_numbers()
     
-    # データ取得を最適化（必要な列のみ取得）
-    all_products = Product.objects.filter(is_active=True).select_related(
+    # 画面と同じフィルタリング条件を適用
+    products_query = Product.objects.filter(is_active=True)
+    
+    if manufacturer_filter:
+        def normalize_simple(text):
+            if not text:
+                return ""
+            text = unicodedata.normalize('NFKC', text)
+            return text.upper()
+        
+        normalized_manufacturer = normalize_simple(manufacturer_filter)
+        products_query = products_query.filter(manufacturer__name__icontains=normalized_manufacturer)
+    
+    if product_name_filter:
+        def normalize_simple(text):
+            if not text:
+                return ""
+            text = unicodedata.normalize('NFKC', text)
+            return text.upper()
+        
+        normalized_filter = normalize_simple(product_name_filter)
+        products_query = products_query.filter(product_name__icontains=normalized_filter)
+    
+    # データ取得を最適化（フィルタリング済み）
+    all_products = products_query.select_related(
         'livestock_type', 'category', 'manufacturer'
     ).only(
         'id', 'product_name', 'model_number', 'specification', 'shipping_unit', 
-        'shipping_fee', 'remarks', 'sort_num',
+        'remarks', 'sort_num',
         'livestock_type__name', 'category__name', 'manufacturer__name'
     ).order_by('livestock_type', 'category', 'manufacturer', 'sort_num', 'product_name')
     
@@ -376,7 +423,10 @@ def export_excel(request):
                     kenren_price = int(wholesale * margin)
                 except:
                     kenren_price = '都度見積'
-            previous_month_prices[prev_history.product_id] = kenren_price
+            previous_month_prices[prev_history.product_id] = {
+                'kenren_price': kenren_price,
+                'wholesale_price': prev_history.wholesale_price
+            }
     
     # 価格ありかつ仕切価格0円以外の商品のみフィルタ
     product_data = []
@@ -412,6 +462,8 @@ def export_excel(request):
             # 開発環境では従来通り
             template_path = os.path.join(settings.BASE_DIR, 'degital_value_list.xlsx')
     
+    logger.info(f"使用するExcelテンプレート: {template_path} {'(存在)' if os.path.exists(template_path) else '(存在しない)'}")
+    
     try:
         wb = openpyxl.load_workbook(template_path)
         # [価格表]シートを指定（存在しない場合はアクティブシートを使用）
@@ -419,6 +471,9 @@ def export_excel(request):
             ws = wb['価格表']
         except KeyError:
             ws = wb.active
+        
+        # デフォルト行の高さを110ピクセルに設定
+        ws.sheet_format.defaultRowHeight = 110
         
         # 表紙シートの{sysdate}、{effective_date}、{status}を置き換え
         try:
@@ -457,9 +512,13 @@ def export_excel(request):
         ws = wb.active
         ws.title = '価格表'
         
+        # デフォルト行の高さを110ピクセルに設定
+        ws.sheet_format.defaultRowHeight = 110
+        
         headers = [
             '№', '畜種', '分類', 'メーカー', '商品名', '型式', '規格', '発送単位',
-            '県連価格', '改定額', '参考小売価格', '送料', '備考', '改定理由'
+            '【{prev_month}】仕切価格', '【{yyyy.mm}～】仕切価格', '【{prev_month}】県連価格', '【{yyyy.mm}～】県連価格',
+            '改定額', '【{yyyy.mm}】参考小売価格', '送料', '備考', '改定理由'
         ]
         for col, header in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col, value=header)
@@ -469,7 +528,7 @@ def export_excel(request):
     
     # 既存データをクリア（5行目以降のデータ行）
     for row in range(5, ws.max_row + 1):
-        for col in range(1, 16):  # 15列目までクリア
+        for col in range(1, 18):  # 17列目までクリア
             ws.cell(row=row, column=col).value = None
     
     # ヘッダーの年月を更新
@@ -540,27 +599,50 @@ def export_excel(request):
             revision_amount = 0
         
         # 前月価格を取得
-        previous_month_price = ''
+        previous_month_wholesale = ''
+        previous_month_kenren = ''
         if item.get('previous_month_price'):
-            try:
-                if isinstance(item['previous_month_price'], (int, float)):
-                    previous_month_price = int(item['previous_month_price'])
+            prev_data = item['previous_month_price']
+            if isinstance(prev_data, dict):
+                if prev_data.get('wholesale_price'):
+                    try:
+                        previous_month_wholesale = int(float(str(prev_data['wholesale_price']).replace(',', '')))
+                    except:
+                        previous_month_wholesale = prev_data['wholesale_price']
                 else:
-                    previous_month_price = item['previous_month_price']
-            except:
-                previous_month_price = item['previous_month_price']
+                    previous_month_wholesale = '-'
+                
+                if prev_data.get('kenren_price'):
+                    try:
+                        previous_month_kenren = int(float(str(prev_data['kenren_price']).replace(',', '')))
+                    except:
+                        previous_month_kenren = prev_data['kenren_price']
+                else:
+                    previous_month_kenren = '-'
+            else:
+                previous_month_kenren = prev_data
+                previous_month_wholesale = '-'
         else:
-            previous_month_price = '-'
+            previous_month_wholesale = '-'
+            previous_month_kenren = '-'
+        
+        # 価格をフォーマット
+        wholesale_price_formatted = format_price_for_excel(price_history.wholesale_price)
+        kenren_price_formatted = format_price_for_excel(kenren_price)
+        retail_price_formatted = format_price_for_excel(retail_price)
+        previous_month_wholesale_formatted = format_price_for_excel(previous_month_wholesale)
+        previous_month_kenren_formatted = format_price_for_excel(previous_month_kenren)
         
         data = [
             excel_row_num - 1, str(product.livestock_type or ''), str(product.category or ''), str(product.manufacturer or ''),
             product.product_name or '', product.model_number or '', product.specification or '',
-            product.shipping_unit or '', previous_month_price, kenren_price, revision_amount, retail_price,
-            product.shipping_fee or '', product.remarks or '',
+            product.shipping_unit or '', previous_month_wholesale_formatted, wholesale_price_formatted,
+            previous_month_kenren_formatted, kenren_price_formatted, revision_amount, retail_price_formatted,
+            price_history.shipping_fee.replace('\r\n', '\n') if price_history and price_history.shipping_fee else '', product.remarks or '',
             price_history.revision_reason if price_history.revision_reason else ''
         ]
         
-        # データを書き込み（スタイルは最後に一括設定）
+        # データを書き込み
         for col, value in enumerate(data, 1):
             ws.cell(row=row_num, column=col, value=value)
         
@@ -569,8 +651,18 @@ def export_excel(request):
     # テンプレート行（4行目）の書式をコピー
     if row_num > 4:
         template_styles = []
-        for col in range(1, 16):  # 15列目まで拡張
+        for col in range(1, 18):  # 17列目まで拡張
             template_cell = ws.cell(row=4, column=col)
+            # wrap_text設定を確認してログ出力
+            if col == 15:  # 送料列（O列）
+                wrap_text = template_cell.alignment.wrap_text if template_cell.alignment else False
+                logger.info(f"テンプレート送料列のwrap_text設定: {wrap_text}")
+                
+                # 行の高さの自動調整設定を確認
+                row_height = ws.row_dimensions[4].height
+                auto_fit = ws.row_dimensions[4].height is None
+                logger.info(f"テンプレート4行目の高さ設定: {row_height}, 自動調整: {auto_fit}")
+            
             template_styles.append({
                 'font': template_cell.font.copy() if template_cell.font else None,
                 'border': template_cell.border.copy() if template_cell.border else None,
@@ -581,7 +673,7 @@ def export_excel(request):
         
         # データ行にスタイルを適用
         gray_fill = PatternFill(start_color='F2F2F2', end_color='F2F2F2', fill_type='solid')
-        yellow_fill = PatternFill(start_color='FFC000', end_color='FFC000', fill_type='solid')  # 改定額0以外の色
+        yellow_fill = PatternFill(start_color='FFFF99', end_color='FFFF99', fill_type='solid')  # 改定額0以外の色
         
         for row in range(4, row_num):
             is_gray_row = (row - 4) % 2 == 1  # 奇数行をグレーに
@@ -605,32 +697,55 @@ def export_excel(request):
                         except:
                             current_price = '都度見積'
                     
+                    # 前月県連価格を取得
+                    prev_kenren_price = prev_price.get('kenren_price') if isinstance(prev_price, dict) else prev_price
+                    
                     # 価格変動があった場合のみ色付け
-                    if current_price != prev_price:
+                    if current_price != prev_kenren_price:
                         has_revision = True
             else:
                 has_revision = False
             
-            for col in range(1, 16):  # 15列目までスタイル適用
+            for col in range(1, 19):  # 18列目まで拡張（ダミーカラム含む）
                 cell = ws.cell(row=row, column=col)
-                style = template_styles[col-1]
-                if style['font']:
-                    cell.font = style['font']
-                if style['border']:
-                    cell.border = style['border']
-                
-                # 背景色の優先順位：改定額あり > グレー行 > デフォルト
-                if has_revision:
-                    cell.fill = yellow_fill
-                elif is_gray_row:
-                    cell.fill = gray_fill
-                elif style['fill']:
-                    cell.fill = style['fill']
+                if col <= 17:
+                    # 通常のデータ列
+                    style = template_styles[col-1]
+                    if style['font']:
+                        cell.font = style['font']
+                    if style['border']:
+                        cell.border = style['border']
                     
-                if style['alignment']:
-                    cell.alignment = style['alignment']
-                if style['number_format']:
-                    cell.number_format = style['number_format']
+                    # 背景色の優先順位：改定額あり > グレー行 > デフォルト
+                    if has_revision:
+                        cell.fill = yellow_fill
+                    elif is_gray_row:
+                        cell.fill = gray_fill
+                    elif style['fill']:
+                        cell.fill = style['fill']
+                        
+                    if style['alignment']:
+                        cell.alignment = style['alignment']
+                    if style['number_format']:
+                        cell.number_format = style['number_format']
+                else:
+                    # ダミーカラム（18列目）はテンプレートからコピー
+                    template_dummy_cell = ws.cell(row=4, column=18)
+                    if template_dummy_cell.font:
+                        cell.font = template_dummy_cell.font.copy()
+                    if template_dummy_cell.border:
+                        cell.border = template_dummy_cell.border.copy()
+                    if template_dummy_cell.fill:
+                        cell.fill = template_dummy_cell.fill.copy()
+                    if template_dummy_cell.alignment:
+                        cell.alignment = template_dummy_cell.alignment.copy()
+    
+
+    # 仕切価格列を除外する場合は列を非表示にする
+    if exclude_wholesale:
+        # I列（前月仕切価格）とJ列（仕切価格）を非表示
+        ws.column_dimensions[get_column_letter(9)].hidden = True
+        ws.column_dimensions[get_column_letter(10)].hidden = True
     
     # 承認状態をチェック
     is_approved = _check_approval_pdf(selected_month)
@@ -651,6 +766,7 @@ def export_excel(request):
     else:
         filename = f'{datetime.now().strftime("%Y%m")}デジタル価格表_{approval_status}.xlsx'
     
+    # 最終出力用に保存
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
@@ -775,12 +891,14 @@ def upload_approval_pdf(request):
             # ファイル名を生成
             approval_month = year_month.replace('/', '')
             
-            # 保存ディレクトリを作成
-            approval_dir = os.path.join(settings.MEDIA_ROOT, 'approval')
-            os.makedirs(approval_dir, exist_ok=True)
+            # 保存ディレクトリをconfig.iniのmedia_rootから取得
+            from digital_pricelist_system.settings import get_media_root
+            media_root = get_media_root()
+            approval_dir = media_root / 'approval'
+            approval_dir.mkdir(parents=True, exist_ok=True)
             
             # ファイルを保存
-            file_path = os.path.join(approval_dir, f'{approval_month}_approval.pdf')
+            file_path = approval_dir / f'{approval_month}_approval.pdf'
             with open(file_path, 'wb') as f:
                 for chunk in pdf_file.chunks():
                     f.write(chunk)
@@ -789,10 +907,13 @@ def upload_approval_pdf(request):
             ApprovalPdf.objects.update_or_create(
                 year_month=year_month,
                 defaults={
-                    'pdf_file_path': file_path,
+                    'pdf_file_path': str(file_path),
                     'uploaded_by': get_current_user()
                 }
             )
+            
+            # 古いPDFを自動削除
+            _cleanup_old_approval_pdfs()
             
             messages.success(request, f'{year_month}の承認PDFをアップロードしました')
             return redirect('products_master:upload_approval_pdf')
@@ -801,8 +922,23 @@ def upload_approval_pdf(request):
             messages.error(request, f'アップロード中にエラーが発生しました: {str(e)}')
             return redirect('products_master:upload_approval_pdf')
     
-    # 既存の承認PDF一覧を取得
-    approved_pdfs = ApprovalPdf.objects.all().order_by('-year_month')
+    # 既存の承認PDF一覧を取得（3年度以内のデータのみ）
+    from datetime import datetime
+    current_date = datetime.now()
+    
+    # 現在の年度を計算（4月～3月）
+    if current_date.month >= 4:
+        current_fiscal_year = current_date.year
+    else:
+        current_fiscal_year = current_date.year - 1
+    
+    # 3年度前の3月までを削除対象とする
+    cutoff_fiscal_year = current_fiscal_year - 3
+    cutoff_month = f'{cutoff_fiscal_year + 1}/3'  # 3年度前の3月以降のデータを表示
+    
+    approved_pdfs = ApprovalPdf.objects.filter(
+        year_month__gt=cutoff_month
+    ).order_by('-year_month')
     
     context = {
         'current_user': get_current_user(),
@@ -810,6 +946,48 @@ def upload_approval_pdf(request):
         'breadcrumbs': get_breadcrumbs('upload_approval_pdf')
     }
     return render(request, 'products_master/upload_approval_pdf.html', context)
+
+def _cleanup_old_approval_pdfs():
+    """古い承認PDFを自動削除（3年度以上前のデータ）"""
+    try:
+        from datetime import datetime
+        import os
+        
+        current_date = datetime.now()
+        
+        # 現在の年度を計算（4月～3月）
+        if current_date.month >= 4:
+            current_fiscal_year = current_date.year
+        else:
+            current_fiscal_year = current_date.year - 1
+        
+        # 3年度前の3月までを削除対象とする
+        cutoff_fiscal_year = current_fiscal_year - 3
+        cutoff_month = f'{cutoff_fiscal_year + 1}/3'  # 3年度前の3月までを削除対象
+        
+        # 削除対象のPDFを取得
+        old_pdfs = ApprovalPdf.objects.filter(year_month__lte=cutoff_month)
+        
+        deleted_count = 0
+        for pdf in old_pdfs:
+            try:
+                # ファイルを削除
+                if os.path.exists(pdf.pdf_file_path):
+                    os.remove(pdf.pdf_file_path)
+                
+                # DBレコードを削除
+                pdf.delete()
+                deleted_count += 1
+                
+            except Exception as e:
+                # ログ出力はしない（サイレントに続行）
+                continue
+        
+        return deleted_count
+        
+    except Exception:
+        # エラーが発生してもメイン処理に影響しないようにサイレントに処理
+        return 0
 def download_approval_pdf(request, pk):
     """承認PDFダウンロード"""
     try:

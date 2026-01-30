@@ -13,6 +13,7 @@ from dashboard.products_master.forms import ProductForm
 from digital_pricelist_system.utils import get_current_user
 from digital_pricelist_system.breadcrumbs import get_breadcrumbs
 from digital_pricelist_system.gross_margin_utils import calculate_gross_margin_rate as calc_margin_rate
+from digital_pricelist_system.text_utils import normalize_product_name
 
 def is_admin_user(username):
     """管理者ユーザーかどうかを判定"""
@@ -47,6 +48,7 @@ def product_detail(request, pk):
             'kenren_price': history.kenren_price,  # 元のkenren_priceフィールド
             'kenren_price_display': history.get_kenren_price_display(),
             'retail_price': history.retail_price,
+            'shipping_fee': history.shipping_fee,
             'gross_margin_rate': str(history.gross_margin_rate) if history.gross_margin_rate is not None else None,
             'revision_amount': history.get_revision_amount(),
             'revision_reason': history.revision_reason or '',
@@ -71,7 +73,6 @@ def product_detail(request, pk):
         'model_number': product.model_number if product else '',
         'specification': product.specification if product else '',
         'shipping_unit': product.shipping_unit if product else '',
-        'shipping_fee': product.shipping_fee if product else '',
         'remarks': product.remarks if product else '',
     })
     
@@ -85,7 +86,6 @@ def product_detail(request, pk):
         'model_number': form.initial.get('model_number', ''),
         'specification': form.initial.get('specification', ''),
         'shipping_unit': form.initial.get('shipping_unit', ''),
-        'shipping_fee': form.initial.get('shipping_fee', ''),
         'remarks': form.initial.get('remarks', ''),
     })
     
@@ -231,7 +231,6 @@ def product_detail_new(request):
                     'model_number': original_product.model_number,
                     'specification': original_product.specification,
                     'shipping_unit': original_product.shipping_unit,
-                    'shipping_fee': original_product.shipping_fee,
                     'remarks': original_product.remarks,
                 }
                 form = ProductForm(initial=initial_data)
@@ -258,7 +257,6 @@ def product_detail_new(request):
                 'model_number': original_product.model_number or '',
                 'specification': original_product.specification or '',
                 'shipping_unit': original_product.shipping_unit or '',
-                'shipping_fee': original_product.shipping_fee or '',
                 'remarks': original_product.remarks or '',
             })
         except Product.DoesNotExist:
@@ -272,7 +270,6 @@ def product_detail_new(request):
                 'model_number': '',
                 'specification': '',
                 'shipping_unit': '',
-                'shipping_fee': '',
                 'remarks': '',
             })
     else:
@@ -286,7 +283,6 @@ def product_detail_new(request):
             'model_number': '',
             'specification': '',
             'shipping_unit': '',
-            'shipping_fee': '',
             'remarks': '',
         })
     
@@ -303,7 +299,6 @@ def product_detail_new(request):
         'model_number': form.initial.get('model_number', ''),
         'specification': form.initial.get('specification', ''),
         'shipping_unit': form.initial.get('shipping_unit', ''),
-        'shipping_fee': form.initial.get('shipping_fee', ''),
         'remarks': form.initial.get('remarks', ''),
     })
     
@@ -646,7 +641,6 @@ def submit_approval_core(request, pk=None, is_reapplication=False):
         model_number=product_data['model_number'],
         specification=product_data['specification'],
         shipping_unit=product_data['shipping_unit'],
-        shipping_fee=product_data['shipping_fee'],
         remarks=product_data['remarks'],
         applicant=get_current_user()
     )
@@ -671,6 +665,7 @@ def submit_approval_core(request, pk=None, is_reapplication=False):
                 wholesale_price=wholesale_price if wholesale_price else history.wholesale_price,
                 kenren_price=kenren_price if kenren_price else history.kenren_price,
                 retail_price=retail_price if retail_price else history.retail_price,
+                shipping_fee=request.POST.get(f'edit_shipping_fee_{history.pk}', '').strip() or history.shipping_fee,
                 revision_amount=0,
                 revision_reason=revision_reason if revision_reason else history.revision_reason,
                 memo=memo if memo else history.memo,
@@ -702,9 +697,10 @@ def submit_approval_core(request, pk=None, is_reapplication=False):
             wholesale_price=history['wholesale_price'] or '都度見積',
             kenren_price=history['kenren_price'] if history['kenren_price'] else None,
             retail_price=history['retail_price'] if history['retail_price'] else None,
+            shipping_fee=history['shipping_fee'] if history['shipping_fee'] else None,
             revision_amount=0,
-            revision_reason=history['revision_reason'],
-            memo=history['memo'],
+            revision_reason=history['revision_reason'] if history['revision_reason'] else None,
+            memo=history['memo'] if history['memo'] else None,
             applicant=get_current_user()
         )
     
@@ -717,18 +713,12 @@ def submit_approval(request, pk=None):
         submit_approval_core(request, pk)
         return HttpResponse('<script>alert("申請完了");location.href="/products/";</script>')
     except ValueError as e:
-        # バリデーションエラーの場合
-        if pk:
-            product = get_object_or_404(Product, pk=pk)
-            form = ProductForm(request.POST, instance=product)
-        else:
-            product = None
-            form = ProductForm(request.POST)
-        return _return_form_with_error(request, product, form, str(e))
+        # バリデーションエラーの場合はJSONでエラーを返す
+        return JsonResponse({'error': str(e)}, status=400)
     except Exception as e:
         import traceback
         print(f"ERROR: {traceback.format_exc()}")
-        return HttpResponse('<script>alert("エラー発生");</script>', status=500)
+        return JsonResponse({'error': 'エラーが発生しました'}, status=500)
 
 def validate_date_format(effective_year_month):
     """日付形式のバリデーションのみ"""
@@ -1098,7 +1088,6 @@ def approval_detail(request, pk):
             'model_number': approval.model_number != original_product.model_number,
             'specification': approval.specification != original_product.specification,
             'shipping_unit': approval.shipping_unit != original_product.shipping_unit,
-            'shipping_fee': approval.shipping_fee != original_product.shipping_fee,
             'remarks': approval.remarks != original_product.remarks,
         }
     
@@ -1238,7 +1227,6 @@ def _process_approval(approval):
                 product.model_number = approval.model_number
                 product.specification = approval.specification
                 product.shipping_unit = approval.shipping_unit
-                product.shipping_fee = approval.shipping_fee
                 product.remarks = approval.remarks
                 product.status = ''
                 product.approver = get_current_user()
@@ -1295,6 +1283,7 @@ def _process_approval(approval):
                                 'wholesale_price': approval_history.wholesale_price,
                                 'kenren_price': approval_history.kenren_price,
                                 'retail_price': approval_history.retail_price,
+                                'shipping_fee': approval_history.shipping_fee,
                                 'revision_amount': approval_history.revision_amount,
                                 'revision_reason': approval_history.revision_reason,
                                 'memo': approval_history.memo,
@@ -1307,6 +1296,7 @@ def _process_approval(approval):
                             history.wholesale_price = approval_history.wholesale_price
                             history.kenren_price = approval_history.kenren_price
                             history.retail_price = approval_history.retail_price
+                            history.shipping_fee = approval_history.shipping_fee
                             history.revision_amount = approval_history.revision_amount
                             history.revision_reason = approval_history.revision_reason
                             history.memo = approval_history.memo
@@ -1392,7 +1382,6 @@ def _process_approval(approval):
                     model_number=approval.model_number,
                     specification=approval.specification,
                     shipping_unit=approval.shipping_unit,
-                    shipping_fee=approval.shipping_fee,
                     remarks=approval.remarks,
                     status='',
                     approver=get_current_user()
@@ -1415,6 +1404,7 @@ def _process_approval(approval):
                             wholesale_price=approval_history.wholesale_price,
                             kenren_price=approval_history.kenren_price,
                             retail_price=approval_history.retail_price,
+                            shipping_fee=approval_history.shipping_fee,
                             revision_amount=approval_history.revision_amount,
                             revision_reason=approval_history.revision_reason,
                             memo=approval_history.memo,
@@ -1538,7 +1528,7 @@ def validate_form_data(request, product=None):
         'livestock_type': str(request.POST.get('livestock_type', '') or ''),
         'category': str(request.POST.get('category', '') or ''),
         'manufacturer': str(request.POST.get('manufacturer', '') or ''),
-        'product_name': (product_name_raw or '').strip() if isinstance(product_name_raw, str) else str(product_name_raw or ''),
+        'product_name': normalize_product_name((product_name_raw or '').strip() if isinstance(product_name_raw, str) else str(product_name_raw or '')),
         'model_number': (request.POST.get('model_number', '') or '').strip() if isinstance(request.POST.get('model_number', ''), str) else str(request.POST.get('model_number', '') or ''),
         'specification': (request.POST.get('specification', '') or '').strip() if isinstance(request.POST.get('specification', ''), str) else str(request.POST.get('specification', '') or ''),
         'shipping_unit': (request.POST.get('shipping_unit', '') or '').strip() if isinstance(request.POST.get('shipping_unit', ''), str) else str(request.POST.get('shipping_unit', '') or ''),
@@ -1555,6 +1545,7 @@ def validate_form_data(request, product=None):
             wholesale_price = request.POST.get(f'new_wholesale_price_{index}', '').strip()
             kenren_price = request.POST.get(f'new_kenren_price_{index}', '').strip()
             retail_price = request.POST.get(f'new_retail_price_{index}', '').strip()
+            shipping_fee = request.POST.get(f'new_shipping_fee_{index}', '').strip()
             revision_reason = request.POST.get(f'new_revision_reason_{index}', '').strip()
             memo = request.POST.get(f'new_memo_{index}', '').strip()
             
@@ -1563,6 +1554,7 @@ def validate_form_data(request, product=None):
                 'wholesale_price': wholesale_price,
                 'kenren_price': kenren_price,
                 'retail_price': retail_price,
+                'shipping_fee': shipping_fee,
                 'revision_reason': revision_reason,
                 'memo': memo
             })

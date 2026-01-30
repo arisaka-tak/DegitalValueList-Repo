@@ -47,7 +47,11 @@
                                     {% if request.GET.manufacturer or request.GET.product_name %}disabled title="フィルタ適用中は無効"{% endif %}>並び順をリセット</button>
                             <button type="button" class="btn btn-outline-primary me-2" id="saveSortBtn" onclick="saveSortOrder()" disabled 
                                     {% if request.GET.manufacturer or request.GET.product_name %}title="フィルタ適用中は無効"{% endif %}>並び順を保存</button>
-                            <button type="button" class="btn btn-success" onclick="exportExcel()">Excel出力</button>
+                            <button type="button" class="btn btn-success me-2" onclick="exportExcel()">Excel出力</button>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" id="includeWholesalePrice">
+                                <label class="form-check-label" for="includeWholesalePrice">仕切価格を含める</label>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -72,13 +76,15 @@
                                     <th rowspan="2" class="align-middle text-center">型式</th>
                                     <th rowspan="2" class="align-middle text-center">規格</th>
                                     <th rowspan="2" class="align-middle text-center">発送単位</th>
-                                    <th colspan="4" class="text-center">価格情報</th>
+                                    <th colspan="6" class="text-center">価格情報</th>
                                     <th rowspan="2" class="align-middle text-center">送料</th>
                                     <th rowspan="2" class="align-middle text-center">備考</th>
                                     <th rowspan="2" class="align-middle text-center">改定理由</th>
                                 </tr>
                                 <tr>
-                                    <th class="text-center">前月価格</th>
+                                    <th class="text-center">前月仕切価格</th>
+                                    <th class="text-center">仕切価格</th>
+                                    <th class="text-center">前月県連価格</th>
                                     <th class="text-center">県連価格</th>
                                     <th class="text-center">改定額</th>
                                     <th class="text-center">参考小売価格</th>
@@ -91,7 +97,7 @@
                                         data-livestock="{{ item.product.livestock_type }}" 
                                         data-category="{{ item.product.category }}" 
                                         data-manufacturer="{{ item.product.manufacturer }}" 
-                                        draggable="true">
+                                        {% if not request.GET.manufacturer and not request.GET.product_name %}draggable="true"{% endif %}>
                                         <td class="text-end">{{ forloop.counter }}</td>
                                         <td class="text-center">
                                             <button class="btn btn-sm btn-outline-secondary me-1" onclick="moveUp(this)" title="上に移動" 
@@ -120,7 +126,29 @@
 
                                         <td class="text-end">
                                             {% if item.has_price and item.previous_month_price %}
-                                                {{ item.previous_month_price|format_price }}
+                                                {% if item.previous_month_price.wholesale_price %}
+                                                    {{ item.previous_month_price.wholesale_price|format_price }}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end">
+                                            {% if item.has_price %}
+                                                {{ item.price_history.wholesale_price|format_price }}
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end">
+                                            {% if item.has_price and item.previous_month_price %}
+                                                {% if item.previous_month_price.kenren_price %}
+                                                    {{ item.previous_month_price.kenren_price|format_price }}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
                                             {% else %}
                                                 <span class="text-muted">-</span>
                                             {% endif %}
@@ -156,7 +184,7 @@
                                                 <span class="text-muted">-</span>
                                             {% endif %}
                                         </td>
-                                        <td class="text-start">{{ item.product.shipping_fee|default:"-" }}</td>
+                                        <td class="text-start">{{ item.price_history.shipping_fee|default:"-" }}</td>
                                         <td>
                                             {% if item.product.remarks %}
                                                 {{ item.product.remarks }}
@@ -312,13 +340,15 @@
     .resizable-table th:nth-child(7) { min-width: 80px; width: 80px; }  /* 型式 */
     .resizable-table th:nth-child(8) { min-width: 80px; width: 80px; }  /* 規格 */
     .resizable-table th:nth-child(9) { min-width: 80px; width: 80px; }  /* 発送単位 */
-    .resizable-table th:nth-child(10) { min-width: 100px; width: 100px; } /* 前月価格 */
-    .resizable-table th:nth-child(11) { min-width: 100px; width: 100px; } /* 県連価格 */
-    .resizable-table th:nth-child(12) { min-width: 80px; width: 80px; } /* 改定額 */
-    .resizable-table th:nth-child(13) { min-width: 120px; width: 120px; } /* 参考小売価格 */
-    .resizable-table th:nth-child(14) { min-width: 60px; width: 60px; } /* 送料 */
-    .resizable-table th:nth-child(15) { min-width: 100px; width: 100px; } /* 備考 */
-    .resizable-table th:nth-child(16) { min-width: 120px; width: 120px; } /* 改定理由 */
+    .resizable-table th:nth-child(10) { min-width: 120px; width: 120px; } /* 前月仕切価格 */
+    .resizable-table th:nth-child(11) { min-width: 100px; width: 100px; } /* 仕切価格 */
+    .resizable-table th:nth-child(12) { min-width: 120px; width: 120px; } /* 前月県連価格 */
+    .resizable-table th:nth-child(13) { min-width: 100px; width: 100px; } /* 県連価格 */
+    .resizable-table th:nth-child(14) { min-width: 80px; width: 80px; } /* 改定額 */
+    .resizable-table th:nth-child(15) { min-width: 120px; width: 120px; } /* 参考小売価格 */
+    .resizable-table th:nth-child(16) { min-width: 60px; width: 60px; } /* 送料 */
+    .resizable-table th:nth-child(17) { min-width: 100px; width: 100px; } /* 備考 */
+    .resizable-table th:nth-child(18) { min-width: 120px; width: 120px; } /* 改定理由 */
     
     .table-responsive {
         overflow-x: auto;
@@ -565,23 +595,41 @@
             }
         });
         
-        // ドラッグ&ドロップ機能
-        const rows = table.querySelectorAll('.sortable-row');
-        rows.forEach(row => {
-            row.addEventListener('dragstart', handleDragStart);
-            row.addEventListener('dragover', handleDragOver);
-            row.addEventListener('drop', handleDrop);
-            row.addEventListener('dragend', handleDragEnd);
-        });
+        // フィルタ適用中かどうかをチェック
+        const isFilterActive = {% if request.GET.manufacturer or request.GET.product_name %}true{% else %}false{% endif %};
+        
+        // ドラッグ&ドロップ機能（フィルタ適用中は無効）
+        if (!isFilterActive) {
+            const rows = table.querySelectorAll('.sortable-row');
+            rows.forEach(row => {
+                row.addEventListener('dragstart', handleDragStart);
+                row.addEventListener('dragover', handleDragOver);
+                row.addEventListener('drop', handleDrop);
+                row.addEventListener('dragend', handleDragEnd);
+            });
+        }
     });
     
     function handleDragStart(e) {
+        // フィルタ適用中はドラッグを無効化
+        const isFilterActive = {% if request.GET.manufacturer or request.GET.product_name %}true{% else %}false{% endif %};
+        if (isFilterActive) {
+            e.preventDefault();
+            return false;
+        }
+        
         draggedRow = this;
         this.style.opacity = '0.5';
         e.dataTransfer.effectAllowed = 'move';
     }
     
     function handleDragOver(e) {
+        // フィルタ適用中はドラッグを無効化
+        const isFilterActive = {% if request.GET.manufacturer or request.GET.product_name %}true{% else %}false{% endif %};
+        if (isFilterActive) {
+            return false;
+        }
+        
         if (e.preventDefault) {
             e.preventDefault();
         }
@@ -598,6 +646,12 @@
     }
     
     function handleDrop(e) {
+        // フィルタ適用中はドラッグを無効化
+        const isFilterActive = {% if request.GET.manufacturer or request.GET.product_name %}true{% else %}false{% endif %};
+        if (isFilterActive) {
+            return false;
+        }
+        
         if (e.stopPropagation) {
             e.stopPropagation();
         }
@@ -795,10 +849,30 @@
     
     function exportExcel() {
         const selectedMonth = document.getElementById('month').value;
+        const manufacturer = document.getElementById('manufacturer').value;
+        const productName = document.getElementById('product_name').value;
+        const includeWholesalePrice = document.getElementById('includeWholesalePrice').checked;
+        
         let url = '{% url "products_master:export_excel" %}';
+        const params = new URLSearchParams();
+        
         if (selectedMonth) {
-            url += '?month=' + encodeURIComponent(selectedMonth);
+            params.append('month', selectedMonth);
         }
+        if (manufacturer) {
+            params.append('manufacturer', manufacturer);
+        }
+        if (productName) {
+            params.append('product_name', productName);
+        }
+        if (!includeWholesalePrice) {
+            params.append('exclude_wholesale', '1');
+        }
+        
+        if (params.toString()) {
+            url += '?' + params.toString();
+        }
+        
         window.open(url, '_blank');
     }
     

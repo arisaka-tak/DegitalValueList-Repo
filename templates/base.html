@@ -41,61 +41,58 @@
                             <span class="me-2">📊</span> デジタル価格表
                         </a>
                     </li>
+                    
                     <li class="nav-item mb-2">
                         <h6 class="text-muted mb-2 mt-3">システム管理</h6>
-                        <ul class="nav flex-column ms-3">
-                            <li class="nav-item mb-1">
-                                <a class="nav-link d-flex align-items-center" href="/products/masters/livestock-types/">
-                                    <span class="me-2">🐄</span> 畜種マスタ
-                                </a>
-                            </li>
-                            <li class="nav-item mb-1">
-                                <a class="nav-link d-flex align-items-center" href="/products/masters/categories/">
-                                    <span class="me-2">📂</span> 分類マスタ
-                                </a>
-                            </li>
-                            <li class="nav-item mb-1">
-                                <a class="nav-link d-flex align-items-center" href="/products/masters/manufacturers/">
-                                    <span class="me-2">🏢</span> メーカーマスタ
-                                </a>
-                            </li>
-                        </ul>
                     </li>
                     <li class="nav-item mb-2">
-                        <h6 class="text-muted mb-2 mt-3">決裁管理</h6>
-                        <ul class="nav flex-column ms-3">
-                            <li class="nav-item mb-1">
-                                <a class="nav-link d-flex align-items-center" href="/products/upload-approval-pdf/">
-                                    <span class="me-2">📋</span> 決裁書アップロード
-                                </a>
-                            </li>
-                        </ul>
+                        <a class="nav-link d-flex align-items-center" href="/products/masters/livestock-types/">
+                            <span class="me-2">🐄</span> 畜種マスタ
+                        </a>
                     </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link d-flex align-items-center" href="/products/masters/categories/">
+                            <span class="me-2">📂</span> 分類マスタ
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link d-flex align-items-center" href="/products/masters/manufacturers/">
+                            <span class="me-2">🏢</span> メーカーマスタ
+                        </a>
+                    </li>
+                    
+                    <li class="nav-item mb-2">
+                        <h6 class="text-muted mb-2 mt-3">決裁管理</h6>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link d-flex align-items-center" href="/products/upload-approval-pdf/">
+                            <span class="me-2">📋</span> 決裁書アップロード
+                        </a>
+                    </li>
+                    
                     {% if is_admin %}
                     <li class="nav-item mb-2">
                         <h6 class="text-muted mb-2 mt-3">データ管理(ホスト:BC101131~のみ)</h6>
-                        <ul class="nav flex-column ms-3">
-                            <li class="nav-item mb-1">
-                                <a class="nav-link d-flex align-items-center" href="/system/export/">
-                                    <span class="me-2">📤</span> データエクスポート
-                                </a>
-                            </li>
-                            <li class="nav-item mb-1">
-                                <a class="nav-link d-flex align-items-center" href="/system/import/">
-                                    <span class="me-2">📥</span> データインポート
-                                </a>
-                            </li>
-                            <li class="nav-item mb-1">
-                                <a class="nav-link d-flex align-items-center text-warning" href="/system/status-reset/">
-                                    <span class="me-2">♾️</span> ステータスリセット
-                                </a>
-                            </li>
-                            <li class="nav-item mb-1">
-                                <a class="nav-link d-flex align-items-center text-danger" href="/system/clear/">
-                                    <span class="me-2">🗑️</span> データクリア
-                                </a>
-                            </li>
-                        </ul>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link d-flex align-items-center" href="/system/export/">
+                            <span class="me-2">📤</span> データエクスポート
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link d-flex align-items-center" href="/system/import/">
+                            <span class="me-2">📥</span> データインポート
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link d-flex align-items-center text-warning" href="/system/status-reset/">
+                            <span class="me-2">♾️</span> ステータスリセット
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link d-flex align-items-center text-danger" href="/system/clear/">
+                            <span class="me-2">🗑️</span> データクリア
+                        </a>
                     </li>
                     {% endif %}
                 </ul>

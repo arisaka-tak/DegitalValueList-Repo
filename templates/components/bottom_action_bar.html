@@ -16,9 +16,9 @@
                                 class="btn btn-success btn-sm"
                                 onclick="return submitApplication(this)">申請</button>
                         {% if request.GET.from == 'pricelist' %}
-                            <a href="{% url 'products_master:integrated_pricelist' %}{% if request.GET.month or request.GET.page %}?{% if request.GET.month %}month={{ request.GET.month }}{% endif %}{% if request.GET.month and request.GET.page %}&{% endif %}{% if request.GET.page %}page={{ request.GET.page }}{% endif %}{% endif %}" class="btn btn-outline-secondary btn-sm">価格表に戻る</a>
+                            <button type="button" onclick="history.back()" class="btn btn-outline-secondary btn-sm">価格表に戻る</button>
                         {% else %}
-                            <a href="{% url 'products_master:product_list' %}" class="btn btn-outline-secondary btn-sm">一覧に戻る</a>
+                            <button type="button" onclick="history.back()" class="btn btn-outline-secondary btn-sm">戻る</button>
                         {% endif %}
                     </div>
                     {% if not is_new %}

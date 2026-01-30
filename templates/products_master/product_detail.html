@@ -104,6 +104,24 @@
     <!-- 保存確認モーダル -->
     <div id="save-preview-modal"></div>
     
+    <!-- 送料詳細モーダル -->
+    <div class="modal fade" id="shippingFeeModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">送料詳細</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="shippingFeeContent" style="white-space: pre-wrap;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <!-- メーカー選択モーダル -->
     {% include 'components/manufacturer_modal.html' %}
     
@@ -239,10 +257,45 @@
             }
         });
         
-        // フォームをPOSTで送信（actionは現在のページ）
-        form.method = 'post';
-        console.log('Submitting form');
-        form.submit();
+        // フォームデータを作成
+        const formData = new FormData(form);
+        
+        // Fetch APIで送信
+        fetch(form.action || window.location.pathname, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => {
+            if (response.ok) {
+                if (response.headers.get('content-type')?.includes('application/json')) {
+                    return response.json();
+                } else {
+                    // HTMLレスポンス（成功時のリダイレクト用JavaScript）
+                    return response.text().then(html => {
+                        document.write(html);
+                        document.close();
+                    });
+                }
+            } else {
+                return response.json().then(data => {
+                    throw new Error(data.error || 'エラーが発生しました');
+                });
+            }
+        })
+        .then(data => {
+            if (data && data.error) {
+                throw new Error(data.error);
+            }
+        })
+        .catch(error => {
+            alert(error.message);
+            // ボタンを元に戻す
+            button.disabled = false;
+            button.textContent = '申請';
+        });
         
         return false;
     }
@@ -295,6 +348,26 @@
         
         return errors;
     }
+    
+    // 送料モーダル表示関数
+    window.showShippingFeeModal = function(shippingFeeText) {
+        const content = document.getElementById('shippingFeeContent');
+        if (content) {
+            // \\n を実際の改行に変換し、改行コードを正規化
+            let cleanText = shippingFeeText.replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
+            const lines = cleanText.split('\n');
+            while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+                lines.pop();
+            }
+            cleanText = lines.join('\n');
+            content.textContent = cleanText;
+            const modalElement = document.getElementById('shippingFeeModal');
+            if (modalElement) {
+                const modal = new bootstrap.Modal(modalElement);
+                modal.show();
+            }
+        }
+    };
     
     // 価格フィールドのカンマ区切り整形と粗利率更新
     document.addEventListener('blur', function(e) {
@@ -353,7 +426,7 @@
             const profitDisplay = window.GrossMarginUtils.formatGrossMarginRate(marginRate);
             
             // 粗利率セルを更新
-            const marginCell = row.querySelector('td:nth-child(6)');
+            const marginCell = row.querySelector('td:nth-child(7)');
             if (marginCell) {
                 marginCell.textContent = profitDisplay;
                 marginCell.style.color = 'blue';

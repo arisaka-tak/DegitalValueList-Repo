@@ -32,6 +32,7 @@ class PriceHistoryComponent extends HTMLElement {
                             <th>仕切価格</th>
                             <th>県連価格</th>
                             <th>参考小売価格</th>
+                            <th>送料</th>
                             <th class="text-nowrap">粗利率<button type="button" class="btn btn-sm btn-link p-0 text-primary ms-1" data-bs-toggle="modal" data-bs-target="#grossMarginModal" title="粗利率管理">⚙️</button></th>
                             ${!isApprovalMode ? '<th>改定額</th>' : ''}
                             <th>改定理由</th>
@@ -80,6 +81,7 @@ class PriceHistoryComponent extends HTMLElement {
                     <td class="${this.getCellClass(history, 'wholesale_price', isDiffRow)}" ${this.getCellAttributes(history, 'wholesale_price')}>${this.formatPrice(history.wholesale_price)}</td>
                     <td class="kenren-price-cell ${this.getCellClass(history, 'kenren_price', isDiffRow)}" ${this.getCellAttributes(history, 'kenren_price')} style="${this.getKenrenPriceStyle(history)}">${this.formatPrice(this.getKenrenPriceDisplay(history))}</td>
                     <td class="${this.getCellClass(history, 'retail_price', isDiffRow)}" ${this.getCellAttributes(history, 'retail_price')}>${this.formatPrice(history.retail_price)}</td>
+                    <td class="${this.getCellClass(history, 'shipping_fee', isDiffRow)}" ${this.getCellAttributes(history, 'shipping_fee')}>${this.formatShippingFee(history.shipping_fee || (isDiffRow ? '' : '-'))}</td>
                     <td>${grossMarginDisplay}</td>
                     ${!isApprovalMode ? `<td>${history.revision_amount !== null && history.revision_amount !== undefined ? history.revision_amount : '自動算出'}</td>` : ''}
                     <td class="${this.getCellClass(history, 'revision_reason', isDiffRow)}" ${this.getCellAttributes(history, 'revision_reason')}>${history.revision_reason || (isDiffRow ? '' : '-')}</td>
@@ -92,11 +94,30 @@ class PriceHistoryComponent extends HTMLElement {
 
     setupEventListeners() {
         if (this.mode === 'approval') {
-            return; // 承認モードではイベントリスナーを設定しない
+            // 承認モードでも送料クリックイベントは有効にする
+            this.addEventListener('click', (e) => {
+                if (e.target.classList.contains('shipping-fee-truncated')) {
+                    const fullText = e.target.dataset.fullText;
+                    if (fullText && window.showShippingFeeModal) {
+                        window.showShippingFeeModal(fullText);
+                    }
+                }
+            });
+            return; // 承認モードでは他のイベントリスナーは設定しない
         }
         
         // 初期状態でボタン状態を更新
         this.updateAddButtonState();
+        
+        // 送料クリックイベント
+        this.addEventListener('click', (e) => {
+            if (e.target.classList.contains('shipping-fee-truncated')) {
+                const fullText = e.target.dataset.fullText;
+                if (fullText && window.showShippingFeeModal) {
+                    window.showShippingFeeModal(fullText);
+                }
+            }
+        });
         
         // イベント委譲でボタンクリックを処理
         this.addEventListener('click', (e) => {
@@ -172,6 +193,7 @@ class PriceHistoryComponent extends HTMLElement {
             <td><input type="text" class="form-control form-control-sm" name="new_wholesale_price_${this.rowIndex}" form="productForm" placeholder="仕切価格"></td>
             <td><input type="text" class="form-control form-control-sm" name="new_kenren_price_${this.rowIndex}" form="productForm" placeholder="県連価格"></td>
             <td><input type="text" class="form-control form-control-sm" name="new_retail_price_${this.rowIndex}" form="productForm" placeholder="参考小売価格"></td>
+            <td><textarea class="form-control form-control-sm" name="new_shipping_fee_${this.rowIndex}" form="productForm" placeholder="送料" rows="2"></textarea></td>
             <td class="text-muted gross-margin-${this.rowIndex}">自動算定</td>
             <td class="text-muted">自動算出</td>
             <td><input type="text" class="form-control form-control-sm" name="new_revision_reason_${this.rowIndex}" form="productForm" placeholder="改定理由"></td>
@@ -268,34 +290,43 @@ class PriceHistoryComponent extends HTMLElement {
 
     // インライン編集開始
     startInlineEdit(cell) {
-        if (this.mode === 'approval' || cell.querySelector('input')) return; // 承認モードまたは既に編集中
+        if (this.mode === 'approval' || cell.querySelector('input, textarea')) return; // 承認モードまたは既に編集中
         
         const originalValue = cell.textContent.trim();
         const field = cell.dataset.field;
         const historyId = cell.dataset.historyId;
         
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.className = 'form-control form-control-sm';
+        let inputElement;
+        
+        // 送料フィールドの場合はテキストエリアを使用
+        if (field === 'shipping_fee') {
+            inputElement = document.createElement('textarea');
+            inputElement.rows = 2;
+        } else {
+            inputElement = document.createElement('input');
+            inputElement.type = 'text';
+        }
+        
+        inputElement.className = 'form-control form-control-sm';
         
         // 県連価格が自動計算（緑色）の場合は空のフォームにする
         if (field === 'kenren_price' && cell.style.color === 'green') {
-            input.value = '';
+            inputElement.value = '';
         } else {
-            input.value = originalValue;
+            inputElement.value = originalValue;
         }
         
-        input.name = `edit_${field}_${historyId}`;
-        input.setAttribute('form', 'productForm');
+        inputElement.name = `edit_${field}_${historyId}`;
+        inputElement.setAttribute('form', 'productForm');
         
         cell.innerHTML = '';
-        cell.appendChild(input);
-        input.focus();
-        input.select();
+        cell.appendChild(inputElement);
+        inputElement.focus();
+        if (inputElement.select) inputElement.select();
         
         // Enterキーまたはフォーカス離脱で編集終了
         const finishEdit = () => {
-            const newValue = input.value.trim();
+            const newValue = inputElement.value.trim();
             
             // 価格フィールドの場合はカンマ区切りでフォーマット
             let displayValue = newValue || originalValue;
@@ -320,9 +351,9 @@ class PriceHistoryComponent extends HTMLElement {
             }
         };
         
-        input.addEventListener('blur', finishEdit);
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
+        inputElement.addEventListener('blur', finishEdit);
+        inputElement.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && field !== 'shipping_fee') { // 送料以外でEnterキー
                 e.preventDefault();
                 finishEdit();
             } else if (e.key === 'Escape') {
@@ -456,6 +487,38 @@ class PriceHistoryComponent extends HTMLElement {
     // 自動計算かどうかを判定
     isAutoCalculated(history) {
         return !history.kenren_price || history.kenren_price === null;
+    }
+    
+    // 送料の改行表示用フォーマット（3行制限付き）
+    formatShippingFee(value) {
+        if (!value || value === '-') {
+            return value;
+        }
+        
+        // 改行コードを正規化（\r\n → \n）
+        const normalizedValue = value.replace(/\r\n/g, '\n');
+        const lines = normalizedValue.split('\n');
+        
+        // 末尾の連続した空行のみ除去
+        while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+            lines.pop();
+        }
+        
+        if (lines.length > 3) {
+            // 3行を超える場合は省略表示
+            const truncated = lines.slice(0, 3);
+            truncated[2] = truncated[2] + '...';
+            const displayText = truncated.join('<br>');
+            return `<span class="shipping-fee-truncated" style="cursor: pointer; color: #0066cc;" data-full-text="${this.escapeForAttribute(normalizedValue)}">${displayText}</span>`;
+        } else {
+            // 3行以下はそのまま表示
+            return lines.join('<br>');
+        }
+    }
+    
+    // 属性値用エスケープ
+    escapeForAttribute(text) {
+        return text.replace(/'/g, '&#39;').replace(/"/g, '&quot;').replace(/\n/g, '\\n');
     }
     
     // 価格をカンマ区切りでフォーマット

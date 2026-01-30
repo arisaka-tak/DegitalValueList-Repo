@@ -86,7 +86,6 @@ def approval_to_json(approval):
             'model_number': approval.model_number or '',
             'specification': approval.specification or '',
             'shipping_unit': approval.shipping_unit or '',
-            'shipping_fee': approval.shipping_fee or '',
             'remarks': approval.remarks or '',
         }
         return json.dumps(data)
@@ -131,6 +130,7 @@ def approval_histories_to_json(price_histories):
                 'kenren_price': history.kenren_price,
                 'kenren_price_display': kenren_price_display,
                 'retail_price': history.retail_price,
+                'shipping_fee': history.shipping_fee or '',
                 'gross_margin_rate': str(history.gross_margin_rate) if history.gross_margin_rate is not None else None,
                 'revision_reason': history.revision_reason or '',
                 'memo': history.memo or '',

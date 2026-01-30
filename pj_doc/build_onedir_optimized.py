@@ -59,12 +59,18 @@ def main():
              shutil.copy2(src, dst)
              print(f"  ✅ {file_name} をコピー")
     
-    # mediaフォルダを作成
-    media_dir = deploy_dir / "media"
-    media_dir.mkdir(exist_ok=True)
-    (media_dir / "approval").mkdir(exist_ok=True)
-    (media_dir / "ai_extract").mkdir(exist_ok=True)
-    print("  ✅ media/ フォルダを作成")
+    # mediaフォルダをコピー
+    media_src = project_root / "media"
+    media_dst = deploy_dir / "media"
+    
+    if media_src.exists():
+        shutil.copytree(media_src, media_dst, dirs_exist_ok=True)
+        print("  ✅ media/ フォルダをコピー")
+    else:
+        media_dst.mkdir(exist_ok=True)
+        (media_dst / "approval").mkdir(exist_ok=True)
+        (media_dst / "ai_extract").mkdir(exist_ok=True)
+        print("  ✅ media/ フォルダを作成")
     
     print("")
     print("✅ ビルド完了!")

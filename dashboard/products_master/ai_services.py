@@ -75,8 +75,8 @@ def normalize_text(text):
     # 2. ひらがな→カタカナ（漢字はそのまま）
     text = ''.join([chr(ord(c) + 0x60) if 'ひ' <= c <= 'ゖ' else c for c in text])
     
-    # 3. 記号の統一（全て半角スペースに変換）
-    text = re.sub(r'[−–—ー－ｰ]', ' ', text)  # 各種ハイフン→半角スペース
+    # 3. 記号の統一（検索時は長音記号を保持）
+    # text = re.sub(r'[−–—ー－ｰ]', ' ', text)  # 各種ハイフン→半角スペース（検索時は無効化）
     text = re.sub(r'[・·•]', ' ', text)  # 中点→半角スペース
     text = re.sub(r'[（）]', ' ', text)  # 全角括弧→半角スペース
     text = re.sub(r'[\(\)]', ' ', text)  # 半角括弧→半角スペース

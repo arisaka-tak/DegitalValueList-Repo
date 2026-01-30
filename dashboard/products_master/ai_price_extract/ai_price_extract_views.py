@@ -501,23 +501,21 @@ def ai_extract_rematch(request):
 def setup_proxy_from_config():
     """プロキシ設定をconfig.iniから読み込み環境変数に設定"""
     import configparser
-    from pathlib import Path
-    import sys
+    from digital_pricelist_system.config_paths import CONFIG_PATH
     
     config = configparser.ConfigParser()
     
-    # PyInstaller環境ではexeと同じフォルダのconfig.iniを参照
-    if getattr(sys, 'frozen', False):
-        config_path = Path(sys.executable).parent / "config.ini"
-    else:
-        config_path = Path(__file__).parent.parent.parent.parent / "config.ini"
+    print(f"[WEB画面] config.iniパス: {CONFIG_PATH}")
+    print(f"[WEB画面] config.ini存在: {CONFIG_PATH.exists()}")
     
-    if config_path.exists():
+    if CONFIG_PATH.exists():
         try:
-            config.read(config_path, encoding='utf-8')
+            config.read(CONFIG_PATH, encoding='utf-8')
             http_proxy = config.get('PROXY', 'http_proxy', fallback='')
             https_proxy = config.get('PROXY', 'https_proxy', fallback='')
             proxy_auth = config.get('PROXY', 'proxy_auth', fallback='')
+            
+            print(f"[WEB画面] プロキシ設定読み込み: http_proxy={bool(http_proxy)}, https_proxy={bool(https_proxy)}, auth={bool(proxy_auth)}")
             
             if http_proxy:
                 # プロトコルを除去して正しい形式に変換
@@ -529,7 +527,7 @@ def setup_proxy_from_config():
                     proxy_url = f"http://{clean_proxy}"
                     os.environ['HTTP_PROXY'] = proxy_url
                 
-                print(f"プロキシ設定: {clean_proxy}")
+                print(f"[WEB画面] プロキシ設定: {clean_proxy}")
             
             if https_proxy and 'HTTP_PROXY' in os.environ:
                 # HTTPプロキシが設定されている場合のみHTTPSも設定
@@ -540,7 +538,9 @@ def setup_proxy_from_config():
                     os.environ['HTTPS_PROXY'] = f"http://{clean_proxy}"
             
         except Exception as e:
-            print(f"プロキシ設定エラー: {e}")
+            print(f"[WEB画面] プロキシ設定エラー: {e}")
+    else:
+        print(f"[WEB画面] config.iniが見つかりません")
 
 def ai_extract_pdf_process(request):
     """PDFアップロード・AI抽出処理"""
