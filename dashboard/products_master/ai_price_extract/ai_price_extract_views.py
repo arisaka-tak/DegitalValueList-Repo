@@ -274,7 +274,6 @@ def _process_ai_extract_submission(request, results, json_data):
                 'model_number': product.model_number,
                 'specification': product.specification,
                 'shipping_unit': product.shipping_unit,
-                'shipping_fee': product.shipping_fee,
                 'remarks': product.remarks,
                 f'new_effective_year_month_1': f'{year:04d}/{month:02d}',
                 f'new_wholesale_price_1': str(new_price),

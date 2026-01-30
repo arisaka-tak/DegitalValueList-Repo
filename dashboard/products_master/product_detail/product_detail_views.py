@@ -821,7 +821,6 @@ def _return_form_with_error(request, product, form, error_message):
             'model_number': product.model_number or '',
             'specification': product.specification or '',
             'shipping_unit': product.shipping_unit or '',
-            'shipping_fee': product.shipping_fee or '',
             'remarks': product.remarks or '',
         })
     else:
@@ -839,7 +838,6 @@ def _return_form_with_error(request, product, form, error_message):
         'model_number': request.POST.get('model_number', ''),
         'specification': request.POST.get('specification', ''),
         'shipping_unit': request.POST.get('shipping_unit', ''),
-        'shipping_fee': request.POST.get('shipping_fee', ''),
         'remarks': request.POST.get('remarks', ''),
     })
     
@@ -1532,7 +1530,7 @@ def validate_form_data(request, product=None):
         'model_number': (request.POST.get('model_number', '') or '').strip() if isinstance(request.POST.get('model_number', ''), str) else str(request.POST.get('model_number', '') or ''),
         'specification': (request.POST.get('specification', '') or '').strip() if isinstance(request.POST.get('specification', ''), str) else str(request.POST.get('specification', '') or ''),
         'shipping_unit': (request.POST.get('shipping_unit', '') or '').strip() if isinstance(request.POST.get('shipping_unit', ''), str) else str(request.POST.get('shipping_unit', '') or ''),
-        'shipping_fee': (request.POST.get('shipping_fee', '') or '').strip() if isinstance(request.POST.get('shipping_fee', ''), str) else str(request.POST.get('shipping_fee', '') or ''),
+
         'remarks': (request.POST.get('remarks', '') or '').strip() if isinstance(request.POST.get('remarks', ''), str) else str(request.POST.get('remarks', '') or '')
     }
     
