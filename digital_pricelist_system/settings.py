@@ -136,7 +136,8 @@ DATABASES = {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': get_database_path(),
         'OPTIONS': {
-            'init_command': 'PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA cache_size=10000; PRAGMA temp_store=MEMORY; PRAGMA mmap_size=268435456;',
+            'timeout': 30,  # 30秒のタイムアウト設定
+            'init_command': 'PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA cache_size=10000; PRAGMA temp_store=MEMORY; PRAGMA mmap_size=268435456; PRAGMA busy_timeout=30000;',
         },
     }
 }
