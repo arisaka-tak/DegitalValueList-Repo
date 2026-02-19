@@ -329,7 +329,7 @@ class PriceHistoryComponent extends HTMLElement {
             const newValue = inputElement.value.trim();
             
             // 価格フィールドの場合はカンマ区切りでフォーマット
-            let displayValue = newValue || originalValue;
+            let displayValue = newValue;
             if ((field === 'wholesale_price' || field === 'kenren_price' || field === 'retail_price') && newValue) {
                 displayValue = this.formatPrice(newValue);
             }
@@ -373,14 +373,12 @@ class PriceHistoryComponent extends HTMLElement {
             existingInput.remove();
         }
         
-        // 新しいhidden inputを追加
-        if (value) {
-            const hiddenInput = document.createElement('input');
-            hiddenInput.type = 'hidden';
-            hiddenInput.name = inputName;
-            hiddenInput.value = value;
-            form.appendChild(hiddenInput);
-        }
+        // 新しいhidden inputを追加（空文字列も追加）
+        const hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.name = inputName;
+        hiddenInput.value = value;
+        form.appendChild(hiddenInput);
     }
     
     // 県連価格の再計算

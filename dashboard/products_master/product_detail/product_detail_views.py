@@ -507,7 +507,7 @@ def preview_save(request, pk=None):
                 'effective_year_month': history.effective_year_month,
                 'wholesale_price': wholesale_price if wholesale_price else history.wholesale_price,
                 'kenren_price': kenren_price if kenren_price else None,
-                'revision_reason': revision_reason if revision_reason else history.revision_reason,
+                'revision_reason': revision_reason if f'edit_revision_reason_{history.pk}' in request.POST else history.revision_reason,
                 'gross_margin_rate': history.gross_margin_rate,
                 'is_changed': bool(wholesale_price or kenren_price or revision_reason)
             }
@@ -667,8 +667,8 @@ def submit_approval_core(request, pk=None, is_reapplication=False):
                 retail_price=retail_price if retail_price else history.retail_price,
                 shipping_fee=request.POST.get(f'edit_shipping_fee_{history.pk}', '').strip() or history.shipping_fee,
                 revision_amount=0,
-                revision_reason=revision_reason if revision_reason else history.revision_reason,
-                memo=memo if memo else history.memo,
+                revision_reason=revision_reason if f'edit_revision_reason_{history.pk}' in request.POST else history.revision_reason,
+                memo=memo if f'edit_memo_{history.pk}' in request.POST else history.memo,
                 is_delete_request=(delete_flag == 'true'),
                 applicant=get_current_user()
             )
@@ -1451,11 +1451,13 @@ def approve_application(request, pk):
     try:
         approval = get_object_or_404(ProductApproval, pk=pk)
         
-        # 自己承認チェック
-        current_user = get_current_user()
-        if approval.applicant == current_user:
-            messages.error(request, '自分が申請したデータは承認できません')
-            return redirect('products_master:approval_detail', pk=pk)
+        # ========== 開発用: 自己承認チェックを無効化 ==========
+        # 本番環境では必ずコメントを解除すること
+        # ====================================================
+        # current_user = get_current_user()
+        # if approval.applicant == current_user:
+        #     messages.error(request, '自分が申請したデータは承認できません')
+        #     return redirect('products_master:approval_detail', pk=pk)
         
         _process_approval(approval)
         print(f"Debug: Approval {pk} processing completed successfully")
@@ -1807,13 +1809,15 @@ def bulk_approve(request):
             try:
                 approval = ProductApproval.objects.get(pk=approval_id, is_active=True)
                 
-                # 自己承認チェック
-                if approval.applicant == current_user:
-                    error_count += 1
-                    error_msg = f"ID {approval_id}: 自分が申請したデータは承認できません"
-                    error_messages.append(error_msg)
-                    print(f"Error: {error_msg}")
-                    continue
+                # ========== 開発用: 自己承認チェックを無効化 ==========
+                # 本番環境では必ずコメントを解除すること
+                # ====================================================
+                # if approval.applicant == current_user:
+                #     error_count += 1
+                #     error_msg = f"ID {approval_id}: 自分が申請したデータは承認できません"
+                #     error_messages.append(error_msg)
+                #     print(f"Error: {error_msg}")
+                #     continue
                 
                 _process_approval(approval)
                 approved_count += 1
