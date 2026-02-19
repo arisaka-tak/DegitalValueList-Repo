@@ -1451,13 +1451,11 @@ def approve_application(request, pk):
     try:
         approval = get_object_or_404(ProductApproval, pk=pk)
         
-        # ========== 開発用: 自己承認チェックを無効化 ==========
-        # 本番環境では必ずコメントを解除すること
-        # ====================================================
-        # current_user = get_current_user()
-        # if approval.applicant == current_user:
-        #     messages.error(request, '自分が申請したデータは承認できません')
-        #     return redirect('products_master:approval_detail', pk=pk)
+        # 自己承認チェック
+        current_user = get_current_user()
+        if approval.applicant == current_user:
+            messages.error(request, '自分が申請したデータは承認できません')
+            return redirect('products_master:approval_detail', pk=pk)
         
         _process_approval(approval)
         print(f"Debug: Approval {pk} processing completed successfully")
@@ -1809,15 +1807,13 @@ def bulk_approve(request):
             try:
                 approval = ProductApproval.objects.get(pk=approval_id, is_active=True)
                 
-                # ========== 開発用: 自己承認チェックを無効化 ==========
-                # 本番環境では必ずコメントを解除すること
-                # ====================================================
-                # if approval.applicant == current_user:
-                #     error_count += 1
-                #     error_msg = f"ID {approval_id}: 自分が申請したデータは承認できません"
-                #     error_messages.append(error_msg)
-                #     print(f"Error: {error_msg}")
-                #     continue
+                # 自己承認チェック
+                if approval.applicant == current_user:
+                    error_count += 1
+                    error_msg = f"ID {approval_id}: 自分が申請したデータは承認できません"
+                    error_messages.append(error_msg)
+                    print(f"Error: {error_msg}")
+                    continue
                 
                 _process_approval(approval)
                 approved_count += 1
