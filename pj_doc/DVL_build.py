@@ -29,6 +29,11 @@ def main():
         "--add-data=degital_value_list.xlsx;.",
         "--hidden-import=django",
         "--hidden-import=dashboard.products_master",
+        "--hidden-import=azure.ai.documentintelligence",
+        "--hidden-import=azure.ai.formrecognizer",
+        "--hidden-import=openai",
+        "--hidden-import=dashboard.products_master.ai_price_extract.ai_price_extract_views",
+        "--hidden-import=dashboard.products_master.ai_price_extract.ai_history_views",
         "Django_run.py"
     ]
     

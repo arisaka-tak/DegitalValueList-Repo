@@ -163,6 +163,8 @@ def ensure_folders():
 
 def process_pdf_file(pdf_path):
     """単一PDFファイルを処理"""
+    logger = logging.getLogger(__name__)
+    logger.info(f"処理開始: {pdf_path}")
     print(f"処理開始: {pdf_path}")
     
     try:
@@ -172,40 +174,53 @@ def process_pdf_file(pdf_path):
         ai_result_path = os.path.join(temp_dir, f"batch_ai_{os.getpid()}_{uuid.uuid4().hex[:8]}.json")
         
         # Document Intelligence処理
+        logger.info("  Document Intelligence処理中...")
         print("  Document Intelligence処理中...")
         extract_di_main(str(pdf_path), di_result_path)
+        logger.info("  Document Intelligence処理完了")
+        print("  Document Intelligence処理完了")
         
         # AI解析処理
+        logger.info("  AI解析処理中...")
         print("  AI解析処理中...")
         ai_results = process_ai_main(di_result_path, ai_result_path)
+        logger.info(f"  AI解析結果: {ai_results is not None}")
         print(f"  AI解析結果: {ai_results is not None}")
         
         if ai_results is None:
+            logger.warning("  AI解析がNoneを返しました")
             print("  AI解析がNoneを返しました")
             return False
         
         products = ai_results.get('products', [])
+        logger.info(f"  抽出された商品数: {len(products)}")
         print(f"  抽出された商品数: {len(products)}")
         
         if not products:
+            logger.warning("  商品情報が抽出できませんでした")
             print("  商品情報が抽出できませんでした")
             return False
         
         # トランザクション作成
+        logger.info("  トランザクション作成中...")
         print("  トランザクション作成中...")
         transaction_id = f"BATCH_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
         
         document_metadata = ai_results.get('document_metadata', {})
         sender = document_metadata.get('sender', '')
         reason = document_metadata.get('reason', 'バッチ処理によるAI抽出')
+        logger.info(f"  送信元: {sender}, 理由: {reason}")
         print(f"  送信元: {sender}, 理由: {reason}")
         
         # PDFファイルを読み込み
+        logger.info("  PDFファイル読み込み中...")
         print("  PDFファイル読み込み中...")
         with open(pdf_path, 'rb') as f:
             pdf_content = f.read()
+        logger.info(f"  PDFサイズ: {len(pdf_content)} bytes")
         print(f"  PDFサイズ: {len(pdf_content)} bytes")
         
+        logger.info("  データベースにトランザクション保存中...")
         print("  データベースにトランザクション保存中...")
         match_transaction = AIExtractTransaction.objects.create(
             transaction_id=transaction_id,
@@ -217,12 +232,15 @@ def process_pdf_file(pdf_path):
             total_products=len(ai_results['products']),
             status='照合中'
         )
+        logger.info(f"  トランザクションID: {transaction_id}")
         print(f"  トランザクションID: {transaction_id}")
         
         # PDF保存パスをログ出力
+        logger.info(f"  PDF保存パス: {match_transaction.uploaded_pdf.path}")
         print(f"  PDF保存パス: {match_transaction.uploaded_pdf.path}")
         
         # 商品照合処理
+        logger.info("  商品照合処理中...")
         print("  商品照合処理中...")
         json_data = {
             'document_metadata': document_metadata,
@@ -237,18 +255,23 @@ def process_pdf_file(pdf_path):
                 for entity in ai_results['products']
             ]
         }
+        logger.info(f"  照合対象商品数: {len(json_data['products'])}")
         print(f"  照合対象商品数: {len(json_data['products'])}")
         
         results = process_extraction_results(json_data)
+        logger.info(f"  照合結果: {results is not None}")
         print(f"  照合結果: {results is not None}")
         
         if results is None:
+            logger.error("  商品照合処理が失敗しました")
             print("  商品照合処理が失敗しました")
             return False
         
         # 照合結果を明細テーブルに保存
+        logger.info("  明細データ保存中...")
         print("  明細データ保存中...")
         results_list = results.get('results', [])
+        logger.info(f"  保存対象明細数: {len(results_list)}")
         print(f"  保存対象明細数: {len(results_list)}")
         
         for i, result in enumerate(results_list):
@@ -280,6 +303,7 @@ def process_pdf_file(pdf_path):
                 match_score=match_score,
                 status='未処理'
             )
+            logger.info(f"    明細{i+1}: {extracted_data.get('product_name')} -> {matched_product.product_name if matched_product else 'マッチなし'}")
             print(f"    明細{i+1}: {extracted_data.get('product_name')} -> {matched_product.product_name if matched_product else 'マッチなし'}")
         
         # 一時ファイル削除
@@ -287,20 +311,23 @@ def process_pdf_file(pdf_path):
             if os.path.exists(temp_file):
                 os.unlink(temp_file)
         
+        logger.info(f"  処理完了: トランザクションID {transaction_id}")
+        logger.info(f"  抽出商品数: {len(ai_results['products'])}")
+        logger.info(f"  保存された明細数: {len(results_list)}")
         print(f"  処理完了: トランザクションID {transaction_id}")
         print(f"  抽出商品数: {len(ai_results['products'])}")
         print(f"  保存された明細数: {len(results_list)}")
         return True
         
     except Exception as e:
+        logger.error(f"  エラー: {str(e)}")
         print(f"  エラー: {str(e)}")
         # PyInstaller環境では詳細なエラー情報をログに出力
         error_detail = traceback.format_exc()
+        logger.error(f"  詳細エラー: {error_detail}")
         print(f"  詳細エラー: {error_detail}")
         
         # ログファイルにも詳細エラーを出力
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"PDF処理エラー: {pdf_path.name}")
         logger.error(f"エラー詳細: {str(e)}")
         logger.error(f"スタックトレース: {error_detail}")
@@ -346,14 +373,23 @@ def main():
     
     # ログ設定
     log_file = log_folder / f"batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file, encoding='utf-8'),
-            logging.StreamHandler()
-        ]
-    )
+    
+    # ファイルハンドラーを作成
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    
+    # コンソールハンドラーを作成
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    
+    # ルートロガーを設定
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+    
     logger = logging.getLogger(__name__)
     
     logger.info("=== AI抽出バッチ処理開始 ===")

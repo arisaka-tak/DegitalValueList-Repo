@@ -191,21 +191,21 @@ def extract_from_pdf(pdf_path: str, output_path: str = None):
                 # 認証付きプロキシURLを作成
                 parsed = urlparse(proxy_url)
                 
-                # プロキシ設定を試行（タイムアウト短縮）
+                # プロキシ設定を試行（タイムアウト延長）
                 try:
-                    # httpx 0.27.xの新しいAPI（タイムアウト30秒）
+                    # httpx 0.27.xの新しいAPI（タイムアウト300秒=5分）
                     http_client = httpx.Client(
                         proxy=proxy_url,
-                        timeout=httpx.Timeout(30.0, connect=10.0)
+                        timeout=httpx.Timeout(300.0, connect=30.0)
                     )
-                    logger.info("プロキシ接続を試行（タイムアウト30秒）")
+                    logger.info("プロキシ接続を試行（タイムアウト300秒）")
                 except TypeError:
                     # 古いhttpxバージョン
                     http_client = httpx.Client(
                         proxies={'http': proxy_url, 'https': proxy_url},
-                        timeout=httpx.Timeout(30.0, connect=10.0)
+                        timeout=httpx.Timeout(300.0, connect=30.0)
                     )
-                    logger.info("レガシープロキシ設定で接続（タイムアウト30秒）")
+                    logger.info("レガシープロキシ設定で接続（タイムアウト300秒）")
                 
             except Exception as e:
                 logger.error(f"プロキシ設定エラー: {e}")
@@ -220,8 +220,8 @@ def extract_from_pdf(pdf_path: str, output_path: str = None):
             )
         else:
             logger.info("プロキシなしで接続")
-            # プロキシなしでもタイムアウト設定
-            http_client = httpx.Client(timeout=httpx.Timeout(30.0, connect=10.0))
+            # プロキシなしでもタイムアウト設定（300秒=5分）
+            http_client = httpx.Client(timeout=httpx.Timeout(300.0, connect=30.0))
             client = DocumentIntelligenceClient(
                 endpoint=DOCUMENT_INTELLIGENCE_ENDPOINT,
                 credential=AzureKeyCredential(DOCUMENT_INTELLIGENCE_API_KEY),
