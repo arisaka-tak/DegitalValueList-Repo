@@ -32,7 +32,6 @@ def product_delete(request, pk):
                     model_number=product.model_number,
                     specification=product.specification,
                     shipping_unit=product.shipping_unit,
-                    shipping_fee=product.shipping_fee,
                     remarks=product.remarks,
                     status='削除申請',
                     applicant=get_current_user()
