@@ -19,7 +19,7 @@
             {% endfor %}
         {% endif %}
 
-        <form method="post" action="#">
+        <form method="post">
             {% csrf_token %}
             
             <!-- 適用年月指定（共通） -->
@@ -142,11 +142,11 @@
                                                     {% else %}
                                                         <div class="mb-2">
                                                             <label class="form-label form-label-sm mb-1">新仕切価格</label>
-                                                            <input type="number" class="form-control form-control-sm" name="new_price_{{ result.index }}" value="{{ detail.extracted_price|default:'' }}" placeholder="新仕切価格">
+                                                            <input type="text" class="form-control form-control-sm" name="new_price_{{ result.index }}" value="{{ detail.extracted_price|default:'' }}" placeholder="新仕切価格">
                                                         </div>
                                                         <div>
                                                             <label class="form-label form-label-sm mb-1">標準小売価格</label>
-                                                            <input type="number" class="form-control form-control-sm" name="retail_price_{{ result.index }}" value="{{ detail.extracted_retail_price|default:'' }}" placeholder="標準小売価格">
+                                                            <input type="text" class="form-control form-control-sm" name="retail_price_{{ result.index }}" value="{{ detail.extracted_retail_price|default:'' }}" placeholder="標準小売価格">
                                                         </div>
                                                     {% endif %}
                                                 {% endif %}
@@ -154,11 +154,11 @@
                                         {% else %}
                                             <div class="mb-2">
                                                 <label class="form-label form-label-sm mb-1">新仕切価格</label>
-                                                <input type="number" class="form-control form-control-sm" name="new_price_{{ result.index }}" value="{{ result.extracted_data.new_price|default:'' }}" placeholder="新仕切価格">
+                                                <input type="text" class="form-control form-control-sm" name="new_price_{{ result.index }}" value="{{ result.extracted_data.new_price|default:'' }}" placeholder="新仕切価格">
                                             </div>
                                             <div>
                                                 <label class="form-label form-label-sm mb-1">標準小売価格</label>
-                                                <input type="number" class="form-control form-control-sm" name="retail_price_{{ result.index }}" value="{{ result.extracted_data.retail_price|default:'' }}" placeholder="標準小売価格">
+                                                <input type="text" class="form-control form-control-sm" name="retail_price_{{ result.index }}" value="{{ result.extracted_data.retail_price|default:'' }}" placeholder="標準小売価格">
                                             </div>
                                         {% endif %}
                                     </td>
@@ -436,7 +436,38 @@
     </div>
     
     <script>
+    // Enterキーのグローバル制御（最優先）
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'submit') {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            return false;
+        }
+    }, true); // キャプチャフェーズで実行
+    
     document.addEventListener('DOMContentLoaded', function() {
+    
+    // Enterキーでのフォーム送信とページ遷移を完全に防止
+    const form = document.querySelector('form');
+    if (form) {
+        form.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.type !== 'submit') {
+                e.preventDefault();
+                e.stopPropagation();
+                return false;
+            }
+        });
+        
+        // フォーム送信イベントも制御
+        form.addEventListener('submit', function(e) {
+            // submitボタン以外からの送信を防止
+            if (!e.submitter || e.submitter.type !== 'submit') {
+                e.preventDefault();
+                return false;
+            }
+        });
+    }
     
     // 商品詳細カード表示切り替え
     function showProductDetail(index, productId) {
