@@ -124,14 +124,19 @@ def ai_extract_process(request):
 
 def _process_ai_extract_submission(request, results, json_data):
     """AI抽出結果からの申請データ作成処理（商品詳細の申請ロジックを使用）"""
-    # インポートはファイル上部に移動済み
+    import logging
+    logger = logging.getLogger(__name__)
     
     try:
+        logger.info(f"=== AI価格抽出申請処理開始 ===")
+        logger.info(f"処理対象件数: {len(results.get('results', []))}件")
+        
         # 適用年月を取得
         effective_year_month = request.POST.get('effective_year_month')
-        print(f"Debug: effective_year_month = {effective_year_month}")
+        logger.info(f"適用年月: {effective_year_month}")
         if not effective_year_month:
             messages.error(request, '適用年月を指定してください。')
+            logger.error("適用年月が未入力")
             return redirect(request.path)
         
         # 年月をdatetimeに変換
@@ -264,6 +269,16 @@ def _process_ai_extract_submission(request, results, json_data):
             individual_reason_str = request.POST.get(f'revision_reason_{i}', '').strip()
             final_reason = individual_reason_str if individual_reason_str else revision_reason
             
+            # 前月の送料を取得
+            previous_shipping_fee = None
+            previous_month = f'{year:04d}/{month-1:02d}' if month > 1 else f'{year-1:04d}/12'
+            previous_history = product.price_histories.filter(
+                effective_year_month=previous_month,
+                is_active=True
+            ).first()
+            if previous_history and previous_history.shipping_fee:
+                previous_shipping_fee = previous_history.shipping_fee
+            
             # 新しい価格履歴用のフォームデータを作成
             form_data = {
                 'product_code': product.product_code,
@@ -280,14 +295,13 @@ def _process_ai_extract_submission(request, results, json_data):
                 f'new_revision_reason_1': final_reason,
             }
             
-            # 標準小売価格が入力されている場合は追加
-            if retail_price_str:
-                try:
-                    retail_price = Decimal(str(retail_price_str).strip())
-                    if retail_price >= 0:
-                        form_data[f'new_retail_price_1'] = str(retail_price)
-                except (ValueError, TypeError):
-                    pass
+            # 標準小売価格が入力されている場合は追加（文字列もそのまま渡す）
+            if retail_price_str and retail_price_str.strip():
+                form_data[f'new_retail_price_1'] = retail_price_str.strip()
+            
+            # 前月の送料を設定
+            if previous_shipping_fee:
+                form_data[f'new_shipping_fee_1'] = str(previous_shipping_fee)
             
             # モックリクエストを作成
             from django.http import QueryDict
@@ -367,15 +381,19 @@ def _process_ai_extract_submission(request, results, json_data):
         # 結果メッセージ
         if created_count > 0:
             messages.success(request, f'{created_count}件の価格履歴申請を作成しました。(トランザクションID: {transaction_id})')
+            logger.info(f"申請成功: {created_count}件")
         if skipped_count > 0:
             messages.info(request, f'{skipped_count}件をスキップしました。')
+            logger.info(f"スキップ: {skipped_count}件")
         
-
-        
+        logger.info(f"=== AI価格抽出申請処理完了 ===")
         return redirect(request.path)
         
     except Exception as e:
-        messages.error(request, f'申請データ作成中にエラーが発生しました: {str(e)}')
+        error_msg = f'申請データ作成中にエラーが発生しました: {str(e)}'
+        logger.error(error_msg)
+        logger.error(f"トレースバック: {traceback.format_exc()}")
+        messages.error(request, error_msg)
         return redirect(request.path)
 
 

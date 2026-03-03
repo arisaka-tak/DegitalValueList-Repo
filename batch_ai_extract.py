@@ -70,6 +70,7 @@ def load_config():
     defaults = {
         'watch_folder': r'C:\S3\batch_input',
         'error_folder': r'C:\S3\batch_error',
+        'completed_folder': r'C:\S3\batch_completed',
         'media_root': 'media',
         'http_proxy': '',
         'https_proxy': '',
@@ -82,75 +83,43 @@ def load_config():
             config.read(CONFIG_PATH, encoding='utf-8')
             watch_folder = config.get('AI_BATCH', 'watch_folder', fallback=defaults['watch_folder'])
             error_folder = config.get('AI_BATCH', 'error_folder', fallback=defaults['error_folder'])
+            completed_folder = config.get('AI_BATCH', 'completed_folder', fallback=defaults['completed_folder'])
             media_root = config.get('FILES', 'media_root', fallback=defaults['media_root'])
             http_proxy = config.get('PROXY', 'http_proxy', fallback=defaults['http_proxy'])
             https_proxy = config.get('PROXY', 'https_proxy', fallback=defaults['https_proxy'])
             proxy_auth = config.get('PROXY', 'proxy_auth', fallback=defaults['proxy_auth'])
             pac_url = config.get('PROXY', 'pac_url', fallback=defaults['pac_url'])
-            return watch_folder, error_folder, media_root, http_proxy, https_proxy, proxy_auth, pac_url
+            return watch_folder, error_folder, completed_folder, media_root, http_proxy, https_proxy, proxy_auth, pac_url
         except Exception:
             pass
     
-    return defaults['watch_folder'], defaults['error_folder'], defaults['media_root'], defaults['http_proxy'], defaults['https_proxy'], defaults['proxy_auth'], defaults['pac_url']
-
-def test_proxy_connection(proxy_url):
-    """プロキシ接続をテスト"""
-    try:
-        import requests
-        proxies = {'http': proxy_url, 'https': proxy_url}
-        # PyInstaller環境ではタイムアウトを短くしてフォールバックを早くする
-        timeout = 5 if getattr(sys, 'frozen', False) else 10
-        response = requests.get('http://httpbin.org/ip', proxies=proxies, timeout=timeout)
-        return response.status_code == 200
-    except Exception as e:
-        print(f"プロキシテストエラー: {e}")
-        return False
+    return defaults['watch_folder'], defaults['error_folder'], defaults['completed_folder'], defaults['media_root'], defaults['http_proxy'], defaults['https_proxy'], defaults['proxy_auth'], defaults['pac_url']
 
 def setup_proxy_environment(http_proxy, https_proxy, proxy_auth):
     """プロキシ環境変数を設定"""
     if http_proxy:
-        # プロトコルを除去して正しい形式に変換
         clean_proxy = http_proxy.replace('http://', '').replace('https://', '')
         if proxy_auth:
             proxy_url = f"http://{proxy_auth}@{clean_proxy}"
-            os.environ['HTTP_PROXY'] = proxy_url
         else:
             proxy_url = f"http://{clean_proxy}"
-            os.environ['HTTP_PROXY'] = proxy_url
         
-        # PyInstaller環境ではプロキシテストをスキップして直接設定
-        if getattr(sys, 'frozen', False):
-            print(f"プロキシ設定: {clean_proxy} (PyInstaller環境 - テストスキップ)")
-        else:
-            # プロキシ接続テスト
-            print(f"プロキシ接続テスト中: {clean_proxy}")
-            if test_proxy_connection(proxy_url):
-                print("プロキシ接続: 成功")
-            else:
-                print("プロキシ接続: 失敗 - 直接接続を試行")
-                # プロキシ設定をクリア
-                if 'HTTP_PROXY' in os.environ:
-                    del os.environ['HTTP_PROXY']
-                if 'HTTPS_PROXY' in os.environ:
-                    del os.environ['HTTPS_PROXY']
+        # 環境変数に設定（テスト失敗でも削除しない）
+        os.environ['HTTP_PROXY'] = proxy_url
+        os.environ['HTTPS_PROXY'] = proxy_url
+        print(f"プロキシ設定完了: {clean_proxy}")
+    else:
+        print("プロキシ設定なし")
     
-    if https_proxy and 'HTTP_PROXY' in os.environ:
-        # HTTPプロキシが設定されている場合のみHTTPSも設定
-        clean_proxy = https_proxy.replace('http://', '').replace('https://', '')
-        if proxy_auth:
-            os.environ['HTTPS_PROXY'] = f"http://{proxy_auth}@{clean_proxy}"
-        else:
-            os.environ['HTTPS_PROXY'] = f"http://{clean_proxy}"
-    
-    print(f"プロキシ設定: HTTP={os.environ.get('HTTP_PROXY', 'なし')}, HTTPS={os.environ.get('HTTPS_PROXY', 'なし')}")
+    print(f"環境変数: HTTP_PROXY={os.environ.get('HTTP_PROXY', 'なし')}, HTTPS_PROXY={os.environ.get('HTTPS_PROXY', 'なし')}")
 
 # 設定読み込み
-WATCH_FOLDER, ERROR_FOLDER, MEDIA_ROOT, HTTP_PROXY, HTTPS_PROXY, PROXY_AUTH, PAC_URL = load_config()
+WATCH_FOLDER, ERROR_FOLDER, COMPLETED_FOLDER, MEDIA_ROOT, HTTP_PROXY, HTTPS_PROXY, PROXY_AUTH, PAC_URL = load_config()
 
 def ensure_folders():
     """必要なフォルダを作成"""
     try:
-        for folder in [WATCH_FOLDER, ERROR_FOLDER]:
+        for folder in [WATCH_FOLDER, ERROR_FOLDER, COMPLETED_FOLDER]:
             Path(folder).mkdir(parents=True, exist_ok=True)
         # logフォルダをinputフォルダの下に作成
         log_folder = Path(WATCH_FOLDER) / "log"
@@ -357,6 +326,7 @@ def main():
     print(f"[バッチ] config.ini存在: {CONFIG_PATH.exists()}")
     print(f"監視フォルダ: {WATCH_FOLDER}")
     print(f"エラーフォルダ: {ERROR_FOLDER}")
+    print(f"入力済フォルダ: {COMPLETED_FOLDER}")
     print(f"PDF保存先: {MEDIA_ROOT} (画面と同じ場所)")
     print(f"設定ファイル: config.ini")
     
@@ -396,6 +366,7 @@ def main():
     logger.info(f"設定ファイル: {CONFIG_PATH} {'(存在)' if CONFIG_PATH.exists() else '(デフォルト値使用)'}")
     logger.info(f"監視フォルダ: {WATCH_FOLDER}")
     logger.info(f"エラーフォルダ: {ERROR_FOLDER}")
+    logger.info(f"入力済フォルダ: {COMPLETED_FOLDER}")
     logger.info(f"DBファイル: {db_path}")
     logger.info(f"ログファイル: {log_file}")
     
@@ -422,14 +393,37 @@ def main():
         print(f"\n--- {pdf_file.name} ---")
         logger.info(f"--- {pdf_file.name} ---")
         
-        if process_pdf_file(pdf_file):
-            # 成功時は元ファイルを削除（PDFはDjangoのメディアフォルダに保存済み）
-            pdf_file.unlink()
-            print(f"  処理完了: 元ファイル削除")
-            logger.info(f"処理成功: {pdf_file.name}")
+        # ファイル存在確認
+        print(f"  処理前ファイル存在: {pdf_file.exists()}")
+        logger.info(f"  処理前ファイル存在: {pdf_file.exists()}")
+        
+        process_result = process_pdf_file(pdf_file)
+        
+        # 処理後のファイル存在確認
+        print(f"  処理後ファイル存在: {pdf_file.exists()}")
+        logger.info(f"  処理後ファイル存在: {pdf_file.exists()}")
+        
+        if not pdf_file.exists():
+            print(f"  警告: ファイルが既に削除されています")
+            logger.warning(f"  警告: ファイルが既に削除されています")
+            if process_result:
+                success_count += 1
+            else:
+                error_count += 1
+            continue
+        
+        if process_result:
+            # 成功時は入力済フォルダに移動
+            print(f"  入力済フォルダに移動開始: {COMPLETED_FOLDER}")
+            logger.info(f"  入力済フォルダに移動開始: {COMPLETED_FOLDER}")
+            dest_path = move_file(pdf_file, COMPLETED_FOLDER)
+            print(f"  処理完了: 入力済フォルダに移動 -> {dest_path}")
+            logger.info(f"処理成功: {pdf_file.name} -> {dest_path}")
             success_count += 1
         else:
             # 失敗時はエラーフォルダに移動
+            print(f"  エラーフォルダに移動開始: {ERROR_FOLDER}")
+            logger.info(f"  エラーフォルダに移動開始: {ERROR_FOLDER}")
             dest_path = move_file(pdf_file, ERROR_FOLDER)
             print(f"  エラーファイル移動先: {dest_path}")
             logger.error(f"処理失敗: {pdf_file.name} -> {dest_path}")
