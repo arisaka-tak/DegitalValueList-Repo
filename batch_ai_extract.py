@@ -318,7 +318,10 @@ def move_file(src_path, dest_folder):
 
 def main():
     """メイン処理"""
-    print("=== AI抽出バッチ処理開始 ===")
+    print("\n" + "="*60)
+    print("  AI価格抽出バッチ処理")
+    print("  起動中... (初回起動は20-30秒かかります)")
+    print("="*60 + "\n")
     
     # 設定ファイル検証
     validate_config_paths()

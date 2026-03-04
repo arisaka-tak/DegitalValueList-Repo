@@ -22,8 +22,8 @@ load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# 設定ファイルパス（一箇所で定義）
-CONFIG_PATH = Path(r"\\zbsfs.local.z-bs.co.jp\605ＤＸ企画部\005ＤＸ・アプリグループ\28_全農畜産サービス\08_【デジタル価格表作成業務効率化検討】\DegitalValueList_Console\config.ini")
+# 設定ファイルパス（config_paths.pyと統一）
+from digital_pricelist_system.config_paths import CONFIG_PATH
 
 def get_config():
     """設定ファイルを読み込み"""
