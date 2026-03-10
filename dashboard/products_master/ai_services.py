@@ -89,8 +89,53 @@ def normalize_text(text):
     
     return text
 
+def get_master_data():
+    """
+    マスタ側データに必要なDB関連の処理、重めの処理をやっておく関数
+    バッチ実行時はメインループの外で一度だけ呼び出し、画面から実行されるときは毎回呼び出す
+    """
+    today = datetime.now().strftime('%Y/%m')
+    
+    # 関連データと価格履歴を一括取得
+    products = Product.objects.select_related('manufacturer', 'livestock_type', 'category').prefetch_related('price_histories').all()
+    prepared_master = []
+    
+    for product in products:
+        # 文字列処理をここで一度だけ実行
+        p_name_norm = normalize_text(product.product_name or '')
+        p_model_norm = normalize_text(product.model_number or '')
+        p_spec_norm = normalize_text(product.specification or '')
+        
+        # マスタ側の2-gramキーワードリストAを作成
+        bigrams = get_bigrams(p_name_norm) | get_bigrams(p_spec_norm) | get_bigrams(p_model_norm)
+        
+        # マスタ側の処理日時点の仕切価格を取得
+        latest_price_history = product.price_histories.filter(
+            is_active=True, effective_year_month__lte=today
+        ).order_by('-effective_year_month').first()
+        
+        wholesale_price = None
+        try:
+            if latest_price_history and latest_price_history.wholesale_price:
+                master_price_str = str(latest_price_history.wholesale_price).strip()
+                # 数値のみの場合に処理
+                if master_price_str.replace(',', '').replace('.', '').isdigit():
+                    wholesale_price = float(master_price_str.replace(',', ''))
+        except (ValueError, TypeError):
+            pass
 
-def find_similar_products(extracted_data, threshold=70, debug=False):
+        prepared_master.append({
+            'product_obj': product,
+            'keyword_list': bigrams,
+            'wholesale_price': wholesale_price,
+            'master_model_normalized': p_model_norm,
+            'manufacturer_bigrams': get_bigrams(normalize_text(str(product.manufacturer))) if product.manufacturer else set(),
+        })
+    
+    logger.info(f"マスターデータ準備完了: {len(prepared_master)}件")
+    return prepared_master
+
+def find_similar_products(extracted_data, prepared_master, threshold=70, debug=False):
     """
     抽出されたデータから類似商品を検索
     
@@ -129,10 +174,8 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
             logger.debug("AIキーワードリストが空のためスキップ")
         return []
     
-    # 全商品を対象とした照合（関連データも一括取得）
-    products = Product.objects.select_related('manufacturer', 'livestock_type', 'category').all()
     if is_nfj310_debug:
-        logger.debug(f"全商品対象: {products.count()}件")
+        logger.debug(f"全商品対象: {len(prepared_master)}件")
     
     candidates = []
     debug_info = []
@@ -143,13 +186,10 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
     max_candidates = 50  # より多くの候補を確認
     high_score_threshold = 100  # 早期終了を実質無効化
     
-    for product in products:
-        # マスター側のキーワードリストAを作成（常に動的生成）
-        master_product_bigrams = get_bigrams(normalize_text(product.product_name or ''))
-        master_spec_bigrams = get_bigrams(normalize_text(product.specification or ''))
-        master_model_bigrams = get_bigrams(normalize_text(product.model_number or ''))
-        master_keyword_list = master_product_bigrams | master_spec_bigrams | master_model_bigrams
-        
+    for master_item in prepared_master:
+        product = master_item['product_obj']
+        master_keyword_list = master_item['keyword_list']
+
         # 空のキーワードリストの場合はスキップ
         if not ai_keyword_list or not master_keyword_list:
             continue
@@ -195,7 +235,7 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
             min_length = 6 if master_model_stripped.isdigit() else 4
             
             if len(master_model_stripped) >= min_length:
-                master_model_normalized = normalize_text(product.model_number)
+                master_model_normalized = master_item['master_model_normalized']
                 ai_all_fields = f"{ai_product_name} {ai_model_number} {ai_specification}"
                 ai_all_normalized = normalize_text(ai_all_fields)
                 
@@ -222,7 +262,7 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
         ai_manufacturer = extracted_data.get('manufacturer', '')
         if ai_manufacturer and product.manufacturer:
             ai_manufacturer_bigrams = get_bigrams(normalize_text(ai_manufacturer))
-            master_manufacturer_bigrams = get_bigrams(normalize_text(str(product.manufacturer)))
+            master_manufacturer_bigrams = master_item['manufacturer_bigrams']
             if ai_manufacturer_bigrams:
                 manufacturer_matched = len(ai_manufacturer_bigrams & master_manufacturer_bigrams)
                 manufacturer_match_ratio = manufacturer_matched / len(ai_manufacturer_bigrams)
@@ -233,28 +273,20 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
         # 新価格と仕切価格の範囲チェックボーナス（±10%の範囲で+10点）
         price_range_bonus = 0
         ai_new_price = extracted_data.get('new_price')
-        if ai_new_price and product.price_histories.exists():
+        if ai_new_price and len(product.price_histories.all()) > 0:
             try:
                 # AI側の新価格を数値に変換
                 ai_price_num = float(str(ai_new_price).replace(',', '').strip())
                 
-                # マスタ側の処理日時点の仕切価格を取得
-                today = datetime.now().strftime('%Y/%m')
-                latest_price_history = product.price_histories.filter(
-                    is_active=True,
-                    effective_year_month__lte=today
-                ).order_by('-effective_year_month').first()
-                if latest_price_history and latest_price_history.wholesale_price:
-                    master_price_str = str(latest_price_history.wholesale_price).strip()
-                    # 数値のみの場合に処理
-                    if master_price_str.replace(',', '').replace('.', '').isdigit():
-                        master_price_num = float(master_price_str.replace(',', ''))
-                        
-                        # ±10%の範囲チェック
-                        price_diff_ratio = abs(ai_price_num - master_price_num) / master_price_num
-                        if price_diff_ratio <= 0.1:  # 10%以内
-                            price_range_bonus = 10
-                            bonus_score += price_range_bonus
+                # マスタ側の処理日時点の仕切価格が正常な数値の場合に処理
+                if master_item['wholesale_price']:
+                    master_price_num = master_item['wholesale_price']
+                    
+                    # ±10%の範囲チェック
+                    price_diff_ratio = abs(ai_price_num - master_price_num) / master_price_num
+                    if price_diff_ratio <= 0.1:  # 10%以内
+                        price_range_bonus = 10
+                        bonus_score += price_range_bonus
             except (ValueError, TypeError, ZeroDivisionError):
                 # 数値変換エラーや0除算エラーは無視
                 pass
@@ -347,7 +379,7 @@ def find_similar_products(extracted_data, threshold=70, debug=False):
     return sorted_candidates[:10]  # 上位10件に制限
 
 
-def process_extraction_results(json_data):
+def process_extraction_results(json_data, prepared_master=None):
     """
     AI抽出結果を処理して商品照合を実行
     
@@ -364,6 +396,9 @@ def process_extraction_results(json_data):
             'message': 'JSONに"products"キーが見つかりません'
         }
     
+    if prepared_master is None:
+            prepared_master = get_master_data()
+    
     results = []
     
     for i, product_data in enumerate(json_data['products']):
@@ -379,7 +414,7 @@ def process_extraction_results(json_data):
             continue
         
         # 商品照合実行
-        candidates = find_similar_products(product_data, threshold=50, debug=True)
+        candidates = find_similar_products(product_data, prepared_master, threshold=50, debug=True)
         
         results.append({
             'index': i,

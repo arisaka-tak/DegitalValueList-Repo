@@ -28,6 +28,7 @@ from dashboard.products_master.pdf_processing.process_ai_simple import main as p
 from dashboard.products_master.ai_extract_models import AIExtractTransaction, AIExtractTransactionDetail
 from dashboard.products_master.ai_services import process_extraction_results
 from dashboard.products_master.models import Product
+from dashboard.products_master.ai_services import get_master_data
 from django.core.files.base import ContentFile
 
 from digital_pricelist_system.config_paths import CONFIG_PATH
@@ -130,7 +131,7 @@ def ensure_folders():
         print(f"フォルダ作成エラー: {e}")
         sys.exit(1)
 
-def process_pdf_file(pdf_path):
+def process_pdf_file(pdf_path, prepared_master):
     """単一PDFファイルを処理"""
     logger = logging.getLogger(__name__)
     logger.info(f"処理開始: {pdf_path}")
@@ -227,7 +228,7 @@ def process_pdf_file(pdf_path):
         logger.info(f"  照合対象商品数: {len(json_data['products'])}")
         print(f"  照合対象商品数: {len(json_data['products'])}")
         
-        results = process_extraction_results(json_data)
+        results = process_extraction_results(json_data, prepared_master)
         logger.info(f"  照合結果: {results is not None}")
         print(f"  照合結果: {results is not None}")
         
@@ -397,7 +398,10 @@ def main():
     
     success_count = 0
     error_count = 0
-    
+
+    logger.info("照合用マスタデータロード中...")
+    prepared_master = get_master_data()
+
     for pdf_file in pdf_files:
         print(f"\n--- {pdf_file.name} ---")
         logger.info(f"--- {pdf_file.name} ---")
@@ -406,7 +410,7 @@ def main():
         print(f"  処理前ファイル存在: {pdf_file.exists()}")
         logger.info(f"  処理前ファイル存在: {pdf_file.exists()}")
         
-        process_result = process_pdf_file(pdf_file)
+        process_result = process_pdf_file(pdf_file, prepared_master)
         
         # 処理後のファイル存在確認
         print(f"  処理後ファイル存在: {pdf_file.exists()}")
