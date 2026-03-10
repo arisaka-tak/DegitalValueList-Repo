@@ -242,7 +242,8 @@ def process_pdf_file(pdf_path):
         results_list = results.get('results', [])
         logger.info(f"  保存対象明細数: {len(results_list)}")
         print(f"  保存対象明細数: {len(results_list)}")
-        
+
+        detail_objects = []
         for i, result in enumerate(results_list):
             extracted_data = result.get('extracted_data', {})
             candidates = result.get('candidates', [])
@@ -259,7 +260,7 @@ def process_pdf_file(pdf_path):
                     except Product.DoesNotExist:
                         pass
             
-            detail = AIExtractTransactionDetail.objects.create(
+            detail = AIExtractTransactionDetail(
                 transaction=match_transaction,
                 sequence=i + 1,
                 extracted_product_name=extracted_data.get('product_name'),
@@ -272,9 +273,14 @@ def process_pdf_file(pdf_path):
                 match_score=match_score,
                 status='未処理'
             )
+            detail_objects.append(detail)
             logger.info(f"    明細{i+1}: {extracted_data.get('product_name')} -> {matched_product.product_name if matched_product else 'マッチなし'}")
             print(f"    明細{i+1}: {extracted_data.get('product_name')} -> {matched_product.product_name if matched_product else 'マッチなし'}")
-        
+
+        # 明細全件まとめて一括保存
+        if detail_objects:
+            AIExtractTransactionDetail.objects.bulk_create(detail_objects)
+
         # 一時ファイル削除
         for temp_file in [di_result_path, ai_result_path]:
             if os.path.exists(temp_file):
