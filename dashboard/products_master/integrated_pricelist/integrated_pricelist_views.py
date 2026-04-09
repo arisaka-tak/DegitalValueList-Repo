@@ -183,7 +183,7 @@ def integrated_pricelist(request):
                     try:
                         wholesale = float(str(prev_history.wholesale_price).replace(',', ''))
                         margin = float(prev_history.gross_margin_rate)
-                        kenren_price = int(wholesale * margin)
+                        kenren_price = int(round(wholesale / margin / 10) * 10)
                     except:
                         kenren_price = '都度見積'
                 previous_month_prices[prev_history.product_id] = {
@@ -231,7 +231,7 @@ def integrated_pricelist(request):
                 try:
                     wholesale = float(str(price_history.wholesale_price).replace(',', ''))
                     margin = float(price_history.gross_margin_rate)
-                    current_price = int(wholesale * margin)
+                    current_price = int(round(wholesale / margin / 10) * 10)
                 except:
                     current_price = '都度見積'
             
@@ -420,7 +420,7 @@ def export_excel(request):
                 try:
                     wholesale = float(str(prev_history.wholesale_price).replace(',', ''))
                     margin = float(prev_history.gross_margin_rate)
-                    kenren_price = int(wholesale * margin)
+                    kenren_price = int(round(wholesale / margin / 10) * 10)
                 except:
                     kenren_price = '都度見積'
             previous_month_prices[prev_history.product_id] = {
@@ -577,7 +577,7 @@ def export_excel(request):
                 if price_history.wholesale_price and price_history.wholesale_price != '都度見積':
                     wholesale = float(str(price_history.wholesale_price).replace(',', ''))
                     margin = float(price_history.gross_margin_rate)
-                    kenren_price = int(wholesale * margin)
+                    kenren_price = int(round(wholesale / margin / 10) * 10)
                 else:
                     kenren_price = '都度見積'
             except:
@@ -592,11 +592,16 @@ def export_excel(request):
         else:
             retail_price = '-'
         
-        revision_amount = ''
-        try:
-            revision_amount = price_history.get_revision_amount()
-        except:
-            revision_amount = 0
+        revision_amount = 0
+        prev_data = item.get('previous_month_price')
+        if prev_data and isinstance(prev_data, dict):
+            prev_kenren = prev_data.get('kenren_price')
+            try:
+                current_val = int(float(str(kenren_price).replace(',', '')))
+                prev_val = int(float(str(prev_kenren).replace(',', '')))
+                revision_amount = current_val - prev_val
+            except (ValueError, TypeError):
+                revision_amount = 0
         
         # 前月価格を取得
         previous_month_wholesale = ''
@@ -693,7 +698,7 @@ def export_excel(request):
                         try:
                             wholesale = float(str(price_history.wholesale_price).replace(',', ''))
                             margin = float(price_history.gross_margin_rate)
-                            current_price = int(wholesale * margin)
+                            current_price = int(round(wholesale / margin / 10) * 10)
                         except:
                             current_price = '都度見積'
                     
