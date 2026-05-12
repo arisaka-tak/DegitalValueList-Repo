@@ -638,13 +638,24 @@ def export_excel(request):
         previous_month_wholesale_formatted = format_price_for_excel(previous_month_wholesale)
         previous_month_kenren_formatted = format_price_for_excel(previous_month_kenren)
         
+        # 改定理由は指定月に改定が発生した場合のみ表示
+        revision_reason = ''
+        if selected_month:
+            current_month_history = PriceHistory.objects.filter(
+                product_id=product.id,
+                is_active=True,
+                effective_year_month=selected_month
+            ).first()
+            if current_month_history:
+                revision_reason = current_month_history.revision_reason or ''
+        
         data = [
             excel_row_num - 1, str(product.livestock_type or ''), str(product.category or ''), str(product.manufacturer or ''),
             product.product_name or '', product.model_number or '', product.specification or '',
             product.shipping_unit or '', previous_month_wholesale_formatted, wholesale_price_formatted,
             previous_month_kenren_formatted, kenren_price_formatted, revision_amount, retail_price_formatted,
             price_history.shipping_fee.replace('\r\n', '\n') if price_history and price_history.shipping_fee else '', product.remarks or '',
-            price_history.revision_reason if price_history.revision_reason else ''
+            revision_reason
         ]
         
         # データを書き込み
