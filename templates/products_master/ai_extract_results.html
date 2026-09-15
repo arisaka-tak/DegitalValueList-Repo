@@ -93,7 +93,6 @@
                                                 <div class="small text-muted">{{ result.extracted_data.manufacturer|default:'-' }}</div>
                                             {% endif %}
                                         </div>
-                                        <!-- 編集モード -->
                                         <div id="edit_{{ result.index }}" style="display:none;">
                                             {% if is_history_view and details %}
                                                 {% for detail in details %}
@@ -130,35 +129,74 @@
                                                 {% if detail.sequence == result.index|add:1 %}
                                                     {% if detail.status in 'スキップ,申請済' %}
                                                         <div class="mb-1">
-                                                            <small class="text-muted">新仕切価格</small><br>
-                                                            <span class="text-muted">{{ result.extracted_data.new_price|default:'-' }}</span>
+                                                            <div class="text-muted" style="font-size: 0.75rem;">新仕切価格</div>
+                                                            <div style="font-size: 0.85rem;">{{ result.extracted_data.new_price|default:'-' }}</div>
                                                             <input type="hidden" name="new_price_{{ result.index }}" value="{{ result.extracted_data.new_price|default:'' }}">
                                                         </div>
-                                                        <div>
-                                                            <small class="text-muted">標準小売価格</small><br>
-                                                            <span class="text-muted">{{ result.extracted_data.retail_price|default:'-' }}</span>
+                                                        <div class="mb-1">
+                                                            <div class="text-muted" style="font-size: 0.75rem;">標準小売価格</div>
+                                                            <div style="font-size: 0.85rem;">{{ result.extracted_data.retail_price|default:'-' }}</div>
                                                             <input type="hidden" name="retail_price_{{ result.index }}" value="{{ result.extracted_data.retail_price|default:'' }}">
                                                         </div>
-                                                    {% else %}
-                                                        <div class="mb-2">
-                                                            <label class="form-label form-label-sm mb-1">新仕切価格</label>
-                                                            <input type="text" class="form-control form-control-sm" name="new_price_{{ result.index }}" value="{{ detail.extracted_price|default:'' }}" placeholder="新仕切価格">
+                                                        <div class="mb-1">
+                                                            <div class="text-muted" style="font-size: 0.75rem;">県連価格</div>
+                                                            <div style="font-size: 0.85rem;">{{ result.extracted_data.kenren_price|default:'-' }}</div>
+                                                            <input type="hidden" name="kenren_price_{{ result.index }}" value="{{ result.extracted_data.kenren_price|default:'' }}">
+                                                        </div>
+                                                        <div class="mb-1">
+                                                            <div class="text-muted" style="font-size: 0.75rem;">送料</div>
+                                                            <div style="font-size: 0.85rem;">{{ result.extracted_data.shipping_fee|default:'-' }}</div>
+                                                            <input type="hidden" name="shipping_fee_{{ result.index }}" value="{{ result.extracted_data.shipping_fee|default:'' }}">
                                                         </div>
                                                         <div>
-                                                            <label class="form-label form-label-sm mb-1">標準小売価格</label>
-                                                            <input type="text" class="form-control form-control-sm" name="retail_price_{{ result.index }}" value="{{ detail.extracted_retail_price|default:'' }}" placeholder="標準小売価格">
+                                                            <div class="text-muted" style="font-size: 0.75rem;">粗利率</div>
+                                                            <div style="font-size: 0.85rem;">{{ result.extracted_data.gross_margin|default:'-' }}</div>
+                                                            <input type="hidden" name="gross_margin_{{ result.index }}" value="{{ result.extracted_data.gross_margin|default:'' }}">
+                                                        </div>
+                                                    {% else %}
+                                                        <div class="mb-1">
+                                                            <label class="form-label mb-0 text-muted" style="font-size: 0.75rem;">新仕切価格</label>
+                                                            <input type="text" class="form-control form-control-sm" style="font-size: 0.8rem; padding: 0.2rem 0.4rem;" name="new_price_{{ result.index }}" value="{{ detail.extracted_price|default:'' }}" placeholder="新仕切価格">
+                                                        </div>
+                                                        <div class="mb-1">
+                                                            <label class="form-label mb-0 text-muted" style="font-size: 0.75rem;">標準小売価格</label>
+                                                            <input type="text" class="form-control form-control-sm" style="font-size: 0.8rem; padding: 0.2rem 0.4rem;" name="retail_price_{{ result.index }}" value="{{ detail.extracted_retail_price|default:'' }}" placeholder="標準小売価格">
+                                                        </div>
+                                                        <div class="mb-1">
+                                                            <label class="form-label mb-0 text-muted" style="font-size: 0.75rem;">県連価格</label>
+                                                            <input type="text" class="form-control form-control-sm" style="font-size: 0.8rem; padding: 0.2rem 0.4rem;" name="kenren_price_{{ result.index }}" value="{{ detail.display_kenren_price|default:'' }}" placeholder="県連価格">
+                                                        </div>
+                                                        <div class="mb-1">
+                                                            <label class="form-label mb-0 text-muted" style="font-size: 0.75rem;">送料</label>
+                                                            <input type="text" class="form-control form-control-sm" style="font-size: 0.8rem; padding: 0.2rem 0.4rem;" name="shipping_fee_{{ result.index }}" value="{{ detail.display_shipping_fee|default:'' }}" placeholder="送料">
+                                                        </div>
+                                                        <div>
+                                                            <label class="form-label mb-0 text-muted" style="font-size: 0.75rem;">粗利率</label>
+                                                            <input type="text" class="form-control form-control-sm" style="font-size: 0.8rem; padding: 0.2rem 0.4rem;" name="gross_margin_{{ result.index }}" value="{{ detail.display_gross_margin|default:'' }}" placeholder="粗利率">
                                                         </div>
                                                     {% endif %}
                                                 {% endif %}
                                             {% endfor %}
                                         {% else %}
-                                            <div class="mb-2">
-                                                <label class="form-label form-label-sm mb-1">新仕切価格</label>
-                                                <input type="text" class="form-control form-control-sm" name="new_price_{{ result.index }}" value="{{ result.extracted_data.new_price|default:'' }}" placeholder="新仕切価格">
+                                            <div class="mb-1">
+                                                <label class="form-label mb-0 text-muted" style="font-size: 0.75rem;">新仕切価格</label>
+                                                <input type="text" class="form-control form-control-sm" style="font-size: 0.8rem; padding: 0.2rem 0.4rem;" name="new_price_{{ result.index }}" value="{{ result.extracted_data.new_price|default:'' }}" placeholder="新仕切価格">
+                                            </div>
+                                            <div class="mb-1">
+                                                <label class="form-label mb-0 text-muted" style="font-size: 0.75rem;">標準小売価格</label>
+                                                <input type="text" class="form-control form-control-sm" style="font-size: 0.8rem; padding: 0.2rem 0.4rem;" name="retail_price_{{ result.index }}" value="{{ result.extracted_data.retail_price|default:'' }}" placeholder="標準小売価格">
+                                            </div>
+                                            <div class="mb-1">
+                                                <label class="form-label mb-0 text-muted" style="font-size: 0.75rem;">県連価格</label>
+                                                <input type="text" class="form-control form-control-sm" style="font-size: 0.8rem; padding: 0.2rem 0.4rem;" name="kenren_price_{{ result.index }}" value="{{ result.extracted_data.kenren_price|default:'' }}" placeholder="県連価格">
+                                            </div>
+                                            <div class="mb-1">
+                                                <label class="form-label mb-0 text-muted" style="font-size: 0.75rem;">送料</label>
+                                                <input type="text" class="form-control form-control-sm" style="font-size: 0.8rem; padding: 0.2rem 0.4rem;" name="shipping_fee_{{ result.index }}" value="{{ result.extracted_data.shipping_fee|default:'' }}" placeholder="送料">
                                             </div>
                                             <div>
-                                                <label class="form-label form-label-sm mb-1">標準小売価格</label>
-                                                <input type="text" class="form-control form-control-sm" name="retail_price_{{ result.index }}" value="{{ result.extracted_data.retail_price|default:'' }}" placeholder="標準小売価格">
+                                                <label class="form-label mb-0 text-muted" style="font-size: 0.75rem;">粗利率</label>
+                                                <input type="text" class="form-control form-control-sm" style="font-size: 0.8rem; padding: 0.2rem 0.4rem;" name="gross_margin_{{ result.index }}" value="{{ result.extracted_data.gross_margin|default:'' }}" placeholder="粗利率">
                                             </div>
                                         {% endif %}
                                     </td>
@@ -203,7 +241,6 @@
                                                                         🔍 手動照合
                                                                     </button>
                                                                 </div>
-                                                                <!-- 商品詳細カード -->
                                                                 <div id="product_detail_{{ result.index }}" class="card mt-2" style="{% if not detail.matched_product %}display:none;{% endif %}">
                                                                     <div class="card-body p-2">
                                                                         <div class="row g-1">
@@ -243,7 +280,32 @@
                                                                                     {% endif %}
                                                                                 </div>
                                                                             </div>
-                                                                        </div>
+                                                                            
+                                                                            <div class="col-6 mt-1">
+                                                                                <div class="small text-muted">現在県連価格</div>
+                                                                                <div class="fw-bold" id="current_kenren_price_{{ result.index }}">
+                                                                                    {% if detail.matched_product %}
+                                                                                        {{ detail.display_kenren_price|default:'-' }}
+                                                                                    {% else %}-{% endif %}
+                                                                                </div>
+                                                                            </div>
+                                                                            <div class="col-6 mt-1">
+                                                                                <div class="small text-muted">現在送料</div>
+                                                                                <div id="current_shipping_fee_{{ result.index }}">
+                                                                                    {% if detail.matched_product %}
+                                                                                        {{ detail.display_shipping_fee|default:'-' }}
+                                                                                    {% else %}-{% endif %}
+                                                                                </div>
+                                                                            </div>
+                                                                            <div class="col-6 mt-1">
+                                                                                <div class="small text-muted">現在粗利率</div>
+                                                                                <div id="current_gross_margin_{{ result.index }}">
+                                                                                    {% if detail.matched_product %}
+                                                                                        {{ detail.display_gross_margin|default:'-' }}{% if detail.display_gross_margin != '-' %}%{% endif %}
+                                                                                    {% else %}-{% endif %}
+                                                                                </div>
+                                                                            </div>
+                                                                            </div>
                                                                     </div>
                                                                 </div>
                                                             {% else %}
@@ -434,7 +496,37 @@
             </div>
         </div>
     </div>
-    
+
+    <div class="modal fade" id="productDetailInfoModal" tabindex="-1" style="z-index: 1060;">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">商品詳細情報</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <table class="table table-bordered table-sm mb-0">
+                        <tbody>
+                            <tr><th class="bg-light" width="30%">商品ID</th><td id="detailModal_id"></td></tr>
+                            <tr><th class="bg-light">カテゴリ</th><td id="detailModal_category"></td></tr>
+                            <tr><th class="bg-light">商品名</th><td id="detailModal_name"></td></tr>
+                            <tr><th class="bg-light">型式</th><td id="detailModal_model"></td></tr>
+                            <tr><th class="bg-light">規格</th><td id="detailModal_spec"></td></tr>
+                            <tr><th class="bg-light">メーカー</th><td id="detailModal_mfg"></td></tr>
+                            <tr><th class="bg-light">発送単位</th><td id="detailModal_shippingUnit"></td></tr>
+                            <tr><th class="bg-light">現在仕切価格</th><td id="detailModal_price" class="text-success fw-bold"></td></tr>
+                            <tr><th class="bg-light">県連価格</th><td id="detailModal_kenrenPrice"></td></tr><tr><th class="bg-light">送料</th><td id="detailModal_shippingFee"></td></tr>
+                            <tr><th class="bg-light">粗利率</th><td id="detailModal_grossMarginRate"></td></tr><tr><th class="bg-light">備考</th><td id="detailModal_remarks"></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
     // Enterキーのグローバル制御（最優先）
     document.addEventListener('keydown', function(e) {
@@ -487,6 +579,26 @@
             document.getElementById(`model_${index}`).textContent = candidate.product.model_number || '-';
             document.getElementById(`spec_${index}`).textContent = candidate.product.specification || '-';
             document.getElementById(`mfg_${index}`).textContent = candidate.product.manufacturer || '-';
+            
+            // 🆕 追加：表示用カードの更新
+            const elKenren = document.getElementById(`current_kenren_price_${index}`);
+            if(elKenren) elKenren.textContent = candidate.product.current_kenren_price || '-';
+            const elShipping = document.getElementById(`current_shipping_fee_${index}`);
+            if(elShipping) elShipping.textContent = candidate.product.current_shipping_fee || '-';
+            const elMargin = document.getElementById(`current_gross_margin_${index}`);
+            if(elMargin) {
+                const marginVal = candidate.product.current_gross_margin_rate;
+                elMargin.textContent = (marginVal && marginVal !== '-') ? marginVal + '%' : '-';
+            }
+
+            // 🆕 追加：左側の申請用フォーム(input)に値をセット
+            const inputKenren = document.querySelector(`input[name="kenren_price_${index}"]`);
+            if(inputKenren) inputKenren.value = (candidate.product.current_kenren_price !== '-') ? candidate.product.current_kenren_price : '';
+            const inputShipping = document.querySelector(`input[name="shipping_fee_${index}"]`);
+            if(inputShipping) inputShipping.value = (candidate.product.current_shipping_fee !== '-') ? candidate.product.current_shipping_fee : '';
+            const inputMargin = document.querySelector(`input[name="gross_margin_${index}"]`);
+            if(inputMargin) inputMargin.value = (candidate.product.current_gross_margin_rate !== '-') ? candidate.product.current_gross_margin_rate : '';
+
             card.style.display = 'block';
         } else {
             card.style.display = 'none';
@@ -607,19 +719,14 @@
         const manufacturerEl = document.getElementById(`manufacturer_${index}`);
         const specificationEl = document.getElementById(`specification_${index}`);
         
-        console.log(`Debug: Getting data for index ${index}`);
-        console.log(`Debug: Elements found - name: ${!!productNameEl}, model: ${!!modelNumberEl}, mfg: ${!!manufacturerEl}, spec: ${!!specificationEl}`);
-        
         if (productNameEl && productNameEl.offsetParent !== null) {
             // 編集モードが表示中
-            const data = {
+            return {
                 product_name: productNameEl.value || null,
                 model_number: modelNumberEl ? modelNumberEl.value || null : null,
                 manufacturer: manufacturerEl ? manufacturerEl.value || null : null,
                 specification: specificationEl ? specificationEl.value || null : null
             };
-            console.log(`Debug: Edit mode data:`, data);
-            return data;
         } else {
             // 表示モードからデータを抽出（履歴詳細画面用）
             const displayEl = document.getElementById(`display_${index}`);
@@ -627,7 +734,6 @@
                 const lines = displayEl.textContent.split('\n').map(line => line.trim()).filter(line => line);
                 const productName = lines[0] || null;
                 
-                // 型式と規格を抽出
                 let modelNumber = null;
                 let specification = null;
                 let manufacturer = null;
@@ -652,16 +758,13 @@
                     if (manufacturer === '-') manufacturer = null;
                 }
                 
-                const data = {
+                return {
                     product_name: productName,
                     model_number: modelNumber,
                     manufacturer: manufacturer,
                     specification: specification
                 };
-                console.log(`Debug: Display mode data:`, data);
-                return data;
             } else {
-                console.log(`Debug: No display element found`);
                 return { product_name: null, model_number: null, manufacturer: null, specification: null };
             }
         }
@@ -750,18 +853,15 @@
         const row = container.closest('tr');
         let html = '';
         
-        // 行の背景色を更新（最高スコアで判定）
         let maxScore = 0;
         if (result.candidates && result.candidates.length > 0) {
             maxScore = Math.max(...result.candidates.map(c => c.score));
         }
         
         if (maxScore >= 70) {
-            row.className = 'table-success';  // 緑：70%以上
-            console.log(`Row ${index}: Changed to GREEN (max score: ${maxScore})`);
+            row.className = 'table-success';
         } else {
-            row.className = 'table-warning';   // 黄：70%未満または候補なし
-            console.log(`Row ${index}: Changed to YELLOW (max score: ${maxScore})`);
+            row.className = 'table-warning';
         }
         
         if (result.status === 'success') {
@@ -770,7 +870,6 @@
                     <option value="">-- 選択 --</option>
             `;
             if (result.candidates && result.candidates.length > 0) {
-                // 候補データを更新
                 window.candidatesData[index] = result.candidates;
                 
                 result.candidates.forEach((candidate, i) => {
@@ -783,7 +882,6 @@
                     <option value="">スキップ</option>
                 </select>
                 <div class="small text-success mt-1">${result.candidates ? result.candidates.length : 0}件の候補</div>
-                <!-- 商品詳細カード -->
                 <div id="product_detail_${index}" class="card mt-2" style="display:block;">
                     <div class="card-body p-2">
                         <div class="row g-1">
@@ -803,6 +901,22 @@
                                 <div class="small text-muted">メーカー</div>
                                 <div id="mfg_${index}">${result.candidates && result.candidates[0] ? result.candidates[0].product.manufacturer || '-' : '-'}</div>
                             </div>
+
+                            <div class="col-6 mt-1">
+                                <div class="small text-muted">現在県連価格</div>
+                                <div class="fw-bold" id="current_kenren_price_${index}">${result.candidates && result.candidates[0] ? result.candidates[0].product.current_kenren_price || '-' : '-'}</div>
+                            </div>
+                            <div class="col-6 mt-1">
+                                <div class="small text-muted">現在送料</div>
+                                <div id="current_shipping_fee_${index}">${result.candidates && result.candidates[0] ? result.candidates[0].product.current_shipping_fee || '-' : '-'}</div>
+                            </div>
+                            <div class="col-6 mt-1">
+                                <div class="small text-muted">現在粗利率</div>
+                                <div id="current_gross_margin_${index}">${(() => {
+                                    const rate = result.candidates && result.candidates[0] ? result.candidates[0].product.current_gross_margin_rate : '-';
+                                    return (rate && rate !== '-') ? rate + '%' : '-';
+                                })()}</div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -821,8 +935,6 @@
         }
         
         if (container) container.innerHTML = html;
-        
-        console.log(`Updated match results for index ${index}, status: ${result.status}`);
     }
     
     // 編集内容をデータベースに一括保存
@@ -831,81 +943,42 @@
         const transactionPk = {{ transaction.pk }};
         const sequence = index + 1;
         
-        console.log(`Debug: Batch saving changes for index ${index}, sequence ${sequence}`);
-        
-        // 全フィールドの値を取得
         const updates = [];
         
-        // 新価格
         const priceInput = document.querySelector(`input[name="new_price_${index}"]`);
-        if (priceInput) {
-            updates.push({
-                sequence: sequence,
-                field: 'extracted_price',
-                value: priceInput.value
-            });
-        }
+        if (priceInput) updates.push({ sequence: sequence, field: 'extracted_price', value: priceInput.value });
         
-        // 改定理由
+        const retailInput = document.querySelector(`input[name="retail_price_${index}"]`);
+        if (retailInput) updates.push({ sequence: sequence, field: 'extracted_retail_price', value: retailInput.value });
+
+        // 20260710 該当行コメント
+        // const kenrenInput = document.querySelector(`input[name="kenren_price_${index}"]`);
+        // if (kenrenInput) updates.push({ sequence: sequence, field: 'extracted_kenren_price', value: kenrenInput.value });
+
+        // const shippingInput = document.querySelector(`input[name="shipping_fee_${index}"]`);
+        // if (shippingInput) updates.push({ sequence: sequence, field: 'extracted_shipping_fee', value: shippingInput.value });
+
+        // const marginInput = document.querySelector(`input[name="gross_margin_${index}"]`);
+        // if (marginInput) updates.push({ sequence: sequence, field: 'extracted_gross_margin', value: marginInput.value });
+        
         const reasonInput = document.querySelector(`input[name="revision_reason_${index}"]`);
-        if (reasonInput) {
-            updates.push({
-                sequence: sequence,
-                field: 'extracted_revision_reason',
-                value: reasonInput.value
-            });
-        }
+        if (reasonInput) updates.push({ sequence: sequence, field: 'extracted_revision_reason', value: reasonInput.value });
         
-        // 商品選択
         const productSelect = document.querySelector(`select[name="product_match_${index}"]`);
-        if (productSelect) {
-            updates.push({
-                sequence: sequence,
-                field: 'matched_product',
-                value: productSelect.value
-            });
-        }
+        if (productSelect) updates.push({ sequence: sequence, field: 'matched_product', value: productSelect.value });
         
-        // 編集モードの入力フィールド
         const productNameInput = document.getElementById(`product_name_${index}`);
-        if (productNameInput) {
-            updates.push({
-                sequence: sequence,
-                field: 'extracted_product_name',
-                value: productNameInput.value
-            });
-        }
+        if (productNameInput) updates.push({ sequence: sequence, field: 'extracted_product_name', value: productNameInput.value });
         
         const modelNumberInput = document.getElementById(`model_number_${index}`);
-        if (modelNumberInput) {
-            updates.push({
-                sequence: sequence,
-                field: 'extracted_model_number',
-                value: modelNumberInput.value
-            });
-        }
+        if (modelNumberInput) updates.push({ sequence: sequence, field: 'extracted_model_number', value: modelNumberInput.value });
         
         const specificationInput = document.getElementById(`specification_${index}`);
-        if (specificationInput) {
-            updates.push({
-                sequence: sequence,
-                field: 'extracted_specification',
-                value: specificationInput.value
-            });
-        }
+        if (specificationInput) updates.push({ sequence: sequence, field: 'extracted_specification', value: specificationInput.value });
         
         const manufacturerInput = document.getElementById(`manufacturer_${index}`);
-        if (manufacturerInput) {
-            updates.push({
-                sequence: sequence,
-                field: 'extracted_manufacturer',
-                value: manufacturerInput.value
-            });
-        }
+        if (manufacturerInput) updates.push({ sequence: sequence, field: 'extracted_manufacturer', value: manufacturerInput.value });
         
-        console.log(`Debug: Batch updates:`, updates);
-        
-        // 一括更新を実行
         return fetch('{% url "products_master:ai_extract_update_detail" %}', {
             method: 'POST',
             headers: {
@@ -919,16 +992,11 @@
             })
         })
         .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             return response.json();
         })
         .then(data => {
-            if (!data.success) {
-                throw new Error(data.error || 'Unknown error');
-            }
-            console.log(`Debug: Batch save successful for index ${index}`);
+            if (!data.success) throw new Error(data.error || 'Unknown error');
             return data;
         });
         {% else %}
@@ -941,330 +1009,51 @@
         {% if is_history_view and transaction %}
         const transactionPk = {{ transaction.pk }};
         const sequence = index + 1;
-        
-        console.log(`Debug: Saving changes for index ${index}, sequence ${sequence}`);
-        
-        // 各フィールドを個別に保存
-        const priceInput = document.querySelector(`input[name="new_price_${index}"]`);
-        const reasonInput = document.querySelector(`input[name="revision_reason_${index}"]`);
-        const productSelect = document.querySelector(`select[name="product_match_${index}"]`);
-        
-        // 編集モードの入力フィールド
-        const productNameInput = document.getElementById(`product_name_${index}`);
-        const modelNumberInput = document.getElementById(`model_number_${index}`);
-        const specificationInput = document.getElementById(`specification_${index}`);
-        const manufacturerInput = document.getElementById(`manufacturer_${index}`);
-        
-        console.log(`Debug: Found inputs - name: ${!!productNameInput}, model: ${!!modelNumberInput}, spec: ${!!specificationInput}, mfg: ${!!manufacturerInput}`);
-        
         const savePromises = [];
         
-        // 新価格を保存
-        if (priceInput) {
-            savePromises.push(
-                fetch('{% url "products_master:ai_extract_update_detail" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    },
-                    body: JSON.stringify({
-                        transaction_pk: transactionPk,
-                        sequence: sequence,
-                        field: 'extracted_price',
-                        value: priceInput.value
-                    })
-                })
-            );
-        }
-        
-        // 改定理由を保存
-        if (reasonInput) {
-            savePromises.push(
-                fetch('{% url "products_master:ai_extract_update_detail" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    },
-                    body: JSON.stringify({
-                        transaction_pk: transactionPk,
-                        sequence: sequence,
-                        field: 'extracted_revision_reason',
-                        value: reasonInput.value
-                    })
-                })
-            );
-        }
-        
-        // 商品選択を保存
-        if (productSelect) {
-            savePromises.push(
-                fetch('{% url "products_master:ai_extract_update_detail" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    },
-                    body: JSON.stringify({
-                        transaction_pk: transactionPk,
-                        sequence: sequence,
-                        field: 'matched_product',
-                        value: productSelect.value
-                    })
-                })
-            );
-        }
-        
-        // 商品名を保存
-        if (productNameInput) {
-            savePromises.push(
-                fetch('{% url "products_master:ai_extract_update_detail" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    },
-                    body: JSON.stringify({
-                        transaction_pk: transactionPk,
-                        sequence: sequence,
-                        field: 'extracted_product_name',
-                        value: productNameInput.value
-                    })
-                })
-            );
-        }
-        
-        // 型式を保存
-        if (modelNumberInput) {
-            savePromises.push(
-                fetch('{% url "products_master:ai_extract_update_detail" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    },
-                    body: JSON.stringify({
-                        transaction_pk: transactionPk,
-                        sequence: sequence,
-                        field: 'extracted_model_number',
-                        value: modelNumberInput.value
-                    })
-                })
-            );
-        }
-        
-        // 規格を保存
-        if (specificationInput) {
-            savePromises.push(
-                fetch('{% url "products_master:ai_extract_update_detail" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    },
-                    body: JSON.stringify({
-                        transaction_pk: transactionPk,
-                        sequence: sequence,
-                        field: 'extracted_specification',
-                        value: specificationInput.value
-                    })
-                })
-            );
-        }
-        
-        // メーカーを保存
-        if (manufacturerInput) {
-            savePromises.push(
-                fetch('{% url "products_master:ai_extract_update_detail" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    },
-                    body: JSON.stringify({
-                        transaction_pk: transactionPk,
-                        sequence: sequence,
-                        field: 'extracted_manufacturer',
-                        value: manufacturerInput.value
-                    })
-                })
-            );
-        }
-        
-        // 全ての保存が完了するまで待機
-        return Promise.all(savePromises)
-            .then(responses => {
-                console.log(`Debug: Save successful for index ${index}`);
-                return responses;
-            })
-            .catch(error => {
-                console.error(`Debug: Save error for index ${index}:`, error);
-                throw error;
+        const createFetch = (field, value) => {
+            return fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value },
+                body: JSON.stringify({ transaction_pk: transactionPk, sequence: sequence, field: field, value: value })
             });
-        {% endif %}
-    }
-    
-    // 再照合なしで保存のみ実行
-    function saveEditChangesOnly(index) {
-        {% if is_history_view and transaction %}
-        const transactionPk = {{ transaction.pk }};
-        const sequence = index + 1;
-        
-        console.log(`Saving data for index ${index}, sequence ${sequence}`);
-        
-        // 各フィールドを個別に保存（編集モードでなくても取得できるフィールド）
+        };
+
         const priceInput = document.querySelector(`input[name="new_price_${index}"]`);
+        const retailInput = document.querySelector(`input[name="retail_price_${index}"]`);
+        // 20260710 該当行コメント
+        // const kenrenInput = document.querySelector(`input[name="kenren_price_${index}"]`);
+        // const shippingInput = document.querySelector(`input[name="shipping_fee_${index}"]`);
+        // const marginInput = document.querySelector(`input[name="gross_margin_${index}"]`);
         const reasonInput = document.querySelector(`input[name="revision_reason_${index}"]`);
         const productSelect = document.querySelector(`select[name="product_match_${index}"]`);
-        
-        // 編集モードの入力フィールド（存在する場合のみ）
         const productNameInput = document.getElementById(`product_name_${index}`);
         const modelNumberInput = document.getElementById(`model_number_${index}`);
         const specificationInput = document.getElementById(`specification_${index}`);
         const manufacturerInput = document.getElementById(`manufacturer_${index}`);
-        
-        console.log(`Fields found - price: ${!!priceInput}, reason: ${!!reasonInput}, product: ${!!productSelect}, name: ${!!productNameInput}`);
-        
-        const savePromises = [];
-        
-        // 新価格を保存
-        if (priceInput) {
-            savePromises.push(
-                fetch('{% url "products_master:ai_extract_update_detail" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    },
-                    body: JSON.stringify({
-                        transaction_pk: transactionPk,
-                        sequence: sequence,
-                        field: 'extracted_price',
-                        value: priceInput.value
-                    })
-                })
-            );
-        }
-        
-        // 改定理由を保存
-        if (reasonInput) {
-            savePromises.push(
-                fetch('{% url "products_master:ai_extract_update_detail" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    },
-                    body: JSON.stringify({
-                        transaction_pk: transactionPk,
-                        sequence: sequence,
-                        field: 'extracted_revision_reason',
-                        value: reasonInput.value
-                    })
-                })
-            );
-        }
-        
-        // 商品選択を保存
-        if (productSelect) {
-            savePromises.push(
-                fetch('{% url "products_master:ai_extract_update_detail" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    },
-                    body: JSON.stringify({
-                        transaction_pk: transactionPk,
-                        sequence: sequence,
-                        field: 'matched_product',
-                        value: productSelect.value
-                    })
-                })
-            );
-        }
-        
-        // 商品名を保存
-        if (productNameInput) {
-            savePromises.push(
-                fetch('{% url "products_master:ai_extract_update_detail" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    },
-                    body: JSON.stringify({
-                        transaction_pk: transactionPk,
-                        sequence: sequence,
-                        field: 'extracted_product_name',
-                        value: productNameInput.value
-                    })
-                })
-            );
-        }
-        
-        // 型式を保存
-        if (modelNumberInput) {
-            savePromises.push(
-                fetch('{% url "products_master:ai_extract_update_detail" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    },
-                    body: JSON.stringify({
-                        transaction_pk: transactionPk,
-                        sequence: sequence,
-                        field: 'extracted_model_number',
-                        value: modelNumberInput.value
-                    })
-                })
-            );
-        }
-        
-        // 規格を保存
-        if (specificationInput) {
-            savePromises.push(
-                fetch('{% url "products_master:ai_extract_update_detail" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    },
-                    body: JSON.stringify({
-                        transaction_pk: transactionPk,
-                        sequence: sequence,
-                        field: 'extracted_specification',
-                        value: specificationInput.value
-                    })
-                })
-            );
-        }
-        
-        // メーカーを保存
-        if (manufacturerInput) {
-            savePromises.push(
-                fetch('{% url "products_master:ai_extract_update_detail" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    },
-                    body: JSON.stringify({
-                        transaction_pk: transactionPk,
-                        sequence: sequence,
-                        field: 'extracted_manufacturer',
-                        value: manufacturerInput.value
-                    })
-                })
-            );
-        }
+
+        if (priceInput) savePromises.push(createFetch('extracted_price', priceInput.value));
+        if (retailInput) savePromises.push(createFetch('extracted_retail_price', retailInput.value));
+        // 20260710 該当行コメント
+        // if (kenrenInput) savePromises.push(createFetch('extracted_kenren_price', kenrenInput.value));
+        // if (shippingInput) savePromises.push(createFetch('extracted_shipping_fee', shippingInput.value));
+        // if (marginInput) savePromises.push(createFetch('extracted_gross_margin', marginInput.value));
+        if (reasonInput) savePromises.push(createFetch('extracted_revision_reason', reasonInput.value));
+        if (productSelect) savePromises.push(createFetch('matched_product', productSelect.value));
+        if (productNameInput) savePromises.push(createFetch('extracted_product_name', productNameInput.value));
+        if (modelNumberInput) savePromises.push(createFetch('extracted_model_number', modelNumberInput.value));
+        if (specificationInput) savePromises.push(createFetch('extracted_specification', specificationInput.value));
+        if (manufacturerInput) savePromises.push(createFetch('extracted_manufacturer', manufacturerInput.value));
         
         return Promise.all(savePromises);
         {% else %}
         return Promise.resolve();
         {% endif %}
+    }
+    
+    // 再照合なしで保存のみ実行
+    function saveEditChangesOnly(index) {
+        return saveEditChanges(index);
     }
     
     // 関数をグローバルスコープに公開
@@ -1313,7 +1102,6 @@
     
     // メーカー名がマスタに存在する場合はデフォルトに設定
     function setDefaultManufacturerIfExists(manufacturerName) {
-        // マスタデータが読み込まれているかチェック
         fetch('{% url "products_master:ai_extract_get_masters" %}')
         .then(response => response.json())
         .then(data => {
@@ -1322,7 +1110,6 @@
                 if (matchingManufacturer) {
                     document.getElementById('manufacturerFilter').value = matchingManufacturer.id;
                     document.getElementById('manufacturerFilterDisplay').value = matchingManufacturer.name;
-                    // デフォルトで検索を実行
                     setTimeout(() => performSearch(), 100);
                 }
             }
@@ -1342,7 +1129,6 @@
                 return;
             }
             
-            // 分類プルダウン
             const categorySelect = document.getElementById('categoryFilter');
             categorySelect.innerHTML = '<option value="">全て</option>';
             data.categories.forEach(category => {
@@ -1352,7 +1138,6 @@
                 categorySelect.appendChild(option);
             });
             
-            // 畜種プルダウン
             const livestockSelect = document.getElementById('livestockTypeFilter');
             livestockSelect.innerHTML = '<option value="">全て</option>';
             data.livestock_types.forEach(livestock => {
@@ -1361,8 +1146,6 @@
                 option.textContent = livestock.name;
                 livestockSelect.appendChild(option);
             });
-            
-            // メーカーは既存モーダルを使用するため、ここでは処理しない
         })
         .catch(error => {
             console.error('マスタデータ取得エラー:', error);
@@ -1371,25 +1154,21 @@
     
     // メーカー選択モーダルを開く（絞り込み用）
     function openManufacturerModalForFilter() {
-        // 商品検索モーダルを一旦閉じる
         const productSearchModal = bootstrap.Modal.getInstance(document.getElementById('productSearchModal'));
         if (productSearchModal) {
             productSearchModal.hide();
         }
         
-        // メーカーモーダルを開く（少し遅延してアニメーションを待つ）
         setTimeout(() => {
             const manufacturerModal = new bootstrap.Modal(document.getElementById('manufacturerModal'));
             manufacturerModal.show();
         }, 300);
     }
     
-    // メーカー選択時のコールバック（既存のメーカーモーダルから呼び出される）
     let bulkManufacturerMode = false;
     
     window.selectManufacturer = function(manufacturerId, manufacturerName) {
         if (bulkManufacturerMode) {
-            // 一括訂正モーダル用
             document.getElementById('bulkManufacturerValue').value = manufacturerId;
             document.getElementById('bulkManufacturerDisplay').value = manufacturerName;
             
@@ -1403,24 +1182,20 @@
             
             bulkManufacturerMode = false;
         } else if (currentSearchIndex !== null) {
-            // 商品検索モーダル用のメーカー選択
             document.getElementById('manufacturerFilter').value = manufacturerId;
             document.getElementById('manufacturerFilterDisplay').value = manufacturerName;
             
-            // メーカーモーダルを閉じる
             const manufacturerModal = bootstrap.Modal.getInstance(document.getElementById('manufacturerModal'));
             manufacturerModal.hide();
             
-            // 商品検索モーダルを再表示して検索をトリガー
             setTimeout(() => {
                 const productSearchModal = new bootstrap.Modal(document.getElementById('productSearchModal'));
                 productSearchModal.show();
-                performSearch(); // 即座に検索実行
+                performSearch();
             }, 300);
         }
     };
     
-    // メーカークリア機能
     function clearManufacturerFilter() {
         document.getElementById('manufacturerFilter').value = '';
         document.getElementById('manufacturerFilterDisplay').value = '';
@@ -1434,7 +1209,6 @@
     window.openManufacturerModalForBulk = openManufacturerModalForBulk;
     window.executeBulkManufacturerUpdate = executeBulkManufacturerUpdate;
     
-    // 検索結果から商品を選択
     function selectSearchedProduct(productData) {
         if (currentSearchIndex === null) return;
         
@@ -1442,7 +1216,6 @@
         const hiddenInput = document.querySelector(`input[name="product_match_${currentSearchIndex}"]`);
         
         if (select) {
-            // selectが存在する場合（通常の候補がある場合）
             let existingOption = select.querySelector(`option[value="${productData.pk}"]`);
             if (!existingOption) {
                 const newOption = document.createElement('option');
@@ -1450,21 +1223,15 @@
                 newOption.textContent = `手動 [${productData.pk}] ${productData.product_name.substring(0, 25)}`;
                 newOption.selected = true;
                 
-                // スキップオプションの前に挿入
                 const skipOption = select.querySelector('option[value=""]');
                 select.insertBefore(newOption, skipOption);
             } else {
                 existingOption.selected = true;
             }
             
-            // 商品詳細を更新
             showProductDetail(currentSearchIndex, productData.pk);
         } else if (hiddenInput) {
-            // selectが存在しない場合（該当商品なしの場合）
-            // hiddenフィールドに値を設定
             hiddenInput.value = productData.pk;
-            
-            // マッチング結果エリアを更新して選択された商品を表示
             const container = document.getElementById(`match_results_${currentSearchIndex}`);
             if (container) {
                 container.innerHTML = `
@@ -1478,18 +1245,22 @@
                     <div class="small text-muted">
                         型式: ${productData.model_number} | 規格: ${productData.specification} | メーカー: ${productData.manufacturer}
                     </div>
-                    <div class="small text-success">現在仕切価格: ${productData.current_wholesale_price}</div>
+                    <div class="small text-success mb-1">現在仕切価格: ${productData.current_wholesale_price || '-'}</div>
+                    
+                    <div class="small text-muted">
+                        県連価格: ${productData.kenren_price || '-'} | 
+                        送料: ${productData.shipping_fee || '-'} | 
+                        粗利率: ${productData.gross_margin_rate && productData.gross_margin_rate !== '-' ? productData.gross_margin_rate + '%' : '-'}
+                    </div>
                     <input type="hidden" name="product_match_${currentSearchIndex}" value="${productData.pk}">
                 `;
             }
         }
         
-        // 候補データに追加
         if (!window.candidatesData[currentSearchIndex]) {
             window.candidatesData[currentSearchIndex] = [];
         }
         
-        // 既存の候補データを更新または追加
         let existingCandidate = window.candidatesData[currentSearchIndex].find(c => c.product.pk == productData.pk);
         if (!existingCandidate) {
             window.candidatesData[currentSearchIndex].unshift({
@@ -1501,7 +1272,6 @@
             });
         }
         
-        // データベースに保存
         {% if is_history_view and transaction %}
         const transactionPk = {{ transaction.pk }};
         const sequence = currentSearchIndex + 1;
@@ -1521,30 +1291,57 @@
         })
         .then(response => response.json())
         .then(data => {
-            if (data.success) {
-                console.log(`商品選択をデータベースに保存しました: ${productData.pk}`);
-            } else {
-                console.error('データベース保存エラー:', data.error);
-            }
+            if (!data.success) console.error('データベース保存エラー:', data.error);
         })
-        .catch(error => {
-            console.error('データベース保存エラー:', error);
-        });
+        .catch(error => console.error('データベース保存エラー:', error));
         {% endif %}
         
-        // モーダルを閉じる
         const modal = bootstrap.Modal.getInstance(document.getElementById('productSearchModal'));
         modal.hide();
-        
         currentSearchIndex = null;
     }
+
+    // グローバルスコープへの公開（既存の window.selectSearchedProduct = ... の近くに追加）
+    window.showProductInfoModal = showProductInfoModal;
+
+    // 商品詳細情報モーダルを表示する関数
+    function showProductInfoModal(event, productData) {
+        event.stopPropagation();
+        
+        // モーダル内にデータをセット
+        document.getElementById('detailModal_id').textContent = productData.pk;
+        document.getElementById('detailModal_name').textContent = productData.product_name;
+        document.getElementById('detailModal_model').textContent = productData.model_number || '-';
+        document.getElementById('detailModal_spec').textContent = productData.specification || '-';
+        document.getElementById('detailModal_mfg').textContent = productData.manufacturer || '-';
+        document.getElementById('detailModal_price').textContent = productData.current_wholesale_price || '-';
+        
+        // ※20260708 定義漏れ項目の追記※
+        document.getElementById('detailModal_category').textContent = productData.category_name;
+        document.getElementById('detailModal_shippingUnit').textContent = productData.shipping_unit;
+
+        // --- ここから追加：新しく追加した4項目をセット ---
+        // --- 今回指定された特定のカラムデータをセット ---
+        document.getElementById('detailModal_kenrenPrice').textContent = productData.kenren_price || '-';
+        document.getElementById('detailModal_shippingFee').textContent = productData.shipping_fee || '-';
+
+        const rate = productData.gross_margin_rate;
+        document.getElementById('detailModal_grossMarginRate').textContent = rate !== '-' ? rate + '%' : '-';
+        // document.getElementById('detailModal_grossMarginRate').textContent = productData.gross_margin_rate || '-';
+        // ---------------------------------------------
+        // --- ここまで追加 ---
+        
+        document.getElementById('detailModal_remarks').textContent = productData.remarks || '-';
+
+        // モーダルを表示
+        const detailModal = new bootstrap.Modal(document.getElementById('productDetailInfoModal'));
+        detailModal.show();
+    }
     
-    // 検索入力イベント
     document.getElementById('productSearchInput').addEventListener('input', function(e) {
         triggerSearch();
     });
     
-    // 絞り込み変更イベント
     document.getElementById('categoryFilter').addEventListener('change', function(e) {
         triggerSearch();
     });
@@ -1553,29 +1350,21 @@
         triggerSearch();
     });
     
-    // メーカーはモーダルで選択するため、changeイベントは不要
-    
-    // 検索トリガー
     function triggerSearch() {
-        // 前回のタイマーをクリア
         if (searchTimeout) {
             clearTimeout(searchTimeout);
         }
-        
-        // 300ms待ってから検索実行（連続入力対策）
         searchTimeout = setTimeout(() => {
             performSearch();
         }, 300);
     }
     
-    // 検索実行
     function performSearch() {
         const query = document.getElementById('productSearchInput').value.trim();
         const categoryId = document.getElementById('categoryFilter').value;
         const livestockTypeId = document.getElementById('livestockTypeFilter').value;
         const manufacturerId = document.getElementById('manufacturerFilter').value;
         
-        // キーワードが空で絞り込みもない場合
         if (!query && !categoryId && !livestockTypeId && !manufacturerId) {
             document.getElementById('searchResults').innerHTML = '<div class="text-center text-muted p-3">絞り込み条件を選択するか、キーワードを入力してください</div>';
             return;
@@ -1584,7 +1373,6 @@
         searchProducts(query, categoryId, livestockTypeId, manufacturerId);
     }
     
-    // 商品検索実行
     function searchProducts(query, categoryId, livestockTypeId, manufacturerId) {
         document.getElementById('searchResults').innerHTML = '<div class="text-center p-3"><div class="spinner-border spinner-border-sm" role="status"></div> 検索中...</div>';
         
@@ -1618,20 +1406,27 @@
             
             let html = '';
             products.forEach(product => {
+                const productJson = JSON.stringify(product).replace(/"/g, '&quot;');
                 html += `
-                    <div class="border-bottom p-2 product-search-item" style="cursor: pointer;" onclick="selectSearchedProduct(${JSON.stringify(product).replace(/"/g, '&quot;')})">
-                        <div class="fw-bold">[${product.pk}] ${product.product_name}</div>
-                        <div class="small text-muted">
-                            型式: ${product.model_number} | 規格: ${product.specification} | メーカー: ${product.manufacturer}
+                    <div class="border-bottom p-2 product-search-item d-flex justify-content-between align-items-center">
+                        <div style="cursor: pointer; flex-grow: 1;" onclick="selectSearchedProduct(${productJson})">
+                            <div class="fw-bold">[${product.pk}] ${product.product_name}</div>
+                            <div class="small text-muted">
+                                型式: ${product.model_number} | 規格: ${product.specification} | メーカー: ${product.manufacturer}
+                            </div>
+                            <div class="small text-success">現在仕切価格: ${product.current_wholesale_price}</div>
                         </div>
-                        <div class="small text-success">現在仕切価格: ${product.current_wholesale_price}</div>
+                        <div class="ms-2">
+                            <button type="button" class="btn btn-outline-info btn-sm text-nowrap" onclick="showProductInfoModal(event, ${productJson})">
+                                📄 詳細
+                            </button>
+                        </div>
                     </div>
                 `;
             });
             
             document.getElementById('searchResults').innerHTML = html;
             
-            // ホバーエフェクトを追加
             document.querySelectorAll('.product-search-item').forEach(item => {
                 item.addEventListener('mouseenter', function() {
                     this.style.backgroundColor = '#f8f9fa';
@@ -1646,8 +1441,6 @@
         });
     }
     
-    
-    // 候補データを個別に設定
     {% for result in results.results %}
     {% if result.candidates %}
     window.candidatesData[{{ result.index }}] = [
@@ -1659,7 +1452,10 @@
                 model_number: "{{ candidate.product.model_number|default:'-'|escapejs }}",
                 specification: "{{ candidate.product.specification|default:'-'|escapejs }}",
                 manufacturer: "{{ candidate.product.manufacturer|default:'-'|escapejs }}",
-                current_wholesale_price: "{{ candidate.product.current_wholesale_price|default:'-'|escapejs }}"
+                current_wholesale_price: "{{ candidate.product.current_wholesale_price|default:'-'|escapejs }}",
+                current_kenren_price: "{{ candidate.product.current_kenren_price|default:'-'|escapejs }}",       // 追加
+                current_shipping_fee: "{{ candidate.product.current_shipping_fee|default:'-'|escapejs }}",       // 追加
+                current_gross_margin_rate: "{{ candidate.product.current_gross_margin_rate|default:'-'|escapejs }}" // 追加
             },
             score: {{ candidate.score }},
             matched_field: "{{ candidate.matched_field|escapejs }}",
@@ -1673,7 +1469,6 @@
     {% endif %}
     {% endfor %}
     
-    // メーカー一括訂正モーダルを開く
     function openBulkManufacturerModal() {
         document.getElementById('bulkManufacturerValue').value = '';
         document.getElementById('bulkManufacturerDisplay').value = '';
@@ -1682,7 +1477,6 @@
         modal.show();
     }
     
-    // メーカー選択モーダルを開く（一括訂正用）
     function openManufacturerModalForBulk() {
         bulkManufacturerMode = true;
         
@@ -1697,7 +1491,6 @@
         }, 300);
     }
     
-    // メーカー一括更新・再照合実行
     function executeBulkManufacturerUpdate() {
         const manufacturerName = document.getElementById('bulkManufacturerDisplay').value;
         
@@ -1710,31 +1503,25 @@
             return;
         }
         
-        // モーダルを閉じる
         const modal = bootstrap.Modal.getInstance(document.getElementById('bulkManufacturerModal'));
         modal.hide();
         
-        // 全明細のメーカーを更新（編集モードと表示モード両方）
         {% for result in results.results %}
-        // 編集モードの入力フィールド
         const manufacturerInput{{ result.index }} = document.getElementById('manufacturer_{{ result.index }}');
         if (manufacturerInput{{ result.index }}) {
             manufacturerInput{{ result.index }}.value = manufacturerName;
         }
         
-        // 表示モードの更新
         const display{{ result.index }} = document.getElementById('display_{{ result.index }}');
         if (display{{ result.index }}) {
             const lines = display{{ result.index }}.innerHTML.split('</div>');
             if (lines.length >= 3) {
-                // メーカー部分（最後の行）を更新
                 lines[2] = `            <div class="small text-muted">${manufacturerName}`;
                 display{{ result.index }}.innerHTML = lines.join('</div>');
             }
         }
         {% endfor %}
         
-        // 全明細を保存してから再照合
         const savePromises = [];
         {% for result in results.results %}
         savePromises.push(saveBatchEditChanges({{ result.index }}));
@@ -1743,7 +1530,6 @@
         Promise.all(savePromises)
             .then(() => {
                 console.log('メーカー一括更新完了');
-                // 全明細を再照合
                 {% for result in results.results %}
                 setTimeout(() => reMatch({{ result.index }}), {{ result.index|add:1 }} * 200);
                 {% endfor %}
@@ -1761,7 +1547,6 @@
         {% if is_history_view %}
         const form = document.querySelector('form');
         
-        // 編集モードの値をフォームにhiddenフィールドとして追加
         {% for result in results.results %}
         const index{{ result.index }} = {{ result.index }};
         const productNameInput{{ result.index }} = document.getElementById(`product_name_${index{{ result.index }}}`);
@@ -1802,9 +1587,9 @@
         }
         {% endfor %}
         
-        return true; // フォーム送信を続行
+        return true; 
         {% else %}
-        return true; // 通常のフォーム送信
+        return true; 
         {% endif %}
     }
     </script>

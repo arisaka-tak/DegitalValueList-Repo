@@ -52,12 +52,13 @@
                                 <tr>
                                     <th style="min-width: 80px;">商品番号</th>
                                     <th style="min-width: 100px;">商品コード</th>
-                                    <th style="min-width: 200px;">商品名</th>
-                                    <th style="min-width: 60px;">畜種</th>
-                                    <th style="min-width: 60px;">分類</th>
-                                    <th style="min-width: 120px;">メーカー</th>
+                                    <th style="min-width: 185px;">商品名</th>
+                                    <th style="min-width: 70px;">型式</th>
+                                    <th style="min-width: 55px;">畜種</th>
+                                    <th style="min-width: 55px;">分類</th>
+                                    <th style="min-width: 115px;">メーカー</th>
                                     <th style="min-width: 80px;">発送単位</th>
-                                    <th style="min-width: 200px;">操作</th>
+                                    <th style="min-width: 160px;">操作</th>
                                     <th style="min-width: 100px;">ステータス</th>
                                 </tr>
                             </thead>
@@ -74,6 +75,7 @@
                                                 <span class="badge bg-danger ms-2">削除済み</span>
                                             {% endif %}
                                         </td>
+                                        <td>{{ product.model_number|default:"-" }}</td>
                                         <td>{{ product.livestock_type|default:"-" }}</td>
                                         <td>{{ product.category|default:"-" }}</td>
                                         <td>{{ product.manufacturer|default:"-" }}</td>

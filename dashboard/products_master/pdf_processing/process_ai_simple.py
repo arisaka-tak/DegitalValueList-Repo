@@ -138,7 +138,7 @@ class AITableAnalyzer:
     def analyze_table_structure(self, table_data: List[List[str]]) -> tuple:
         """表構造をAIで解析"""
         if self.openai_client is None:
-            return None, None, None, None, None
+            return None, None, None, None, None, None, None, None, None
         
         try:
             sample_data = table_data[:min(10, len(table_data))]
@@ -162,6 +162,18 @@ class AITableAnalyzer:
                         "type": ["integer", "null"],
                         "description": "標準小売価格列のインデックス(0から開始)、ない場合はnull"
                     },
+                    "kenren_price_column": {
+                        "type": ["integer", "null"],
+                        "description": "県連価格列のインデックス(0から開始)、ない場合はnull"
+                    },
+                    "shipping_fee_column": {
+                        "type": ["integer", "null"],
+                        "description": "送料列のインデックス(0から開始)、ない場合はnull"
+                    },
+                    "gross_margin_column": {
+                        "type": ["integer", "null"],
+                        "description": "粗利率列のインデックス(0から開始)、ない場合はnull"
+                    },
                     "model_column": {
                         "type": ["integer", "null"],
                         "description": "型式列のインデックス(0から開始)、ない場合はnull"
@@ -171,7 +183,7 @@ class AITableAnalyzer:
                         "description": "規格列のインデックス(0から開始)、ない場合はnull"
                     }
                 },
-                "required": ["header_row", "product_column", "price_column", "retail_price_column", "model_column", "spec_column"],
+                "required": ["header_row", "product_column", "price_column", "retail_price_column", "kenren_price_column", "shipping_fee_column", "gross_margin_column", "model_column", "spec_column"],
                 "additionalProperties": False
             }
             
@@ -185,6 +197,9 @@ class AITableAnalyzer:
 - 商品名列: 「商品」「品名」「製品」などを含む列
 - 仕切価格列: 「仕切価格」「新価格」「改定後」などを含む列
 - 標準小売価格列: 「標準小売価格」「小売価格」「定価」などを含む列（ない場合はnull）
+- 県連価格列: 「県連価格」「県連」などを含む列（ない場合はnull）
+- 送料列: 「送料」「運賃」などを含む列（ない場合はnull）
+- 粗利率列: 「粗利率」「利益率」などを含む列（ない場合はnull）
 - 型式列: 「コード」「型式」などを含む列（ない場合はnull）
 - 規格列: 「仕様」「規格」などを含む列（ない場合はnull）
 """
@@ -208,11 +223,11 @@ class AITableAnalyzer:
             
             result = json.loads(response.choices[0].message.content)
             return (result["header_row"], result["product_column"], result["price_column"], 
-                    result["retail_price_column"], result["model_column"], result["spec_column"])
+                    result["retail_price_column"], result["kenren_price_column"], result["shipping_fee_column"], result["gross_margin_column"], result["model_column"], result["spec_column"])
             
         except Exception as e:
             logger.error(f"AI解析エラー: {e}")
-            return None, None, None, None, None, None
+            return None, None, None, None, None, None, None, None, None
     
     def extract_document_metadata(self, all_text: str) -> dict:
         """文書全体からメタデータを抽出"""
@@ -299,6 +314,18 @@ class AITableAnalyzer:
                                     "type": ["string", "null"],
                                     "description": "標準小売価格（数字のみ、ない場合はnull）"
                                 },
+                                "kenren_price": {
+                                    "type": ["string", "null"],
+                                    "description": "県連価格（数字のみ、ない場合はnull）"
+                                },
+                                "shipping_fee": {
+                                    "type": ["string", "null"],
+                                    "description": "送料（数字のみ、ない場合はnull）"
+                                },
+                                "gross_margin": {
+                                    "type": ["string", "null"],
+                                    "description": "粗利率（数字のみ、ない場合はnull）"
+                                },
                                 "model": {
                                     "type": ["string", "null"],
                                     "description": "型式・コード（ある場合のみ）"
@@ -308,7 +335,7 @@ class AITableAnalyzer:
                                     "description": "規格・仕様（ある場合のみ）"
                                 }
                             },
-                            "required": ["name", "price", "retail_price", "model", "spec"],
+                            "required": ["name", "price", "retail_price", "kenren_price", "shipping_fee", "gross_margin", "model", "spec"],
                             "additionalProperties": False
                         }
                     }
@@ -326,7 +353,7 @@ class AITableAnalyzer:
 抽出条件:
 - 商品名が明記されているもの（価格がなくても可）
 - 仕切価格は改定後・新価格・変更後の価格を優先
-- 標準小売価格がある場合は抽出（ない場合はnull）
+- 標準小売価格・県連価格・送料・粗利率がある場合は抽出（ない場合はnull）
 - 価格は数字のみで抽出（カンマや円マークは除外）
 - 型式やコードがある場合はmodelフィールドに抽出
 - 規格や仕様がある場合はspecフィールドに抽出
@@ -420,25 +447,13 @@ def process_tables_with_ai(input_path: str = None, output_path: str = None):
             if analysis_result[0] is None:
                 continue
             
-            header_row, product_col, price_col, retail_price_col, model_col, spec_col = analysis_result
+            header_row, product_col, price_col, retail_price_col, kenren_price_col, shipping_fee_col, gross_margin_col, model_col, spec_col = analysis_result
             
             # ヘッダー行とカラム認識結果を詳細表示
             logger.info(f"  AI認識結果:")
             logger.info(f"    ヘッダー行インデックス: {header_row}")
             if header_row < len(table_matrix):
                 logger.info(f"    ヘッダー行内容: {table_matrix[header_row]}")
-            
-            # 各カラムの認識結果を表示
-            if product_col is not None and header_row < len(table_matrix) and product_col < len(table_matrix[header_row]):
-                logger.info(f"    品名カラム[{product_col}]: '{table_matrix[header_row][product_col]}'")
-            if price_col is not None and header_row < len(table_matrix) and price_col < len(table_matrix[header_row]):
-                logger.info(f"    仕切価格カラム[{price_col}]: '{table_matrix[header_row][price_col]}'")
-            if retail_price_col is not None and header_row < len(table_matrix) and retail_price_col < len(table_matrix[header_row]):
-                logger.info(f"    標準小売価格カラム[{retail_price_col}]: '{table_matrix[header_row][retail_price_col]}'")
-            if model_col is not None and header_row < len(table_matrix) and model_col < len(table_matrix[header_row]):
-                logger.info(f"    型式カラム[{model_col}]: '{table_matrix[header_row][model_col]}'")
-            if spec_col is not None and header_row < len(table_matrix) and spec_col < len(table_matrix[header_row]):
-                logger.info(f"    規格カラム[{spec_col}]: '{table_matrix[header_row][spec_col]}'")
             
             if product_col is None or price_col is None:
                 logger.warning("  -> 商品名または価格列が見つかりません（スキップ）")
@@ -449,12 +464,18 @@ def process_tables_with_ai(input_path: str = None, output_path: str = None):
                 product_name = table_matrix[row_idx][product_col] if product_col < len(table_matrix[row_idx]) else ""
                 price_value = table_matrix[row_idx][price_col] if price_col < len(table_matrix[row_idx]) else ""
                 retail_price_value = table_matrix[row_idx][retail_price_col] if retail_price_col is not None and retail_price_col < len(table_matrix[row_idx]) else ""
+                kenren_price_value = table_matrix[row_idx][kenren_price_col] if kenren_price_col is not None and kenren_price_col < len(table_matrix[row_idx]) else ""
+                shipping_fee_value = table_matrix[row_idx][shipping_fee_col] if shipping_fee_col is not None and shipping_fee_col < len(table_matrix[row_idx]) else ""
+                gross_margin_value = table_matrix[row_idx][gross_margin_col] if gross_margin_col is not None and gross_margin_col < len(table_matrix[row_idx]) else ""
                 model_value = table_matrix[row_idx][model_col] if model_col is not None and model_col < len(table_matrix[row_idx]) else ""
                 spec_value = table_matrix[row_idx][spec_col] if spec_col is not None and spec_col < len(table_matrix[row_idx]) else ""
                 
                 if product_name.strip() and price_value.strip():
                     clean_price = ''.join(filter(str.isdigit, price_value))
                     clean_retail_price = ''.join(filter(str.isdigit, retail_price_value)) if retail_price_value.strip() else None
+                    clean_kenren_price = ''.join(filter(str.isdigit, kenren_price_value)) if kenren_price_value.strip() else None
+                    clean_shipping_fee = ''.join(filter(str.isdigit, shipping_fee_value)) if shipping_fee_value.strip() else None
+                    clean_gross_margin = ''.join(filter(str.isdigit, gross_margin_value)) if gross_margin_value.strip() else None
                     
                     if clean_price:
                         product_data = {
@@ -464,21 +485,18 @@ def process_tables_with_ai(input_path: str = None, output_path: str = None):
                         }
                         if clean_retail_price:
                             product_data['retail_price'] = clean_retail_price
+                        if clean_kenren_price:
+                            product_data['kenren_price'] = clean_kenren_price
+                        if clean_shipping_fee:
+                            product_data['shipping_fee'] = clean_shipping_fee
+                        if clean_gross_margin:
+                            product_data['gross_margin'] = clean_gross_margin
                         if model_value:
                             product_data['model'] = model_value.strip()
                         if spec_value:
                             product_data['spec'] = spec_value.strip()
                         
                         extracted_products.append(product_data)
-                        
-                        debug_info = f"  -> 抽出: {product_name.strip()} = 仕切{clean_price}円"
-                        if clean_retail_price:
-                            debug_info += f", 小売{clean_retail_price}円"
-                        if model_value:
-                            debug_info += f", 型式: {model_value.strip()}"
-                        if spec_value:
-                            debug_info += f", 規格: {spec_value.strip()}"
-                        logger.info(debug_info)
         
         except Exception as e:
             logger.error(f"  -> エラー: {e}")
@@ -488,7 +506,6 @@ def process_tables_with_ai(input_path: str = None, output_path: str = None):
     if len(extracted_products) == 0:
         logger.info("フォールバック: 段落からの商品抽出開始")
         all_text = " ".join([p.content for p in result.paragraphs if p.content])
-        logger.info(f"段落テキスト長: {len(all_text)}文字")
         
         if all_text.strip():
             try:
@@ -497,9 +514,6 @@ def process_tables_with_ai(input_path: str = None, output_path: str = None):
                     for product in text_products:
                         product['table_id'] = 'text'
                         extracted_products.append(product)
-                    logger.info(f"段落から {len(text_products)} 件の商品を抽出しました")
-                else:
-                    logger.warning("段落からも商品情報を抽出できませんでした")
             except Exception as e:
                 logger.error(f"段落抽出エラー: {e}")
     
@@ -514,19 +528,6 @@ def process_tables_with_ai(input_path: str = None, output_path: str = None):
     
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(result_data, f, ensure_ascii=False, indent=2)
-    
-    logger.info(f"最終結果")
-    logger.info(f"抽出商品: {len(extracted_products)} 件")
-    for i, product in enumerate(extracted_products, 1):
-        logger.info(f"{i:2d}. 商品名: {product['name']}")
-        logger.info(f"    仕切価格: {product['price']} 円")
-        if 'retail_price' in product:
-            logger.info(f"    標準小売価格: {product['retail_price']} 円")
-        if 'model' in product:
-            logger.info(f"    型式: {product['model']}")
-        if 'spec' in product:
-            logger.info(f"    規格: {product['spec']}")
-        logger.info(f"    (表{product['table_id']}から抽出)")
     
     logger.info(f"✓ 処理完了: 結果を {output_path} に保存しました")
     return result_data
