@@ -1,0 +1,129 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}デジタル価格表システム{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{% static 'css/common.css' %}" rel="stylesheet">
+    <link href="{% static 'css/price_table.css' %}" rel="stylesheet">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'dashboard' %}">デジタル価格表システム</a>
+            <div class="navbar-nav ms-auto">
+                <span class="navbar-text">ユーザー: {{ current_user }}</span>
+            </div>
+        </div>
+    </nav>
+    
+    <div style="display: flex;">
+        <!-- サイドナビゲーション -->
+        <nav style="width: 250px; min-height: calc(100vh - 56px); background-color: #f8f9fa; border-right: 1px solid #dee2e6; flex-shrink: 0;">
+            <div class="p-3">
+                <h6 class="text-muted mb-3">メニュー</h6>
+                <ul class="nav flex-column">
+                    <li class="nav-item mb-2">
+                        <a class="nav-link d-flex align-items-center" href="/products/">
+                            <span class="me-2">📦</span> 商品マスタ管理
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link d-flex align-items-center" href="/products/approvals/">
+                            <span class="me-2">📝</span> 承認ワークフロー
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link d-flex align-items-center" href="/products/integrated-pricelist/">
+                            <span class="me-2">📊</span> デジタル価格表
+                        </a>
+                    </li>
+                    
+                    <li class="nav-item mb-2">
+                        <h6 class="text-muted mb-2 mt-3">システム管理</h6>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link d-flex align-items-center" href="/products/masters/livestock-types/">
+                            <span class="me-2">🐄</span> 畜種マスタ
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link d-flex align-items-center" href="/products/masters/categories/">
+                            <span class="me-2">📂</span> 分類マスタ
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link d-flex align-items-center" href="/products/masters/manufacturers/">
+                            <span class="me-2">🏢</span> メーカーマスタ
+                        </a>
+                    </li>
+                    
+                    <li class="nav-item mb-2">
+                        <h6 class="text-muted mb-2 mt-3">決裁管理</h6>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link d-flex align-items-center" href="/products/upload-approval-pdf/">
+                            <span class="me-2">📋</span> 決裁書アップロード
+                        </a>
+                    </li>
+                    
+                    {% if is_admin %}
+                    <li class="nav-item mb-2">
+                        <h6 class="text-muted mb-2 mt-3">データ管理(ホスト:BC101131~のみ)</h6>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link d-flex align-items-center" href="/system/export/">
+                            <span class="me-2">📤</span> データエクスポート
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link d-flex align-items-center" href="/system/import/">
+                            <span class="me-2">📥</span> データインポート
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link d-flex align-items-center text-warning" href="/system/status-reset/">
+                            <span class="me-2">♾️</span> ステータスリセット
+                        </a>
+                    </li>
+                    <li class="nav-item mb-2">
+                        <a class="nav-link d-flex align-items-center text-danger" href="/system/clear/">
+                            <span class="me-2">🗑️</span> データクリア
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </nav>
+        
+        <!-- メインコンテンツ -->
+        <div style="width: calc(100vw - 250px); overflow-x: auto;">
+            {% block breadcrumb %}{% endblock %}
+            
+            <!-- メッセージ表示 -->
+            {% if messages %}
+                <div class="container mt-3">
+                    {% for message in messages %}
+                        <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags == 'warning' %}warning{% elif message.tags == 'success' %}success{% else %}info{% endif %} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+            
+            <div class="p-4">
+                {% block content %}
+                {% endblock %}
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

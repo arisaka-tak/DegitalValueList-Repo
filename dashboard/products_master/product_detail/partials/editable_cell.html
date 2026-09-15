@@ -1,0 +1,32 @@
+{% load price_filters %}
+{% if history.is_editable and field == 'wholesale_price' %}
+    <input type="text" class="form-control form-control-sm" 
+           name="value"
+           value="{{ history.wholesale_price|default:'' }}"
+           hx-post="{% url 'products_master:price_history_update' history.pk %}"
+           hx-vals='{"field": "wholesale_price"}'
+           hx-target="closest tr"
+           hx-trigger="blur">
+{% elif history.is_editable and field == 'kenren_price' %}
+    <input type="text" class="form-control form-control-sm" 
+           name="value"
+           value="{{ history.kenren_price|default:'' }}"
+           hx-post="{% url 'products_master:price_history_update' history.pk %}"
+           hx-vals='{"field": "kenren_price"}'
+           hx-target="closest tr"
+           hx-trigger="blur">
+{% elif field == 'wholesale_price' %}
+    {{ history.wholesale_price|default:"-" }}
+{% elif field == 'kenren_price' %}
+    {% if history.kenren_price %}
+        {{ history.kenren_price }}
+    {% else %}
+        {% with calc_price=history.wholesale_price|calc_kenren_price:history.gross_margin_rate %}
+            {% if calc_price %}
+                <span class="text-success">{{ calc_price|format_price }}</span>
+            {% else %}
+                <span class="text-muted">要見積</span>
+            {% endif %}
+        {% endwith %}
+    {% endif %}
+{% endif %}

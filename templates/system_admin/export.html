@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+
+{% block title %}データエクスポート - デジタル価格表システム{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>データエクスポート</h2>
+    
+    <div class="row mt-4">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">CSVエクスポート</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label class="form-label">エクスポート対象</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="export_type" value="products" id="products" checked>
+                                <label class="form-check-label" for="products">
+                                    商品マスタ
+                                </label>
+                                <small class="text-muted d-block">商品の基本情報をエクスポートします</small>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="export_type" value="price_histories" id="price_histories">
+                                <label class="form-check-label" for="price_histories">
+                                    価格履歴
+                                </label>
+                                <small class="text-muted d-block">全商品の価格改定履歴をエクスポートします</small>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="export_type" value="masters" id="masters">
+                                <label class="form-check-label" for="masters">
+                                    マスタデータ
+                                </label>
+                                <small class="text-muted d-block">畜種・カテゴリ・メーカーマスタをエクスポートします</small>
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-download"></i> CSVダウンロード
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">注意事項</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="small">
+                        <li>エクスポートされるファイルはUTF-8エンコードです</li>
+                        <li>Excelで開く場合は文字化けにご注意ください</li>
+                        <li>大量データの場合、処理に時間がかかることがあります</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

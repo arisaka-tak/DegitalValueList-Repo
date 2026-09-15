@@ -1,0 +1,932 @@
+{% extends 'base.html' %}
+{% load price_filters %}
+
+{% block title %}デジタル価格表 - デジタル価格表システム{% endblock %}
+
+{% block breadcrumb %}
+    {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
+{% endblock %}
+
+{% block content %}
+    {% include 'components/page_header.html' with page_title="デジタル価格表" page_subtitle="商品マスタと価格履歴の統合表示" header_actions='<a href="/products/new/" class="btn btn-primary">新規作成</a>' %}
+    
+    <div class="container" style="max-width: none; margin-left: 0; margin-right: 0; padding-left: 1rem; padding-right: 1rem;">
+        <!-- フィルター -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <form method="get" class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label for="month" class="form-label">適用年月</label>
+                        <input type="month" class="form-control" id="month" name="month" 
+                               value="{% if selected_month %}{{ selected_month|slice:':4' }}-{{ selected_month|slice:'5:' }}{% endif %}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="manufacturer" class="form-label">メーカー</label>
+                        <input type="text" class="form-control" id="manufacturer" name="manufacturer" 
+                               value="{{ request.GET.manufacturer }}" placeholder="メーカー名で絞り込み">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="product_name" class="form-label">商品名</label>
+                        <input type="text" class="form-control" id="product_name" name="product_name" 
+                               value="{{ request.GET.product_name }}" placeholder="商品名で絞り込み">
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-primary">絞り込み</button>
+                        <a href="{% url 'products_master:integrated_pricelist' %}" class="btn btn-outline-secondary">クリア</a>
+                    </div>
+                </form>
+                <div class="row mt-3">
+                    <div class="col-12 text-end">
+                        {% if request.GET.manufacturer or request.GET.product_name %}
+                            <div class="alert alert-info d-inline-block me-3">
+                                <i class="fas fa-filter"></i> フィルタ適用中のため、並び順変更は無効です
+                            </div>
+                        {% endif %}
+                        <div class="d-inline-block">
+                            <button type="button" class="btn btn-outline-danger me-2" onclick="resetSortOrder()" 
+                                    {% if request.GET.manufacturer or request.GET.product_name %}disabled title="フィルタ適用中は無効"{% endif %}>並び順をリセット</button>
+                            <button type="button" class="btn btn-outline-primary me-2" id="saveSortBtn" onclick="saveSortOrder()" disabled 
+                                    {% if request.GET.manufacturer or request.GET.product_name %}title="フィルタ適用中は無効"{% endif %}>並び順を保存</button>
+                            <button type="button" class="btn btn-success me-2" onclick="exportExcel()">Excel出力</button>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" id="includeWholesalePrice">
+                                <label class="form-check-label" for="includeWholesalePrice">仕切価格を含める</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- デジタル価格表 -->
+        <div class="card">
+            <div class="card-body px-0">
+                {% if page_obj %}
+                    <!-- ▼ この div がスクロールコンテナ -->
+                    <div class="price-table-wrapper">
+                        <table class="resizable-table" id="priceTable">
+                            <thead class="table-primary">
+                                <tr>
+                                    <th rowspan="2" class="align-middle text-center">№</th>
+                                    <th rowspan="2" class="align-middle text-center">操作</th>
+                                    <th rowspan="2" class="align-middle text-center">畜種</th>
+                                    <th rowspan="2" class="align-middle text-center">分類</th>
+                                    <th rowspan="2" class="align-middle text-center">メーカー</th>
+                                    <th rowspan="2" class="align-middle text-center">商品名</th>
+                                    <th rowspan="2" class="align-middle text-center">型式</th>
+                                    <th rowspan="2" class="align-middle text-center">規格</th>
+                                    <th rowspan="2" class="align-middle text-center">発送単位</th>
+                                    <th colspan="6" class="text-center">価格情報</th>
+                                    <th rowspan="2" class="align-middle text-center">送料</th>
+                                    <th rowspan="2" class="align-middle text-center">備考</th>
+                                    <th rowspan="2" class="align-middle text-center">改定理由</th>
+                                </tr>
+                                <tr>
+                                    <th class="text-center">前月仕切価格</th>
+                                    <th class="text-center">仕切価格</th>
+                                    <th class="text-center">前月県連価格</th>
+                                    <th class="text-center">県連価格</th>
+                                    <th class="text-center">改定額</th>
+                                    <th class="text-center">参考小売価格</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in page_obj %}
+                                    <tr class="sortable-row{% if not item.has_price %} table-secondary{% endif %}{% if item.is_group_start and not forloop.first %} group-border{% endif %}{% if item.is_current_month %} current-month-highlight{% endif %}" 
+                                        data-product-id="{{ item.product.pk }}" 
+                                        data-livestock="{{ item.product.livestock_type }}" 
+                                        data-category="{{ item.product.category }}" 
+                                        data-manufacturer="{{ item.product.manufacturer }}" 
+                                        {% if not request.GET.manufacturer and not request.GET.product_name %}draggable="true"{% endif %}>
+                                        <td class="text-end">{{ forloop.counter }}</td>
+                                        <td class="text-center">
+                                            <button class="btn btn-sm btn-outline-secondary me-1" onclick="moveUp(this)" title="上に移動" 
+                                                    {% if request.GET.manufacturer or request.GET.product_name %}disabled{% endif %}>↑</button>
+                                            <button class="btn btn-sm btn-outline-secondary me-1" onclick="moveDown(this)" title="下に移動" 
+                                                    {% if request.GET.manufacturer or request.GET.product_name %}disabled{% endif %}>↓</button>
+                                            {% if forloop.first %}
+                                                <button class="btn btn-sm btn-outline-info me-1" onclick="moveToPrevPage(this)" title="前ページ末尾へ">⤴</button>
+                                            {% elif forloop.last %}
+                                                <button class="btn btn-sm btn-outline-info me-1" onclick="moveToNextPage(this)" title="次ページ先頭へ">⤵</button>
+                                            {% endif %}
+                                            <span class="drag-handle" title="ドラッグで移動">⋮⋮</span>
+                                        </td>
+                                        <td>{{ item.product.livestock_type }}</td>
+                                        <td>{{ item.product.category }}</td>
+                                        <td>{{ item.product.manufacturer }}</td>
+                                        <td>
+                                            <a href="{% url 'products_master:product_detail' item.product.pk %}?from=pricelist{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}{% if page_obj.number != 1 %}&page={{ page_obj.number }}{% endif %}" 
+                                               class="text-decoration-none">
+                                                {{ item.product.product_name }}
+                                            </a>
+                                        </td>
+                                        <td>{{ item.product.model_number|default:"-" }}</td>
+                                        <td>{{ item.product.specification|default:"-" }}</td>
+                                        <td>{{ item.product.shipping_unit }}</td>
+
+                                        <td class="text-end">
+                                            {% if item.has_price and item.previous_month_price %}
+                                                {% if item.previous_month_price.wholesale_price %}
+                                                    {{ item.previous_month_price.wholesale_price|format_price }}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end">
+                                            {% if item.has_price %}
+                                                {{ item.price_history.wholesale_price|format_price }}
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end">
+                                            {% if item.has_price and item.previous_month_price %}
+                                                {% if item.previous_month_price.kenren_price %}
+                                                    {{ item.previous_month_price.kenren_price|format_price }}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end">
+                                            {% if item.has_price %}
+                                                {% if item.price_history.kenren_price %}
+                                                    {{ item.price_history.kenren_price|format_price }}
+                                                {% else %}
+                                                    {% with calc_price=item.price_history.wholesale_price|calc_kenren_price:item.price_history.gross_margin_rate %}
+                                                        {% if calc_price %}
+                                                            <span class="text-success">{{ calc_price|format_price }}</span>
+                                                        {% else %}
+                                                            <span class="text-muted">都度見積</span>
+                                                        {% endif %}
+                                                    {% endwith %}
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="text-muted">価格未設定</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end">
+                                            {% if item.has_price %}
+                                                {{ item.price_history.get_revision_amount|format_revision_amount }}
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end">
+                                            {% if item.has_price %}
+                                                {{ item.price_history.retail_price|format_price }}
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-start">{{ item.price_history.shipping_fee|default:"-" }}</td>
+                                        <td>
+                                            {% if item.product.remarks %}
+                                                {{ item.product.remarks }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if item.has_price and item.price_history.revision_reason %}
+                                                {{ item.price_history.revision_reason }}
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- ページネーション -->
+                    {% if page_obj.has_other_pages %}
+                        <nav aria-label="デジタル価格表ページネーション" class="mt-4">
+                            <ul class="pagination justify-content-center">
+                                <!-- 最初へ -->
+                                {% if page_obj.has_previous %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page=1{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">&laquo;</a>
+                                    </li>
+                                {% endif %}
+                                
+                                <!-- 前へ -->
+                                {% if page_obj.has_previous %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">&lsaquo;</a>
+                                    </li>
+                                {% endif %}
+                                
+                                <!-- ページ番号 -->
+                                {% with page_obj.paginator.num_pages as total_pages %}
+                                {% with page_obj.number as current_page %}
+                                    
+                                    <!-- 最初の方のページ -->
+                                    {% if current_page > 4 %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page=1{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">1</a>
+                                        </li>
+                                        {% if current_page > 5 %}
+                                            <li class="page-item disabled">
+                                                <span class="page-link">...</span>
+                                            </li>
+                                        {% endif %}
+                                    {% endif %}
+                                    
+                                    <!-- 現在ページ周辺 -->
+                                    {% for page_num in page_obj.paginator.page_range %}
+                                        {% if page_num >= current_page|add:"-2" and page_num <= current_page|add:"2" %}
+                                            {% if page_num == current_page %}
+                                                <li class="page-item active">
+                                                    <span class="page-link">{{ page_num }}</span>
+                                                </li>
+                                            {% else %}
+                                                <li class="page-item">
+                                                    <a class="page-link" href="?page={{ page_num }}{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">{{ page_num }}</a>
+                                                </li>
+                                            {% endif %}
+                                        {% endif %}
+                                    {% endfor %}
+                                    
+                                    <!-- 最後の方のページ -->
+                                    {% if current_page < total_pages|add:"-3" %}
+                                        {% if current_page < total_pages|add:"-4" %}
+                                            <li class="page-item disabled">
+                                                <span class="page-link">...</span>
+                                            </li>
+                                        {% endif %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page={{ total_pages }}{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">{{ total_pages }}</a>
+                                        </li>
+                                    {% endif %}
+                                    
+                                {% endwith %}
+                                {% endwith %}
+                                
+                                <!-- 次へ -->
+                                {% if page_obj.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">&rsaquo;</a>
+                                    </li>
+                                {% endif %}
+                                
+                                <!-- 最後へ -->
+                                {% if page_obj.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if selected_month %}&month={{ selected_month|urlencode }}{% endif %}">&raquo;</a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    {% endif %}
+                {% else %}
+                    <div class="text-center py-5">
+                        <div class="mb-3" style="font-size: 3rem; color: #6c757d;">📊</div>
+                        <h5 class="text-muted">価格データがありません</h5>
+                        <p class="text-muted">商品と価格履歴を登録してください。</p>
+                        <div class="d-flex gap-2 justify-content-center">
+                            <a href="{% url 'products_master:product_new' %}" class="btn btn-primary">商品登録</a>
+                            <a href="{% url 'products_master:product_list' %}" class="btn btn-outline-primary">商品一覧</a>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <style>
+    /* ▼ 追加：ヘッダ行を sticky にする */
+    /* ▼ テーブルコンテナ（縦横スクロール） */
+    .price-table-wrapper {
+        max-height: 85vh;
+        overflow: auto;
+        position: relative;
+    }
+
+    /* ▼ sticky ヘッダー本体 */
+    #priceTable {
+        border-collapse: collapse;
+        min-width: 1200px;
+    }
+
+    /* 既存の resizable-table の設定はそのままでOK */
+    .resizable-table th {
+        position: relative;
+        border-right: 1px solid #e0e0e0;
+        white-space: nowrap;
+    }
+
+    .resizable-table td {
+        white-space: nowrap;
+        border-right: 1px solid #e0e0e0;
+    }
+
+    /* ここに列幅の nth-child 系の指定はそのまま残してOK */
+
+    
+    /* 各列の最小幅を設定 */
+    .resizable-table th:nth-child(1) { min-width: 50px; width: 50px; }  /* № */
+    .resizable-table th:nth-child(2) { min-width: 80px; width: 80px; }  /* 操作 */
+    .resizable-table th:nth-child(3) { min-width: 60px; width: 60px; }  /* 畜種 */
+    .resizable-table th:nth-child(4) { min-width: 60px; width: 60px; }  /* 分類 */
+    .resizable-table th:nth-child(5) { min-width: 80px; width: 80px; }  /* メーカー */
+    .resizable-table th:nth-child(6) { min-width: 200px; width: 200px; } /* 商品名 */
+    .resizable-table th:nth-child(7) { min-width: 80px; width: 80px; }  /* 型式 */
+    .resizable-table th:nth-child(8) { min-width: 80px; width: 80px; }  /* 規格 */
+    .resizable-table th:nth-child(9) { min-width: 80px; width: 80px; }  /* 発送単位 */
+    .resizable-table th:nth-child(10) { min-width: 120px; width: 120px; } /* 前月仕切価格 */
+    .resizable-table th:nth-child(11) { min-width: 100px; width: 100px; } /* 仕切価格 */
+    .resizable-table th:nth-child(12) { min-width: 120px; width: 120px; } /* 前月県連価格 */
+    .resizable-table th:nth-child(13) { min-width: 100px; width: 100px; } /* 県連価格 */
+    .resizable-table th:nth-child(14) { min-width: 80px; width: 80px; } /* 改定額 */
+    .resizable-table th:nth-child(15) { min-width: 120px; width: 120px; } /* 参考小売価格 */
+    .resizable-table th:nth-child(16) { min-width: 60px; width: 60px; } /* 送料 */
+    .resizable-table th:nth-child(17) { min-width: 100px; width: 100px; } /* 備考 */
+    .resizable-table th:nth-child(18) { min-width: 120px; width: 120px; } /* 改定理由 */
+    
+    .table-responsive {
+        overflow-x: auto;
+        overflow-y: auto;
+        max-height: 70vh;
+    }
+    
+    .table-responsive::-webkit-scrollbar {
+        height: 12px;
+    }
+    
+    .table-responsive::-webkit-scrollbar-track {
+        background: #f1f1f1;
+    }
+    
+    .table-responsive::-webkit-scrollbar-thumb {
+        background: #888;
+        border-radius: 6px;
+    }
+    
+    .table-responsive::-webkit-scrollbar-thumb:hover {
+        background: #555;
+    }
+    
+    .resizable-table {
+        width: auto;
+        min-width: 100%;
+    }
+    
+    .resizable-table th:hover {
+        border-right: 2px solid #007bff;
+    }
+    
+    .column-resizer {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 5px;
+        height: 100%;
+        cursor: col-resize;
+        background: transparent;
+    }
+    
+    .column-resizer:hover {
+        background: #007bff;
+    }
+    
+    .resizing {
+        cursor: col-resize;
+        user-select: none;
+    }
+    
+    /* ドラッグ&ドロップ用スタイル */
+    .sortable-row {
+        cursor: move;
+    }
+    
+    .sortable-row:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .sortable-row.table-secondary {
+        background-color: #e9ecef !important;
+    }
+    
+    .sortable-row.table-secondary:hover {
+        background-color: #e2e3e5 !important;
+    }
+    
+    /* グループ境界線 */
+    .group-border {
+        border-top: 3px solid #007bff !important;
+    }
+    
+    .group-border td {
+        border-top: 3px solid #007bff !important;
+    }
+    
+    .drag-handle {
+        cursor: grab;
+        color: #6c757d;
+        font-size: 12px;
+        user-select: none;
+    }
+    
+    .drag-handle:hover {
+        color: #007bff;
+    }
+    
+    .sortable-row[draggable="true"]:active .drag-handle {
+        cursor: grabbing;
+    }
+    
+    .sortable-row.dragging {
+        opacity: 0.5;
+    }
+    
+    .drop-target {
+        background-color: #e3f2fd !important;
+    }
+    
+    /* 選択月と同じ適用月の価格履歴を持つ行の背景色 */
+    .current-month-highlight {
+        background-color: #FFC000 !important;
+    }
+    
+    .current-month-highlight:hover {
+        background-color: #E6AC00 !important;
+    }
+    
+    .current-month-highlight.table-secondary {
+        background-color: #FFD966 !important;
+    }
+    
+    .current-month-highlight.table-secondary:hover {
+        background-color: #E6C200 !important;
+    }
+
+    /* ヘッダー固定 */
+    .price-table-wrapper #priceTable thead tr:first-child th {
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 10 !important;
+        background-color: #4472C4 !important;
+        color: #fff !important;
+        vertical-align: middle !important;
+        border: 1px solid #fff !important;
+    }
+
+    .price-table-wrapper #priceTable thead tr:nth-child(2) th {
+        position: sticky !important;
+        z-index: 10 !important;
+        background-color: #4472C4 !important;
+        color: #fff !important;
+        vertical-align: middle !important;
+        border: 1px solid #fff !important;
+    }
+
+    /* №カラム（1列目）と操作カラム（2列目）を横スクロール時に固定 */
+    .price-table-wrapper #priceTable thead th:nth-child(1),
+    .price-table-wrapper #priceTable tbody td:nth-child(1) {
+        position: sticky !important;
+        left: 0 !important;
+        z-index: 5 !important;
+        background-color: #fff !important;
+    }
+    
+    .price-table-wrapper #priceTable thead th:nth-child(2),
+    .price-table-wrapper #priceTable tbody td:nth-child(2) {
+        position: sticky !important;
+        left: 50px !important;
+        z-index: 5 !important;
+        background-color: #fff !important;
+        border-right: 2px solid #dee2e6 !important;
+    }
+
+    /* №カラムと操作カラムのヘッダー部分は他のヘッダーより上に表示（縦横両方の固定） */
+    .price-table-wrapper #priceTable thead tr:first-child th:nth-child(1) {
+        z-index: 20 !important;
+        background-color: #4472C4 !important;
+    }
+    
+    .price-table-wrapper #priceTable thead tr:first-child th:nth-child(2) {
+        z-index: 20 !important;
+        background-color: #4472C4 !important;
+    }
+
+    .price-table-wrapper #priceTable thead tr:nth-child(2) th:nth-child(1) {
+        z-index: 20 !important;
+        background-color: #4472C4 !important;
+    }
+    
+    .price-table-wrapper #priceTable thead tr:nth-child(2) th:nth-child(2) {
+        z-index: 20 !important;
+        background-color: #4472C4 !important;
+    }
+
+    /* グレー背景の行の№カラムと操作カラムもグレーに */
+    .price-table-wrapper #priceTable tbody tr.table-secondary td:nth-child(1) {
+        background-color: #e9ecef !important;
+    }
+    
+    .price-table-wrapper #priceTable tbody tr.table-secondary td:nth-child(2) {
+        background-color: #e9ecef !important;
+    }
+    </style>
+    
+    <script>
+    let sortOrderChanged = false;
+    let draggedRow = null;
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        const table = document.getElementById('priceTable');
+        if (!table) return;
+        
+        // 2段目ヘッダーのtop位置を動的に設定
+        const firstRow = table.querySelector('thead tr:first-child');
+        const firstRowHeight = firstRow.offsetHeight;
+        const borderWidth = 1; // border: 1px solid #fff
+        const secondRowHeaders = table.querySelectorAll('thead tr:nth-child(2) th');
+        secondRowHeaders.forEach(th => {
+            th.style.top = (firstRowHeight - borderWidth) + 'px';
+        });
+        
+        // カラムリサイズ機能
+        const headers = table.querySelectorAll('thead th');
+        headers.forEach((header, index) => {
+            if (index < headers.length - 1) {
+                const resizer = document.createElement('div');
+                resizer.className = 'column-resizer';
+                header.appendChild(resizer);
+                
+                let isResizing = false;
+                let startX = 0;
+                let startWidth = 0;
+                
+                resizer.addEventListener('mousedown', function(e) {
+                    isResizing = true;
+                    startX = e.clientX;
+                    startWidth = header.offsetWidth;
+                    document.body.classList.add('resizing');
+                    e.preventDefault();
+                });
+                
+                document.addEventListener('mousemove', function(e) {
+                    if (!isResizing) return;
+                    
+                    const width = startWidth + (e.clientX - startX);
+                    const computedStyle = window.getComputedStyle(header);
+                    const minWidth = parseInt(computedStyle.minWidth) || 50;
+                    
+                    if (width > minWidth) {
+                        header.style.width = width + 'px';
+                        header.style.minWidth = width + 'px';
+                    }
+                });
+                
+                document.addEventListener('mouseup', function() {
+                    if (isResizing) {
+                        isResizing = false;
+                        document.body.classList.remove('resizing');
+                    }
+                });
+            }
+        });
+        
+        // フィルタ適用中かどうかをチェック
+        const isFilterActive = {% if request.GET.manufacturer or request.GET.product_name %}true{% else %}false{% endif %};
+        
+        // ドラッグ&ドロップ機能（フィルタ適用中は無効）
+        if (!isFilterActive) {
+            const rows = table.querySelectorAll('.sortable-row');
+            rows.forEach(row => {
+                row.addEventListener('dragstart', handleDragStart);
+                row.addEventListener('dragover', handleDragOver);
+                row.addEventListener('drop', handleDrop);
+                row.addEventListener('dragend', handleDragEnd);
+            });
+        }
+    });
+    
+    function handleDragStart(e) {
+        // フィルタ適用中はドラッグを無効化
+        const isFilterActive = {% if request.GET.manufacturer or request.GET.product_name %}true{% else %}false{% endif %};
+        if (isFilterActive) {
+            e.preventDefault();
+            return false;
+        }
+        
+        draggedRow = this;
+        this.style.opacity = '0.5';
+        e.dataTransfer.effectAllowed = 'move';
+    }
+    
+    function handleDragOver(e) {
+        // フィルタ適用中はドラッグを無効化
+        const isFilterActive = {% if request.GET.manufacturer or request.GET.product_name %}true{% else %}false{% endif %};
+        if (isFilterActive) {
+            return false;
+        }
+        
+        if (e.preventDefault) {
+            e.preventDefault();
+        }
+        
+        // 同じグループ内でのみ移動可能
+        if (canMove(draggedRow, this)) {
+            e.dataTransfer.dropEffect = 'move';
+            this.style.backgroundColor = '#e3f2fd';
+        } else {
+            e.dataTransfer.dropEffect = 'none';
+        }
+        
+        return false;
+    }
+    
+    function handleDrop(e) {
+        // フィルタ適用中はドラッグを無効化
+        const isFilterActive = {% if request.GET.manufacturer or request.GET.product_name %}true{% else %}false{% endif %};
+        if (isFilterActive) {
+            return false;
+        }
+        
+        if (e.stopPropagation) {
+            e.stopPropagation();
+        }
+        
+        if (draggedRow !== this && canMove(draggedRow, this)) {
+            const tbody = this.parentNode;
+            const draggedIndex = Array.from(tbody.children).indexOf(draggedRow);
+            const targetIndex = Array.from(tbody.children).indexOf(this);
+            
+            if (draggedIndex < targetIndex) {
+                tbody.insertBefore(draggedRow, this.nextSibling);
+            } else {
+                tbody.insertBefore(draggedRow, this);
+            }
+            
+            updateRowNumbers();
+            updateGroupBorders();
+            markSortChanged();
+        }
+        
+        this.style.backgroundColor = '';
+        return false;
+    }
+    
+    function handleDragEnd(e) {
+        this.style.opacity = '';
+        document.querySelectorAll('.sortable-row').forEach(row => {
+            row.style.backgroundColor = '';
+        });
+    }
+    
+    function canMove(sourceRow, targetRow) {
+        const sourceLivestock = sourceRow.dataset.livestock;
+        const sourceCategory = sourceRow.dataset.category;
+        const sourceManufacturer = sourceRow.dataset.manufacturer;
+        
+        const targetLivestock = targetRow.dataset.livestock;
+        const targetCategory = targetRow.dataset.category;
+        const targetManufacturer = targetRow.dataset.manufacturer;
+        
+        return sourceLivestock === targetLivestock && 
+               sourceCategory === targetCategory && 
+               sourceManufacturer === targetManufacturer;
+    }
+    
+    function moveUp(button) {
+        const row = button.closest('tr');
+        const prevRow = row.previousElementSibling;
+        
+        if (prevRow && canMove(row, prevRow)) {
+            row.parentNode.insertBefore(row, prevRow);
+            updateRowNumbers();
+            updateGroupBorders();
+            markSortChanged();
+        }
+    }
+    
+    function moveDown(button) {
+        const row = button.closest('tr');
+        const nextRow = row.nextElementSibling;
+        
+        if (nextRow && canMove(row, nextRow)) {
+            row.parentNode.insertBefore(nextRow, row);
+            updateRowNumbers();
+            updateGroupBorders();
+            markSortChanged();
+        }
+    }
+    
+    function updateRowNumbers() {
+        const rows = document.querySelectorAll('.sortable-row');
+        rows.forEach((row, index) => {
+            row.querySelector('td:first-child').textContent = index + 1;
+        });
+    }
+    
+    function updateGroupBorders() {
+        const rows = document.querySelectorAll('.sortable-row');
+        let previousGroup = null;
+        
+        rows.forEach((row, index) => {
+            const livestock = row.dataset.livestock;
+            const category = row.dataset.category;
+            const manufacturer = row.dataset.manufacturer;
+            const currentGroup = `${livestock}-${category}-${manufacturer}`;
+            
+            // 既存のグループ境界クラスを削除
+            row.classList.remove('group-border');
+            
+            // グループが変わる位置で、かつ最初の行でない場合に境界線を追加
+            if (previousGroup !== null && previousGroup !== currentGroup && index > 0) {
+                row.classList.add('group-border');
+            }
+            
+            previousGroup = currentGroup;
+        });
+    }
+    
+    function markSortChanged() {
+        sortOrderChanged = true;
+        document.getElementById('saveSortBtn').disabled = false;
+        document.getElementById('saveSortBtn').textContent = '並び順を保存 (未保存)';
+    }
+    
+    function saveSortOrder() {
+        if (!sortOrderChanged) return;
+        
+        const rows = document.querySelectorAll('.sortable-row');
+        const updates = [];
+        
+        // グループ別に連番を振り直し
+        let currentGroup = null;
+        let sortCounter = 1;
+        
+        rows.forEach(row => {
+            const livestock = row.dataset.livestock;
+            const category = row.dataset.category;
+            const manufacturer = row.dataset.manufacturer;
+            const groupKey = `${livestock}-${category}-${manufacturer}`;
+            
+            if (currentGroup !== groupKey) {
+                currentGroup = groupKey;
+                sortCounter = 1;
+            }
+            
+            updates.push({
+                product_id: parseInt(row.dataset.productId),
+                sort_num: sortCounter
+            });
+            
+            sortCounter++;
+        });
+        
+        // CSRFトークンを取得
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                         document.querySelector('meta[name=csrf-token]')?.getAttribute('content') ||
+                         '{{ csrf_token }}';
+        
+        // API呼び出し
+        fetch('{% url "products_master:update_sort_order" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({ updates: updates })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                sortOrderChanged = false;
+                document.getElementById('saveSortBtn').disabled = true;
+                document.getElementById('saveSortBtn').textContent = '並び順を保存';
+                alert('ソート順序を保存しました');
+            } else {
+                alert('エラー: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('保存に失敗しました');
+        });
+    }
+    
+    function resetSortOrder() {
+        if (!confirm('ソート順序をリセットしますか？\n（商品名順で再配置されます）')) {
+            return;
+        }
+        
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                         document.querySelector('meta[name=csrf-token]')?.getAttribute('content') ||
+                         '{{ csrf_token }}';
+        
+        fetch('{% url "products_master:reset_sort_order" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('ソート順序をリセットしました');
+                location.reload();
+            } else {
+                alert('エラー: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('リセットに失敗しました');
+        });
+    }
+    
+    function exportExcel() {
+        const selectedMonth = document.getElementById('month').value;
+        const manufacturer = document.getElementById('manufacturer').value;
+        const productName = document.getElementById('product_name').value;
+        const includeWholesalePrice = document.getElementById('includeWholesalePrice').checked;
+        
+        let url = '{% url "products_master:export_excel" %}';
+        const params = new URLSearchParams();
+        
+        if (selectedMonth) {
+            params.append('month', selectedMonth);
+        }
+        if (manufacturer) {
+            params.append('manufacturer', manufacturer);
+        }
+        if (productName) {
+            params.append('product_name', productName);
+        }
+        if (!includeWholesalePrice) {
+            params.append('exclude_wholesale', '1');
+        }
+        
+        if (params.toString()) {
+            url += '?' + params.toString();
+        }
+        
+        window.open(url, '_blank');
+    }
+    
+    function moveToPrevPage(button) {
+        const row = button.closest('tr');
+        const productId = row.dataset.productId;
+        
+        if (!confirm('前ページの末尾へ移動しますか？')) return;
+        
+        crossPageMove(productId, 'prev');
+    }
+    
+    function moveToNextPage(button) {
+        const row = button.closest('tr');
+        const productId = row.dataset.productId;
+        
+        if (!confirm('次ページの先頭へ移動しますか？')) return;
+        
+        crossPageMove(productId, 'next');
+    }
+    
+    function crossPageMove(productId, direction) {
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                         document.querySelector('meta[name=csrf-token]')?.getAttribute('content') ||
+                         '{{ csrf_token }}';
+        
+        fetch('{% url "products_master:cross_page_move" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({
+                product_id: parseInt(productId),
+                direction: direction,
+                current_page: parseInt('{{ page_obj.number }}')
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('商品を移動しました');
+                window.location.href = data.redirect_url;
+            } else {
+                alert('エラー: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('移動に失敗しました');
+        });
+    }
+    
+
+    </script>
+    {% csrf_token %}
+{% endblock %}

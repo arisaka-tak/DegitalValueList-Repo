@@ -1,0 +1,1811 @@
+{% extends 'base.html' %}
+
+{% block title %}AI価格抽出結果 - デジタル価格表システム{% endblock %}
+
+{% block breadcrumb %}
+    {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
+{% endblock %}
+
+{% block content %}
+    {% include 'components/page_header.html' with page_title="AI価格抽出結果" page_subtitle="商品照合結果の確認" %}
+    
+    <div class="container-fluid main-content">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+            
+            <!-- 適用年月指定（共通） -->
+            <div class="card mb-3">
+                <div class="card-body py-2">
+                    <div class="row align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label mb-1">適用年月 <span class="text-danger">*</span></label>
+                            <input type="month" class="form-control form-control-sm" name="effective_year_month" required>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label mb-1">改定理由（一括設定）</label>
+                            <input type="text" class="form-control form-control-sm" name="revision_reason" value="{% if is_history_view and transaction.revision_reason %}{{ transaction.revision_reason }}{% else %}AI価格抽出による更新{% endif %}" placeholder="全商品に適用する改定理由">
+                        </div>
+                        <div class="col-md-4">
+                            <div class="d-flex justify-content-end align-items-center gap-2">
+                                {% if is_history_view and transaction.uploaded_pdf %}
+                                    <a href="{{ transaction.uploaded_pdf.url }}" 
+                                       class="btn btn-outline-success btn-sm" 
+                                       download>📄 元PDFダウンロード</a>
+                                {% endif %}
+                                <button type="button" class="btn btn-outline-warning btn-sm" onclick="openBulkManufacturerModal()" title="メーカー一括訂正">
+                                    🏭 メーカー一括訂正
+                                </button>
+                                <span class="badge bg-primary">{{ results.total_products }}商品</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 抽出結果一覧（省スペーステーブル形式） -->
+            <div class="card">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th width="3%" class="text-center">#</th>
+                                    <th width="18%">AI抽出情報</th>
+                                    <th width="12%">価格情報</th>
+                                    <th width="14%">改定理由</th>
+                                    <th width="19%">マッチング候補</th>
+                                    <th width="8%" class="text-center">ステータス</th>
+                                    <th width="6%" class="text-center">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for result in results.results %}
+                                <tr class="{% if result.status == 'success' %}table-success{% elif result.status == 'no_match' %}table-warning{% else %}table-danger{% endif %}">
+                                    <td class="text-center align-middle">{{ result.index|add:1 }}</td>
+                                    <td>
+                                        <div id="display_{{ result.index }}">
+                                            {% if is_history_view and details %}
+                                                {% for detail in details %}
+                                                    {% if detail.sequence == result.index|add:1 %}
+                                                        <div class="fw-bold">{{ detail.extracted_product_name|default:'-' }}</div>
+                                                        <div class="small text-muted">
+                                                            型式: {{ detail.extracted_model_number|default:'-' }} | 
+                                                            規格: {{ detail.extracted_specification|default:'-' }}
+                                                        </div>
+                                                        <div class="small text-muted">{{ detail.extracted_manufacturer|default:'-' }}</div>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            {% else %}
+                                                <div class="fw-bold">{{ result.extracted_data.product_name|default:'-' }}</div>
+                                                <div class="small text-muted">
+                                                    型式: {{ result.extracted_data.model_number|default:'-' }} | 
+                                                    規格: {{ result.extracted_data.specification|default:'-' }}
+                                                </div>
+                                                <div class="small text-muted">{{ result.extracted_data.manufacturer|default:'-' }}</div>
+                                            {% endif %}
+                                        </div>
+                                        <!-- 編集モード -->
+                                        <div id="edit_{{ result.index }}" style="display:none;">
+                                            {% if is_history_view and details %}
+                                                {% for detail in details %}
+                                                    {% if detail.sequence == result.index|add:1 %}
+                                                        <input type="text" class="form-control form-control-sm mb-1" id="product_name_{{ result.index }}" value="{{ detail.extracted_product_name|default:'' }}" placeholder="商品名">
+                                                        <div class="row g-1">
+                                                            <div class="col-6">
+                                                                <input type="text" class="form-control form-control-sm" id="model_number_{{ result.index }}" value="{{ detail.extracted_model_number|default:'' }}" placeholder="型式">
+                                                            </div>
+                                                            <div class="col-6">
+                                                                <input type="text" class="form-control form-control-sm" id="specification_{{ result.index }}" value="{{ detail.extracted_specification|default:'' }}" placeholder="規格">
+                                                            </div>
+                                                        </div>
+                                                        <input type="text" class="form-control form-control-sm mt-1" id="manufacturer_{{ result.index }}" value="{{ detail.extracted_manufacturer|default:'' }}" placeholder="メーカー">
+                                                    {% endif %}
+                                                {% endfor %}
+                                            {% else %}
+                                                <input type="text" class="form-control form-control-sm mb-1" id="product_name_{{ result.index }}" value="{{ result.extracted_data.product_name|default:'' }}" placeholder="商品名">
+                                                <div class="row g-1">
+                                                    <div class="col-6">
+                                                        <input type="text" class="form-control form-control-sm" id="model_number_{{ result.index }}" value="{{ result.extracted_data.model_number|default:'' }}" placeholder="型式">
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <input type="text" class="form-control form-control-sm" id="specification_{{ result.index }}" value="{{ result.extracted_data.specification|default:'' }}" placeholder="規格">
+                                                    </div>
+                                                </div>
+                                                <input type="text" class="form-control form-control-sm mt-1" id="manufacturer_{{ result.index }}" value="{{ result.extracted_data.manufacturer|default:'' }}" placeholder="メーカー">
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                    <td class="align-middle">
+                                        {% if is_history_view and details %}
+                                            {% for detail in details %}
+                                                {% if detail.sequence == result.index|add:1 %}
+                                                    {% if detail.status in 'スキップ,申請済' %}
+                                                        <div class="mb-1">
+                                                            <small class="text-muted">新仕切価格</small><br>
+                                                            <span class="text-muted">{{ result.extracted_data.new_price|default:'-' }}</span>
+                                                            <input type="hidden" name="new_price_{{ result.index }}" value="{{ result.extracted_data.new_price|default:'' }}">
+                                                        </div>
+                                                        <div>
+                                                            <small class="text-muted">標準小売価格</small><br>
+                                                            <span class="text-muted">{{ result.extracted_data.retail_price|default:'-' }}</span>
+                                                            <input type="hidden" name="retail_price_{{ result.index }}" value="{{ result.extracted_data.retail_price|default:'' }}">
+                                                        </div>
+                                                    {% else %}
+                                                        <div class="mb-2">
+                                                            <label class="form-label form-label-sm mb-1">新仕切価格</label>
+                                                            <input type="text" class="form-control form-control-sm" name="new_price_{{ result.index }}" value="{{ detail.extracted_price|default:'' }}" placeholder="新仕切価格">
+                                                        </div>
+                                                        <div>
+                                                            <label class="form-label form-label-sm mb-1">標準小売価格</label>
+                                                            <input type="text" class="form-control form-control-sm" name="retail_price_{{ result.index }}" value="{{ detail.extracted_retail_price|default:'' }}" placeholder="標準小売価格">
+                                                        </div>
+                                                    {% endif %}
+                                                {% endif %}
+                                            {% endfor %}
+                                        {% else %}
+                                            <div class="mb-2">
+                                                <label class="form-label form-label-sm mb-1">新仕切価格</label>
+                                                <input type="text" class="form-control form-control-sm" name="new_price_{{ result.index }}" value="{{ result.extracted_data.new_price|default:'' }}" placeholder="新仕切価格">
+                                            </div>
+                                            <div>
+                                                <label class="form-label form-label-sm mb-1">標準小売価格</label>
+                                                <input type="text" class="form-control form-control-sm" name="retail_price_{{ result.index }}" value="{{ result.extracted_data.retail_price|default:'' }}" placeholder="標準小売価格">
+                                            </div>
+                                        {% endif %}
+                                    </td>
+                                    <td class="align-middle">
+                                        {% if is_history_view and details %}
+                                            {% for detail in details %}
+                                                {% if detail.sequence == result.index|add:1 %}
+                                                    {% if detail.status in 'スキップ,申請済' %}
+                                                        <span class="text-muted">{{ result.extracted_data.revision_reason|default:'-' }}</span>
+                                                        <input type="hidden" name="revision_reason_{{ result.index }}" value="{{ result.extracted_data.revision_reason|default:'' }}">
+                                                    {% else %}
+                                                        <input type="text" class="form-control form-control-sm" name="revision_reason_{{ result.index }}" value="{{ detail.extracted_revision_reason|default:'' }}" placeholder="個別理由（空欄の場合は一括設定を使用）">
+                                                    {% endif %}
+                                                {% endif %}
+                                            {% endfor %}
+                                        {% else %}
+                                            <input type="text" class="form-control form-control-sm" name="revision_reason_{{ result.index }}" value="" placeholder="個別理由（空欄の場合は一括設定を使用）">
+                                        {% endif %}
+                                    </td>
+                                    <td class="align-middle">
+                                        <div id="match_results_{{ result.index }}">
+                                            {% if is_history_view and details %}
+                                                {% for detail in details %}
+                                                    {% if detail.sequence == result.index|add:1 %}
+                                                        {% if detail.status in 'スキップ,申請済' %}
+                                                            <span class="text-muted">{{ detail.selected_candidate_text|default:'スキップ' }}</span>
+                                                            <input type="hidden" name="product_match_{{ result.index }}" value="{{ detail.matched_product.pk|default:'' }}">
+                                                        {% else %}
+                                                            {% if result.candidates %}
+                                                                <select class="form-select form-select-sm" name="product_match_{{ result.index }}" onchange="showProductDetail({{ result.index }}, this.value)">
+                                                                    <option value="">-- 選択 --</option>
+                                                                    {% for candidate in result.candidates %}
+                                                                    <option value="{{ candidate.product.pk }}"{% if detail.matched_product.pk == candidate.product.pk %} selected{% endif %}>
+                                                                        {{ candidate.score }}% [{{ candidate.product.pk }}] {{ candidate.product.product_name|truncatechars:25 }}
+                                                                    </option>
+                                                                    {% endfor %}
+                                                                    <option value="">スキップ</option>
+                                                                </select>
+                                                                <div class="d-flex justify-content-between align-items-center mt-1">
+                                                                    <div class="small {% if result.status == 'success' %}text-success{% else %}text-warning{% endif %}">{{ result.candidates|length }}件の候補</div>
+                                                                    <button type="button" class="btn btn-outline-primary btn-sm px-2 py-0" onclick="openProductSearchModal({{ result.index }})" title="商品検索">
+                                                                        🔍 手動照合
+                                                                    </button>
+                                                                </div>
+                                                                <!-- 商品詳細カード -->
+                                                                <div id="product_detail_{{ result.index }}" class="card mt-2" style="{% if not detail.matched_product %}display:none;{% endif %}">
+                                                                    <div class="card-body p-2">
+                                                                        <div class="row g-1">
+                                                                            <div class="col-6">
+                                                                                <div class="small text-muted">現在仕切価格</div>
+                                                                                <div class="fw-bold" id="current_price_{{ result.index }}">
+                                                                                    {% if detail.matched_product %}
+                                                                                        {% for candidate in result.candidates %}
+                                                                                            {% if candidate.product.pk == detail.matched_product.pk %}
+                                                                                                {{ candidate.product.current_wholesale_price }}
+                                                                                            {% endif %}
+                                                                                        {% endfor %}
+                                                                                    {% endif %}
+                                                                                </div>
+                                                                            </div>
+                                                                            <div class="col-6">
+                                                                                <div class="small text-muted">型式</div>
+                                                                                <div id="model_{{ result.index }}">
+                                                                                    {% if detail.matched_product %}
+                                                                                        {{ detail.matched_product.model_number|default:'-' }}
+                                                                                    {% endif %}
+                                                                                </div>
+                                                                            </div>
+                                                                            <div class="col-6">
+                                                                                <div class="small text-muted">規格</div>
+                                                                                <div id="spec_{{ result.index }}">
+                                                                                    {% if detail.matched_product %}
+                                                                                        {{ detail.matched_product.specification|default:'-' }}
+                                                                                    {% endif %}
+                                                                                </div>
+                                                                            </div>
+                                                                            <div class="col-6">
+                                                                                <div class="small text-muted">メーカー</div>
+                                                                                <div id="mfg_{{ result.index }}">
+                                                                                    {% if detail.matched_product %}
+                                                                                        {{ detail.matched_product.manufacturer|default:'-' }}
+                                                                                    {% endif %}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            {% else %}
+                                                                <div class="d-flex justify-content-between align-items-center">
+                                                                    <div class="small text-warning">該当商品なし</div>
+                                                                    <button type="button" class="btn btn-outline-primary btn-sm px-2 py-0" onclick="openProductSearchModal({{ result.index }})" title="商品検索">
+                                                                        🔍 手動照合
+                                                                    </button>
+                                                                </div>
+                                                                <input type="hidden" name="product_match_{{ result.index }}" value="">
+                                                            {% endif %}
+                                                        {% endif %}
+                                                    {% endif %}
+                                                {% endfor %}
+                                            {% else %}
+                                                {% if result.status == 'success' %}
+                                                    <select class="form-select form-select-sm" name="product_match_{{ result.index }}">
+                                                        <option value="">-- 選択 --</option>
+                                                        {% for candidate in result.candidates %}
+                                                        <option value="{{ candidate.product.pk }}"{% if forloop.first %} selected{% endif %}>
+                                                            {{ candidate.score }}% [{{ candidate.product.pk }}] {{ candidate.product.product_name|truncatechars:25 }}
+                                                        </option>
+                                                        {% endfor %}
+                                                        <option value="">スキップ</option>
+                                                    </select>
+                                                    <div class="small text-success mt-1">{{ result.candidates|length }}件の候補</div>
+                                                {% elif result.status == 'no_match' %}
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        <div class="small text-warning">該当商品なし</div>
+                                                        <button type="button" class="btn btn-outline-primary btn-sm px-2 py-0" onclick="openProductSearchModal({{ result.index }})" title="商品検索">
+                                                            🔍 手動照合
+                                                        </button>
+                                                    </div>
+                                                    <input type="hidden" name="product_match_{{ result.index }}" value="">
+                                                {% else %}
+                                                    <div class="small text-danger">{{ result.message|truncatechars:30 }}</div>
+                                                    <input type="hidden" name="product_match_{{ result.index }}" value="">
+                                                {% endif %}
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                    <td class="text-center align-middle">
+                                        {% if is_history_view and details %}
+                                            {% for detail in details %}
+                                                {% if detail.sequence == result.index|add:1 %}
+                                                    {% if detail.status == '未処理' %}
+                                                        <span class="badge bg-secondary">未処理</span>
+                                                    {% elif detail.status == 'エラー' %}
+                                                        <span class="badge bg-danger">エラー</span>
+                                                    {% elif detail.status == 'スキップ' %}
+                                                        <span class="badge bg-warning">スキップ</span>
+                                                    {% elif detail.status == '申請済' %}
+                                                        <span class="badge bg-success">申請済</span>
+                                                    {% else %}
+                                                        <span class="badge bg-light text-dark">{{ detail.status }}</span>
+                                                    {% endif %}
+                                                {% endif %}
+                                            {% endfor %}
+                                        {% else %}
+                                            <span class="badge bg-secondary">未処理</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center align-middle">
+                                        {% if is_history_view and details %}
+                                            {% for detail in details %}
+                                                {% if detail.sequence == result.index|add:1 %}
+                                                    {% if detail.status in 'スキップ,申請済' %}
+                                                        <span class="text-muted">ロック済</span>
+                                                    {% else %}
+                                                        <div class="btn-group-vertical" role="group">
+                                                            <button type="button" class="btn btn-outline-primary btn-sm px-2 py-1" onclick="toggleEdit({{ result.index }})" title="編集">
+                                                                ✏️
+                                                            </button>
+                                                            <button type="button" class="btn btn-outline-success btn-sm px-2 py-1" onclick="reMatch({{ result.index }})" title="再照合">
+                                                                🔄
+                                                            </button>
+                                                            <button type="button" class="btn btn-outline-warning btn-sm px-2 py-1" onclick="skipProduct({{ result.index }})" title="スキップ">
+                                                                ⏭️
+                                                            </button>
+                                                        </div>
+                                                    {% endif %}
+                                                {% endif %}
+                                            {% endfor %}
+                                        {% else %}
+                                            <div class="btn-group-vertical" role="group">
+                                                <button type="button" class="btn btn-outline-primary btn-sm px-2 py-1" onclick="toggleEdit({{ result.index }})" title="編集">
+                                                    ✏️
+                                                </button>
+                                                <button type="button" class="btn btn-outline-success btn-sm px-2 py-1" onclick="reMatch({{ result.index }})" title="再照合">
+                                                    🔄
+                                                </button>
+                                                <button type="button" class="btn btn-outline-warning btn-sm px-2 py-1" onclick="skipProduct({{ result.index }})" title="スキップ">
+                                                    ⏭️
+                                                </button>
+                                            </div>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- アクションボタン -->
+            <div class="d-flex justify-content-between mt-3">
+                <a href="{% url 'products_master:ai_extract' %}" class="btn btn-secondary">戻る</a>
+                <button type="submit" class="btn btn-primary" onclick="return saveAllBeforeSubmit()">価格履歴申請データを作成</button>
+            </div>
+        </form>
+    </div>
+    
+    <!-- メーカー選択モーダル（既存のものを使用） -->
+    {% include 'components/manufacturer_modal.html' %}
+    
+    <!-- メーカー一括訂正モーダル -->
+    <div class="modal fade" id="bulkManufacturerModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">メーカー一括訂正・再照合</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-3">全商品のメーカーを一括で変更し、再照合します。</p>
+                    <div class="mb-3">
+                        <label class="form-label">新しいメーカー</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="bulkManufacturerDisplay" placeholder="メーカーを選択" readonly>
+                            <input type="hidden" id="bulkManufacturerValue" value="">
+                            <button type="button" class="btn btn-outline-secondary" onclick="openManufacturerModalForBulk()">選択</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    <button type="button" class="btn btn-warning" onclick="executeBulkManufacturerUpdate()">一括更新・再照合</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 商品検索モーダル -->
+    <div class="modal fade" id="productSearchModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">商品検索</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- 絞り込みフィールド -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label form-label-sm">分類</label>
+                            <select class="form-select form-select-sm" id="categoryFilter">
+                                <option value="">全て</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label form-label-sm">畜種</label>
+                            <select class="form-select form-select-sm" id="livestockTypeFilter">
+                                <option value="">全て</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label form-label-sm">メーカー</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control" id="manufacturerFilterDisplay" placeholder="全て" readonly>
+                                <input type="hidden" id="manufacturerFilter" value="">
+                                <button type="button" class="btn btn-outline-secondary" onclick="openManufacturerModalForFilter()">選択</button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="clearManufacturerFilter()" title="クリア">×</button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- キーワード検索 -->
+                    <div class="mb-3">
+                        <input type="text" class="form-control" id="productSearchInput" placeholder="商品名、型式、規格で検索..." autocomplete="off">
+                    </div>
+                    <div id="searchResults" class="border rounded" style="max-height: 350px; overflow-y: auto;">
+                        <div class="text-center text-muted p-3">絞り込み条件を選択するか、キーワードを入力してください</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+    // Enterキーのグローバル制御（最優先）
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'submit') {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            return false;
+        }
+    }, true); // キャプチャフェーズで実行
+    
+    document.addEventListener('DOMContentLoaded', function() {
+    
+    // Enterキーでのフォーム送信とページ遷移を完全に防止
+    const form = document.querySelector('form');
+    if (form) {
+        form.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.type !== 'submit') {
+                e.preventDefault();
+                e.stopPropagation();
+                return false;
+            }
+        });
+        
+        // フォーム送信イベントも制御
+        form.addEventListener('submit', function(e) {
+            // submitボタン以外からの送信を防止
+            if (!e.submitter || e.submitter.type !== 'submit') {
+                e.preventDefault();
+                return false;
+            }
+        });
+    }
+    
+    // 商品詳細カード表示切り替え
+    function showProductDetail(index, productId) {
+        const card = document.getElementById(`product_detail_${index}`);
+        
+        if (!productId) {
+            card.style.display = 'none';
+            return;
+        }
+        
+        // 候補データから商品情報を取得
+        const candidates = window.candidatesData && window.candidatesData[index] ? window.candidatesData[index] : [];
+        const candidate = candidates.find(c => c.product.pk == productId);
+        
+        if (candidate) {
+            document.getElementById(`current_price_${index}`).textContent = candidate.product.current_wholesale_price || '-';
+            document.getElementById(`model_${index}`).textContent = candidate.product.model_number || '-';
+            document.getElementById(`spec_${index}`).textContent = candidate.product.specification || '-';
+            document.getElementById(`mfg_${index}`).textContent = candidate.product.manufacturer || '-';
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    }
+    
+    // 候補データをJavaScriptで使用できるように保存
+    window.candidatesData = {};
+    
+    // 編集モード切り替え
+    function toggleEdit(index) {
+        const display = document.getElementById(`display_${index}`);
+        const edit = document.getElementById(`edit_${index}`);
+        const btn = document.querySelector(`button[onclick="toggleEdit(${index})"]`);
+        
+        if (edit.style.display === 'none' || edit.style.display === '') {
+            display.style.display = 'none';
+            edit.style.display = 'block';
+            btn.innerHTML = '💾';
+            btn.title = '保存';
+        } else {
+            // 編集内容を表示部分に反映
+            updateDisplayFromEdit(index);
+            
+            // データベースに一括保存
+            saveBatchEditChanges(index)
+                .then(() => {
+                    console.log(`Debug: Batch save completed for index ${index}`);
+                    display.style.display = 'block';
+                    edit.style.display = 'none';
+                    btn.innerHTML = '✏️';
+                    btn.title = '編集';
+                    
+                    // 保存後に自動で再照合実行
+                    setTimeout(() => reMatch(index), 100);
+                })
+                .catch(error => {
+                    console.error(`Debug: Batch save failed for index ${index}:`, error);
+                    alert('保存に失敗しました: ' + error.message);
+                });
+        }
+    }
+    
+    // 編集内容を表示部分に反映
+    function updateDisplayFromEdit(index) {
+        const productName = document.getElementById(`product_name_${index}`).value || '-';
+        const modelNumber = document.getElementById(`model_number_${index}`).value || '-';
+        const specification = document.getElementById(`specification_${index}`).value || '-';
+        const manufacturer = document.getElementById(`manufacturer_${index}`).value || '-';
+        
+        const display = document.getElementById(`display_${index}`);
+        display.innerHTML = `
+            <div class="fw-bold">${productName}</div>
+            <div class="small text-muted">
+                型式: ${modelNumber} | 
+                規格: ${specification}
+            </div>
+            <div class="small text-muted">${manufacturer}</div>
+        `;
+    }
+
+    // 再照合処理
+    function reMatch(index) {
+        const btn = document.querySelector(`button[onclick="reMatch(${index})"]`);
+        const originalText = btn ? btn.innerHTML : '🔄';
+        
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '⏳';
+        }
+        
+        // データベースから最新データを取得してから再照合を実行
+        {% if is_history_view and transaction %}
+        const transactionPk = {{ transaction.pk }};
+        const sequence = index + 1;
+        
+        // データベースから最新データを取得
+        fetch('/products/ai-extract/get-detail/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                transaction_pk: transactionPk,
+                sequence: sequence
+            })
+        })
+        .then(response => response.json())
+        .then(detailData => {
+            const extractedData = {
+                product_name: detailData.extracted_product_name || null,
+                model_number: detailData.extracted_model_number || null,
+                manufacturer: detailData.extracted_manufacturer || null,
+                specification: detailData.extracted_specification || null
+            };
+            
+            // 再照合を実行
+            performRematch(index, extractedData, btn, originalText);
+        })
+        .catch(error => {
+            console.error('データ取得エラー:', error);
+            // フォールバック: 編集モードからデータを取得
+            const extractedData = getExtractedDataFromForm(index);
+            performRematch(index, extractedData, btn, originalText);
+        });
+        {% else %}
+        // 編集モードからデータを取得
+        const extractedData = getExtractedDataFromForm(index);
+        performRematch(index, extractedData, btn, originalText);
+        {% endif %}
+    }
+    
+    // フォームからデータを取得するヘルパー関数
+    function getExtractedDataFromForm(index) {
+        const productNameEl = document.getElementById(`product_name_${index}`);
+        const modelNumberEl = document.getElementById(`model_number_${index}`);
+        const manufacturerEl = document.getElementById(`manufacturer_${index}`);
+        const specificationEl = document.getElementById(`specification_${index}`);
+        
+        console.log(`Debug: Getting data for index ${index}`);
+        console.log(`Debug: Elements found - name: ${!!productNameEl}, model: ${!!modelNumberEl}, mfg: ${!!manufacturerEl}, spec: ${!!specificationEl}`);
+        
+        if (productNameEl && productNameEl.offsetParent !== null) {
+            // 編集モードが表示中
+            const data = {
+                product_name: productNameEl.value || null,
+                model_number: modelNumberEl ? modelNumberEl.value || null : null,
+                manufacturer: manufacturerEl ? manufacturerEl.value || null : null,
+                specification: specificationEl ? specificationEl.value || null : null
+            };
+            console.log(`Debug: Edit mode data:`, data);
+            return data;
+        } else {
+            // 表示モードからデータを抽出（履歴詳細画面用）
+            const displayEl = document.getElementById(`display_${index}`);
+            if (displayEl) {
+                const lines = displayEl.textContent.split('\n').map(line => line.trim()).filter(line => line);
+                const productName = lines[0] || null;
+                
+                // 型式と規格を抽出
+                let modelNumber = null;
+                let specification = null;
+                let manufacturer = null;
+                
+                if (lines.length > 1) {
+                    const detailLine = lines[1];
+                    const parts = detailLine.split('|').map(part => part.trim());
+                    
+                    for (const part of parts) {
+                        if (part.startsWith('型式:')) {
+                            modelNumber = part.replace('型式:', '').trim();
+                            if (modelNumber === '-') modelNumber = null;
+                        } else if (part.startsWith('規格:')) {
+                            specification = part.replace('規格:', '').trim();
+                            if (specification === '-') specification = null;
+                        }
+                    }
+                }
+                
+                if (lines.length > 2) {
+                    manufacturer = lines[2] || null;
+                    if (manufacturer === '-') manufacturer = null;
+                }
+                
+                const data = {
+                    product_name: productName,
+                    model_number: modelNumber,
+                    manufacturer: manufacturer,
+                    specification: specification
+                };
+                console.log(`Debug: Display mode data:`, data);
+                return data;
+            } else {
+                console.log(`Debug: No display element found`);
+                return { product_name: null, model_number: null, manufacturer: null, specification: null };
+            }
+        }
+    }
+    
+    // 再照合を実行するヘルパー関数
+    function performRematch(index, extractedData, btn, originalText) {
+        {% if is_history_view and transaction %}
+        const transactionPk = {{ transaction.pk }};
+        const sequence = index + 1;
+        
+        fetch('/products/ai-extract/rematch/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                transaction_pk: transactionPk,
+                sequence: sequence,
+                extracted_data: extractedData
+            })
+        })
+        {% else %}
+        // 履歴画面以外では旧形式を使用（後方互換性）
+        fetch('/products/ai-extract/rematch/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                index: index,
+                extracted_data: extractedData
+            })
+        })
+        {% endif %}
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateMatchResults(index, data.result);
+            } else {
+                alert('エラー: ' + data.error);
+            }
+        })
+        .catch(error => alert('通信エラー: ' + error.message))
+        .finally(() => {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        })
+    }
+    
+    // スキップ処理
+    function skipProduct(index) {
+        if (confirm('この商品をスキップしますか？')) {
+            const select = document.querySelector(`select[name="product_match_${index}"]`);
+            const priceInput = document.querySelector(`input[name="new_price_${index}"]`);
+            
+            if (select) {
+                select.value = '';
+                select.style.backgroundColor = '#fff3cd';
+            }
+            if (priceInput) {
+                priceInput.value = '';
+                priceInput.style.backgroundColor = '#fff3cd';
+            }
+            
+            const container = document.getElementById(`match_results_${index}`);
+            if (container) {
+                const skipMsg = container.querySelector('.skip-message');
+                if (!skipMsg) {
+                    const msgDiv = document.createElement('div');
+                    msgDiv.className = 'small text-warning mt-1 skip-message';
+                    msgDiv.textContent = 'スキップ設定済み';
+                    container.appendChild(msgDiv);
+                }
+            }
+        }
+    }
+
+    // 照合結果更新
+    function updateMatchResults(index, result) {
+        const container = document.getElementById(`match_results_${index}`);
+        const row = container.closest('tr');
+        let html = '';
+        
+        // 行の背景色を更新（最高スコアで判定）
+        let maxScore = 0;
+        if (result.candidates && result.candidates.length > 0) {
+            maxScore = Math.max(...result.candidates.map(c => c.score));
+        }
+        
+        if (maxScore >= 70) {
+            row.className = 'table-success';  // 緑：70%以上
+            console.log(`Row ${index}: Changed to GREEN (max score: ${maxScore})`);
+        } else {
+            row.className = 'table-warning';   // 黄：70%未満または候補なし
+            console.log(`Row ${index}: Changed to YELLOW (max score: ${maxScore})`);
+        }
+        
+        if (result.status === 'success') {
+            html = `
+                <select class="form-select form-select-sm" name="product_match_${index}" onchange="showProductDetail(${index}, this.value)">
+                    <option value="">-- 選択 --</option>
+            `;
+            if (result.candidates && result.candidates.length > 0) {
+                // 候補データを更新
+                window.candidatesData[index] = result.candidates;
+                
+                result.candidates.forEach((candidate, i) => {
+                    html += `<option value="${candidate.product.pk}"${i === 0 ? ' selected' : ''}>
+                        ${candidate.score}% [${candidate.product.pk}] ${candidate.product.product_name.substring(0, 25)}
+                    </option>`;
+                });
+            }
+            html += `
+                    <option value="">スキップ</option>
+                </select>
+                <div class="small text-success mt-1">${result.candidates ? result.candidates.length : 0}件の候補</div>
+                <!-- 商品詳細カード -->
+                <div id="product_detail_${index}" class="card mt-2" style="display:block;">
+                    <div class="card-body p-2">
+                        <div class="row g-1">
+                            <div class="col-6">
+                                <div class="small text-muted">現在仕切価格</div>
+                                <div class="fw-bold" id="current_price_${index}">${result.candidates && result.candidates[0] ? result.candidates[0].product.current_wholesale_price || '-' : '-'}</div>
+                            </div>
+                            <div class="col-6">
+                                <div class="small text-muted">型式</div>
+                                <div id="model_${index}">${result.candidates && result.candidates[0] ? result.candidates[0].product.model_number || '-' : '-'}</div>
+                            </div>
+                            <div class="col-6">
+                                <div class="small text-muted">規格</div>
+                                <div id="spec_${index}">${result.candidates && result.candidates[0] ? result.candidates[0].product.specification || '-' : '-'}</div>
+                            </div>
+                            <div class="col-6">
+                                <div class="small text-muted">メーカー</div>
+                                <div id="mfg_${index}">${result.candidates && result.candidates[0] ? result.candidates[0].product.manufacturer || '-' : '-'}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            html = `
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="small text-warning">該当商品なし</div>
+                    <button type="button" class="btn btn-outline-primary btn-sm px-2 py-0" onclick="openProductSearchModal(${index})" title="商品検索">
+                        🔍 手動照合
+                    </button>
+                </div>
+                <input type="hidden" name="product_match_${index}" value="">
+                <div id="product_detail_${index}" class="card mt-2" style="display:none;"></div>
+            `;
+        }
+        
+        if (container) container.innerHTML = html;
+        
+        console.log(`Updated match results for index ${index}, status: ${result.status}`);
+    }
+    
+    // 編集内容をデータベースに一括保存
+    function saveBatchEditChanges(index) {
+        {% if is_history_view and transaction %}
+        const transactionPk = {{ transaction.pk }};
+        const sequence = index + 1;
+        
+        console.log(`Debug: Batch saving changes for index ${index}, sequence ${sequence}`);
+        
+        // 全フィールドの値を取得
+        const updates = [];
+        
+        // 新価格
+        const priceInput = document.querySelector(`input[name="new_price_${index}"]`);
+        if (priceInput) {
+            updates.push({
+                sequence: sequence,
+                field: 'extracted_price',
+                value: priceInput.value
+            });
+        }
+        
+        // 改定理由
+        const reasonInput = document.querySelector(`input[name="revision_reason_${index}"]`);
+        if (reasonInput) {
+            updates.push({
+                sequence: sequence,
+                field: 'extracted_revision_reason',
+                value: reasonInput.value
+            });
+        }
+        
+        // 商品選択
+        const productSelect = document.querySelector(`select[name="product_match_${index}"]`);
+        if (productSelect) {
+            updates.push({
+                sequence: sequence,
+                field: 'matched_product',
+                value: productSelect.value
+            });
+        }
+        
+        // 編集モードの入力フィールド
+        const productNameInput = document.getElementById(`product_name_${index}`);
+        if (productNameInput) {
+            updates.push({
+                sequence: sequence,
+                field: 'extracted_product_name',
+                value: productNameInput.value
+            });
+        }
+        
+        const modelNumberInput = document.getElementById(`model_number_${index}`);
+        if (modelNumberInput) {
+            updates.push({
+                sequence: sequence,
+                field: 'extracted_model_number',
+                value: modelNumberInput.value
+            });
+        }
+        
+        const specificationInput = document.getElementById(`specification_${index}`);
+        if (specificationInput) {
+            updates.push({
+                sequence: sequence,
+                field: 'extracted_specification',
+                value: specificationInput.value
+            });
+        }
+        
+        const manufacturerInput = document.getElementById(`manufacturer_${index}`);
+        if (manufacturerInput) {
+            updates.push({
+                sequence: sequence,
+                field: 'extracted_manufacturer',
+                value: manufacturerInput.value
+            });
+        }
+        
+        console.log(`Debug: Batch updates:`, updates);
+        
+        // 一括更新を実行
+        return fetch('{% url "products_master:ai_extract_update_detail" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                transaction_pk: transactionPk,
+                sequence: sequence,
+                updates: updates
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (!data.success) {
+                throw new Error(data.error || 'Unknown error');
+            }
+            console.log(`Debug: Batch save successful for index ${index}`);
+            return data;
+        });
+        {% else %}
+        return Promise.resolve();
+        {% endif %}
+    }
+    
+    // 編集内容をデータベースに保存（旧版・互換性のため保持）
+    function saveEditChanges(index) {
+        {% if is_history_view and transaction %}
+        const transactionPk = {{ transaction.pk }};
+        const sequence = index + 1;
+        
+        console.log(`Debug: Saving changes for index ${index}, sequence ${sequence}`);
+        
+        // 各フィールドを個別に保存
+        const priceInput = document.querySelector(`input[name="new_price_${index}"]`);
+        const reasonInput = document.querySelector(`input[name="revision_reason_${index}"]`);
+        const productSelect = document.querySelector(`select[name="product_match_${index}"]`);
+        
+        // 編集モードの入力フィールド
+        const productNameInput = document.getElementById(`product_name_${index}`);
+        const modelNumberInput = document.getElementById(`model_number_${index}`);
+        const specificationInput = document.getElementById(`specification_${index}`);
+        const manufacturerInput = document.getElementById(`manufacturer_${index}`);
+        
+        console.log(`Debug: Found inputs - name: ${!!productNameInput}, model: ${!!modelNumberInput}, spec: ${!!specificationInput}, mfg: ${!!manufacturerInput}`);
+        
+        const savePromises = [];
+        
+        // 新価格を保存
+        if (priceInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_price',
+                        value: priceInput.value
+                    })
+                })
+            );
+        }
+        
+        // 改定理由を保存
+        if (reasonInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_revision_reason',
+                        value: reasonInput.value
+                    })
+                })
+            );
+        }
+        
+        // 商品選択を保存
+        if (productSelect) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'matched_product',
+                        value: productSelect.value
+                    })
+                })
+            );
+        }
+        
+        // 商品名を保存
+        if (productNameInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_product_name',
+                        value: productNameInput.value
+                    })
+                })
+            );
+        }
+        
+        // 型式を保存
+        if (modelNumberInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_model_number',
+                        value: modelNumberInput.value
+                    })
+                })
+            );
+        }
+        
+        // 規格を保存
+        if (specificationInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_specification',
+                        value: specificationInput.value
+                    })
+                })
+            );
+        }
+        
+        // メーカーを保存
+        if (manufacturerInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_manufacturer',
+                        value: manufacturerInput.value
+                    })
+                })
+            );
+        }
+        
+        // 全ての保存が完了するまで待機
+        return Promise.all(savePromises)
+            .then(responses => {
+                console.log(`Debug: Save successful for index ${index}`);
+                return responses;
+            })
+            .catch(error => {
+                console.error(`Debug: Save error for index ${index}:`, error);
+                throw error;
+            });
+        {% endif %}
+    }
+    
+    // 再照合なしで保存のみ実行
+    function saveEditChangesOnly(index) {
+        {% if is_history_view and transaction %}
+        const transactionPk = {{ transaction.pk }};
+        const sequence = index + 1;
+        
+        console.log(`Saving data for index ${index}, sequence ${sequence}`);
+        
+        // 各フィールドを個別に保存（編集モードでなくても取得できるフィールド）
+        const priceInput = document.querySelector(`input[name="new_price_${index}"]`);
+        const reasonInput = document.querySelector(`input[name="revision_reason_${index}"]`);
+        const productSelect = document.querySelector(`select[name="product_match_${index}"]`);
+        
+        // 編集モードの入力フィールド（存在する場合のみ）
+        const productNameInput = document.getElementById(`product_name_${index}`);
+        const modelNumberInput = document.getElementById(`model_number_${index}`);
+        const specificationInput = document.getElementById(`specification_${index}`);
+        const manufacturerInput = document.getElementById(`manufacturer_${index}`);
+        
+        console.log(`Fields found - price: ${!!priceInput}, reason: ${!!reasonInput}, product: ${!!productSelect}, name: ${!!productNameInput}`);
+        
+        const savePromises = [];
+        
+        // 新価格を保存
+        if (priceInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_price',
+                        value: priceInput.value
+                    })
+                })
+            );
+        }
+        
+        // 改定理由を保存
+        if (reasonInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_revision_reason',
+                        value: reasonInput.value
+                    })
+                })
+            );
+        }
+        
+        // 商品選択を保存
+        if (productSelect) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'matched_product',
+                        value: productSelect.value
+                    })
+                })
+            );
+        }
+        
+        // 商品名を保存
+        if (productNameInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_product_name',
+                        value: productNameInput.value
+                    })
+                })
+            );
+        }
+        
+        // 型式を保存
+        if (modelNumberInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_model_number',
+                        value: modelNumberInput.value
+                    })
+                })
+            );
+        }
+        
+        // 規格を保存
+        if (specificationInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_specification',
+                        value: specificationInput.value
+                    })
+                })
+            );
+        }
+        
+        // メーカーを保存
+        if (manufacturerInput) {
+            savePromises.push(
+                fetch('{% url "products_master:ai_extract_update_detail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        transaction_pk: transactionPk,
+                        sequence: sequence,
+                        field: 'extracted_manufacturer',
+                        value: manufacturerInput.value
+                    })
+                })
+            );
+        }
+        
+        return Promise.all(savePromises);
+        {% else %}
+        return Promise.resolve();
+        {% endif %}
+    }
+    
+    // 関数をグローバルスコープに公開
+    window.toggleEdit = toggleEdit;
+    window.reMatch = reMatch;
+    window.skipProduct = skipProduct;
+    window.showProductDetail = showProductDetail;
+    window.saveAllBeforeSubmit = saveAllBeforeSubmit;
+    window.openProductSearchModal = openProductSearchModal;
+    window.selectSearchedProduct = selectSearchedProduct;
+    
+    // 商品検索モーダル関連変数
+    let currentSearchIndex = null;
+    let searchTimeout = null;
+    
+    // 商品検索モーダルを開く
+    function openProductSearchModal(index) {
+        currentSearchIndex = index;
+        document.getElementById('productSearchInput').value = '';
+        document.getElementById('searchResults').innerHTML = '<div class="text-center text-muted p-3">絞り込み条件を選択するか、キーワードを入力してください</div>';
+        
+        // メーカーフィルターをクリア
+        document.getElementById('manufacturerFilter').value = '';
+        document.getElementById('manufacturerFilterDisplay').value = '';
+        document.getElementById('manufacturerFilterDisplay').placeholder = '全て';
+        
+        // メーカー一括訂正で設定されたメーカーがあるかチェック
+        const manufacturerInput = document.getElementById(`manufacturer_${index}`);
+        if (manufacturerInput && manufacturerInput.value) {
+            const manufacturerName = manufacturerInput.value.trim();
+            // マスタデータから一致するメーカーを探してデフォルトに設定
+            setDefaultManufacturerIfExists(manufacturerName);
+        }
+        
+        // マスタデータを読み込み
+        loadMasterData();
+        
+        const modal = new bootstrap.Modal(document.getElementById('productSearchModal'));
+        modal.show();
+        
+        // モーダルが表示されたら検索フィールドにフォーカス
+        setTimeout(() => {
+            document.getElementById('productSearchInput').focus();
+        }, 500);
+    }
+    
+    // メーカー名がマスタに存在する場合はデフォルトに設定
+    function setDefaultManufacturerIfExists(manufacturerName) {
+        // マスタデータが読み込まれているかチェック
+        fetch('{% url "products_master:ai_extract_get_masters" %}')
+        .then(response => response.json())
+        .then(data => {
+            if (data.manufacturers) {
+                const matchingManufacturer = data.manufacturers.find(m => m.name === manufacturerName);
+                if (matchingManufacturer) {
+                    document.getElementById('manufacturerFilter').value = matchingManufacturer.id;
+                    document.getElementById('manufacturerFilterDisplay').value = matchingManufacturer.name;
+                    // デフォルトで検索を実行
+                    setTimeout(() => performSearch(), 100);
+                }
+            }
+        })
+        .catch(error => {
+            console.error('メーカーチェックエラー:', error);
+        });
+    }
+    
+    // マスタデータ読み込み
+    function loadMasterData() {
+        fetch('{% url "products_master:ai_extract_get_masters" %}')
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                console.error('マスタデータ取得エラー:', data.error);
+                return;
+            }
+            
+            // 分類プルダウン
+            const categorySelect = document.getElementById('categoryFilter');
+            categorySelect.innerHTML = '<option value="">全て</option>';
+            data.categories.forEach(category => {
+                const option = document.createElement('option');
+                option.value = category.id;
+                option.textContent = category.name;
+                categorySelect.appendChild(option);
+            });
+            
+            // 畜種プルダウン
+            const livestockSelect = document.getElementById('livestockTypeFilter');
+            livestockSelect.innerHTML = '<option value="">全て</option>';
+            data.livestock_types.forEach(livestock => {
+                const option = document.createElement('option');
+                option.value = livestock.id;
+                option.textContent = livestock.name;
+                livestockSelect.appendChild(option);
+            });
+            
+            // メーカーは既存モーダルを使用するため、ここでは処理しない
+        })
+        .catch(error => {
+            console.error('マスタデータ取得エラー:', error);
+        });
+    }
+    
+    // メーカー選択モーダルを開く（絞り込み用）
+    function openManufacturerModalForFilter() {
+        // 商品検索モーダルを一旦閉じる
+        const productSearchModal = bootstrap.Modal.getInstance(document.getElementById('productSearchModal'));
+        if (productSearchModal) {
+            productSearchModal.hide();
+        }
+        
+        // メーカーモーダルを開く（少し遅延してアニメーションを待つ）
+        setTimeout(() => {
+            const manufacturerModal = new bootstrap.Modal(document.getElementById('manufacturerModal'));
+            manufacturerModal.show();
+        }, 300);
+    }
+    
+    // メーカー選択時のコールバック（既存のメーカーモーダルから呼び出される）
+    let bulkManufacturerMode = false;
+    
+    window.selectManufacturer = function(manufacturerId, manufacturerName) {
+        if (bulkManufacturerMode) {
+            // 一括訂正モーダル用
+            document.getElementById('bulkManufacturerValue').value = manufacturerId;
+            document.getElementById('bulkManufacturerDisplay').value = manufacturerName;
+            
+            const manufacturerModal = bootstrap.Modal.getInstance(document.getElementById('manufacturerModal'));
+            manufacturerModal.hide();
+            
+            setTimeout(() => {
+                const bulkModal = new bootstrap.Modal(document.getElementById('bulkManufacturerModal'));
+                bulkModal.show();
+            }, 300);
+            
+            bulkManufacturerMode = false;
+        } else if (currentSearchIndex !== null) {
+            // 商品検索モーダル用のメーカー選択
+            document.getElementById('manufacturerFilter').value = manufacturerId;
+            document.getElementById('manufacturerFilterDisplay').value = manufacturerName;
+            
+            // メーカーモーダルを閉じる
+            const manufacturerModal = bootstrap.Modal.getInstance(document.getElementById('manufacturerModal'));
+            manufacturerModal.hide();
+            
+            // 商品検索モーダルを再表示して検索をトリガー
+            setTimeout(() => {
+                const productSearchModal = new bootstrap.Modal(document.getElementById('productSearchModal'));
+                productSearchModal.show();
+                performSearch(); // 即座に検索実行
+            }, 300);
+        }
+    };
+    
+    // メーカークリア機能
+    function clearManufacturerFilter() {
+        document.getElementById('manufacturerFilter').value = '';
+        document.getElementById('manufacturerFilterDisplay').value = '';
+        document.getElementById('manufacturerFilterDisplay').placeholder = '全て';
+        triggerSearch();
+    }
+    
+    window.openManufacturerModalForFilter = openManufacturerModalForFilter;
+    window.clearManufacturerFilter = clearManufacturerFilter;
+    window.openBulkManufacturerModal = openBulkManufacturerModal;
+    window.openManufacturerModalForBulk = openManufacturerModalForBulk;
+    window.executeBulkManufacturerUpdate = executeBulkManufacturerUpdate;
+    
+    // 検索結果から商品を選択
+    function selectSearchedProduct(productData) {
+        if (currentSearchIndex === null) return;
+        
+        const select = document.querySelector(`select[name="product_match_${currentSearchIndex}"]`);
+        const hiddenInput = document.querySelector(`input[name="product_match_${currentSearchIndex}"]`);
+        
+        if (select) {
+            // selectが存在する場合（通常の候補がある場合）
+            let existingOption = select.querySelector(`option[value="${productData.pk}"]`);
+            if (!existingOption) {
+                const newOption = document.createElement('option');
+                newOption.value = productData.pk;
+                newOption.textContent = `手動 [${productData.pk}] ${productData.product_name.substring(0, 25)}`;
+                newOption.selected = true;
+                
+                // スキップオプションの前に挿入
+                const skipOption = select.querySelector('option[value=""]');
+                select.insertBefore(newOption, skipOption);
+            } else {
+                existingOption.selected = true;
+            }
+            
+            // 商品詳細を更新
+            showProductDetail(currentSearchIndex, productData.pk);
+        } else if (hiddenInput) {
+            // selectが存在しない場合（該当商品なしの場合）
+            // hiddenフィールドに値を設定
+            hiddenInput.value = productData.pk;
+            
+            // マッチング結果エリアを更新して選択された商品を表示
+            const container = document.getElementById(`match_results_${currentSearchIndex}`);
+            if (container) {
+                container.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="small text-success">手動選択済み</div>
+                        <button type="button" class="btn btn-outline-primary btn-sm px-2 py-0" onclick="openProductSearchModal(${currentSearchIndex})" title="商品検索">
+                            🔍 手動照合
+                        </button>
+                    </div>
+                    <div class="small fw-bold mt-1">[${productData.pk}] ${productData.product_name}</div>
+                    <div class="small text-muted">
+                        型式: ${productData.model_number} | 規格: ${productData.specification} | メーカー: ${productData.manufacturer}
+                    </div>
+                    <div class="small text-success">現在仕切価格: ${productData.current_wholesale_price}</div>
+                    <input type="hidden" name="product_match_${currentSearchIndex}" value="${productData.pk}">
+                `;
+            }
+        }
+        
+        // 候補データに追加
+        if (!window.candidatesData[currentSearchIndex]) {
+            window.candidatesData[currentSearchIndex] = [];
+        }
+        
+        // 既存の候補データを更新または追加
+        let existingCandidate = window.candidatesData[currentSearchIndex].find(c => c.product.pk == productData.pk);
+        if (!existingCandidate) {
+            window.candidatesData[currentSearchIndex].unshift({
+                product: productData,
+                score: 0,
+                matched_field: '手動選択',
+                display_info: productData.display_info,
+                manufacturer: productData.manufacturer
+            });
+        }
+        
+        // データベースに保存
+        {% if is_history_view and transaction %}
+        const transactionPk = {{ transaction.pk }};
+        const sequence = currentSearchIndex + 1;
+        
+        fetch('{% url "products_master:ai_extract_update_detail" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                transaction_pk: transactionPk,
+                sequence: sequence,
+                field: 'matched_product',
+                value: productData.pk
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                console.log(`商品選択をデータベースに保存しました: ${productData.pk}`);
+            } else {
+                console.error('データベース保存エラー:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('データベース保存エラー:', error);
+        });
+        {% endif %}
+        
+        // モーダルを閉じる
+        const modal = bootstrap.Modal.getInstance(document.getElementById('productSearchModal'));
+        modal.hide();
+        
+        currentSearchIndex = null;
+    }
+    
+    // 検索入力イベント
+    document.getElementById('productSearchInput').addEventListener('input', function(e) {
+        triggerSearch();
+    });
+    
+    // 絞り込み変更イベント
+    document.getElementById('categoryFilter').addEventListener('change', function(e) {
+        triggerSearch();
+    });
+    
+    document.getElementById('livestockTypeFilter').addEventListener('change', function(e) {
+        triggerSearch();
+    });
+    
+    // メーカーはモーダルで選択するため、changeイベントは不要
+    
+    // 検索トリガー
+    function triggerSearch() {
+        // 前回のタイマーをクリア
+        if (searchTimeout) {
+            clearTimeout(searchTimeout);
+        }
+        
+        // 300ms待ってから検索実行（連続入力対策）
+        searchTimeout = setTimeout(() => {
+            performSearch();
+        }, 300);
+    }
+    
+    // 検索実行
+    function performSearch() {
+        const query = document.getElementById('productSearchInput').value.trim();
+        const categoryId = document.getElementById('categoryFilter').value;
+        const livestockTypeId = document.getElementById('livestockTypeFilter').value;
+        const manufacturerId = document.getElementById('manufacturerFilter').value;
+        
+        // キーワードが空で絞り込みもない場合
+        if (!query && !categoryId && !livestockTypeId && !manufacturerId) {
+            document.getElementById('searchResults').innerHTML = '<div class="text-center text-muted p-3">絞り込み条件を選択するか、キーワードを入力してください</div>';
+            return;
+        }
+        
+        searchProducts(query, categoryId, livestockTypeId, manufacturerId);
+    }
+    
+    // 商品検索実行
+    function searchProducts(query, categoryId, livestockTypeId, manufacturerId) {
+        document.getElementById('searchResults').innerHTML = '<div class="text-center p-3"><div class="spinner-border spinner-border-sm" role="status"></div> 検索中...</div>';
+        
+        const searchData = {
+            query: query || '',
+            category_id: categoryId || null,
+            livestock_type_id: livestockTypeId || null,
+            manufacturer_id: manufacturerId || null
+        };
+        
+        fetch('{% url "products_master:ai_extract_search_products" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify(searchData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                document.getElementById('searchResults').innerHTML = `<div class="text-center text-danger p-3">${data.error}</div>`;
+                return;
+            }
+            
+            const products = data.products || [];
+            if (products.length === 0) {
+                document.getElementById('searchResults').innerHTML = '<div class="text-center text-muted p-3">該当する商品が見つかりません</div>';
+                return;
+            }
+            
+            let html = '';
+            products.forEach(product => {
+                html += `
+                    <div class="border-bottom p-2 product-search-item" style="cursor: pointer;" onclick="selectSearchedProduct(${JSON.stringify(product).replace(/"/g, '&quot;')})">
+                        <div class="fw-bold">[${product.pk}] ${product.product_name}</div>
+                        <div class="small text-muted">
+                            型式: ${product.model_number} | 規格: ${product.specification} | メーカー: ${product.manufacturer}
+                        </div>
+                        <div class="small text-success">現在仕切価格: ${product.current_wholesale_price}</div>
+                    </div>
+                `;
+            });
+            
+            document.getElementById('searchResults').innerHTML = html;
+            
+            // ホバーエフェクトを追加
+            document.querySelectorAll('.product-search-item').forEach(item => {
+                item.addEventListener('mouseenter', function() {
+                    this.style.backgroundColor = '#f8f9fa';
+                });
+                item.addEventListener('mouseleave', function() {
+                    this.style.backgroundColor = '';
+                });
+            });
+        })
+        .catch(error => {
+            document.getElementById('searchResults').innerHTML = `<div class="text-center text-danger p-3">検索エラー: ${error.message}</div>`;
+        });
+    }
+    
+    
+    // 候補データを個別に設定
+    {% for result in results.results %}
+    {% if result.candidates %}
+    window.candidatesData[{{ result.index }}] = [
+        {% for candidate in result.candidates %}
+        {
+            product: {
+                pk: {{ candidate.product.pk }},
+                product_name: "{{ candidate.product.product_name|escapejs }}",
+                model_number: "{{ candidate.product.model_number|default:'-'|escapejs }}",
+                specification: "{{ candidate.product.specification|default:'-'|escapejs }}",
+                manufacturer: "{{ candidate.product.manufacturer|default:'-'|escapejs }}",
+                current_wholesale_price: "{{ candidate.product.current_wholesale_price|default:'-'|escapejs }}"
+            },
+            score: {{ candidate.score }},
+            matched_field: "{{ candidate.matched_field|escapejs }}",
+            display_info: "{{ candidate.display_info|escapejs }}",
+            manufacturer: "{{ candidate.manufacturer|escapejs }}"
+        }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+    ];
+    {% else %}
+    window.candidatesData[{{ result.index }}] = [];
+    {% endif %}
+    {% endfor %}
+    
+    // メーカー一括訂正モーダルを開く
+    function openBulkManufacturerModal() {
+        document.getElementById('bulkManufacturerValue').value = '';
+        document.getElementById('bulkManufacturerDisplay').value = '';
+        
+        const modal = new bootstrap.Modal(document.getElementById('bulkManufacturerModal'));
+        modal.show();
+    }
+    
+    // メーカー選択モーダルを開く（一括訂正用）
+    function openManufacturerModalForBulk() {
+        bulkManufacturerMode = true;
+        
+        const bulkModal = bootstrap.Modal.getInstance(document.getElementById('bulkManufacturerModal'));
+        if (bulkModal) {
+            bulkModal.hide();
+        }
+        
+        setTimeout(() => {
+            const manufacturerModal = new bootstrap.Modal(document.getElementById('manufacturerModal'));
+            manufacturerModal.show();
+        }, 300);
+    }
+    
+    // メーカー一括更新・再照合実行
+    function executeBulkManufacturerUpdate() {
+        const manufacturerName = document.getElementById('bulkManufacturerDisplay').value;
+        
+        if (!manufacturerName) {
+            alert('メーカーを選択してください。');
+            return;
+        }
+        
+        if (!confirm(`全商品のメーカーを「${manufacturerName}」に変更し、再照合しますか？`)) {
+            return;
+        }
+        
+        // モーダルを閉じる
+        const modal = bootstrap.Modal.getInstance(document.getElementById('bulkManufacturerModal'));
+        modal.hide();
+        
+        // 全明細のメーカーを更新（編集モードと表示モード両方）
+        {% for result in results.results %}
+        // 編集モードの入力フィールド
+        const manufacturerInput{{ result.index }} = document.getElementById('manufacturer_{{ result.index }}');
+        if (manufacturerInput{{ result.index }}) {
+            manufacturerInput{{ result.index }}.value = manufacturerName;
+        }
+        
+        // 表示モードの更新
+        const display{{ result.index }} = document.getElementById('display_{{ result.index }}');
+        if (display{{ result.index }}) {
+            const lines = display{{ result.index }}.innerHTML.split('</div>');
+            if (lines.length >= 3) {
+                // メーカー部分（最後の行）を更新
+                lines[2] = `            <div class="small text-muted">${manufacturerName}`;
+                display{{ result.index }}.innerHTML = lines.join('</div>');
+            }
+        }
+        {% endfor %}
+        
+        // 全明細を保存してから再照合
+        const savePromises = [];
+        {% for result in results.results %}
+        savePromises.push(saveBatchEditChanges({{ result.index }}));
+        {% endfor %}
+        
+        Promise.all(savePromises)
+            .then(() => {
+                console.log('メーカー一括更新完了');
+                // 全明細を再照合
+                {% for result in results.results %}
+                setTimeout(() => reMatch({{ result.index }}), {{ result.index|add:1 }} * 200);
+                {% endfor %}
+            })
+            .catch(error => {
+                console.error('メーカー一括更新エラー:', error);
+                alert('メーカー更新に失敗しました: ' + error.message);
+            });
+    }
+    
+    }); // DOMContentLoaded終了
+    
+    // 全明細の編集内容を保存してから申請処理を実行
+    function saveAllBeforeSubmit() {
+        {% if is_history_view %}
+        const form = document.querySelector('form');
+        
+        // 編集モードの値をフォームにhiddenフィールドとして追加
+        {% for result in results.results %}
+        const index{{ result.index }} = {{ result.index }};
+        const productNameInput{{ result.index }} = document.getElementById(`product_name_${index{{ result.index }}}`);
+        const modelNumberInput{{ result.index }} = document.getElementById(`model_number_${index{{ result.index }}}`);
+        const specificationInput{{ result.index }} = document.getElementById(`specification_${index{{ result.index }}}`);
+        const manufacturerInput{{ result.index }} = document.getElementById(`manufacturer_${index{{ result.index }}}`);
+        
+        if (productNameInput{{ result.index }}) {
+            const hiddenName = document.createElement('input');
+            hiddenName.type = 'hidden';
+            hiddenName.name = `extracted_product_name_${index{{ result.index }}}`;
+            hiddenName.value = productNameInput{{ result.index }}.value;
+            form.appendChild(hiddenName);
+        }
+        
+        if (modelNumberInput{{ result.index }}) {
+            const hiddenModel = document.createElement('input');
+            hiddenModel.type = 'hidden';
+            hiddenModel.name = `extracted_model_number_${index{{ result.index }}}`;
+            hiddenModel.value = modelNumberInput{{ result.index }}.value;
+            form.appendChild(hiddenModel);
+        }
+        
+        if (specificationInput{{ result.index }}) {
+            const hiddenSpec = document.createElement('input');
+            hiddenSpec.type = 'hidden';
+            hiddenSpec.name = `extracted_specification_${index{{ result.index }}}`;
+            hiddenSpec.value = specificationInput{{ result.index }}.value;
+            form.appendChild(hiddenSpec);
+        }
+        
+        if (manufacturerInput{{ result.index }}) {
+            const hiddenMfg = document.createElement('input');
+            hiddenMfg.type = 'hidden';
+            hiddenMfg.name = `extracted_manufacturer_${index{{ result.index }}}`;
+            hiddenMfg.value = manufacturerInput{{ result.index }}.value;
+            form.appendChild(hiddenMfg);
+        }
+        {% endfor %}
+        
+        return true; // フォーム送信を続行
+        {% else %}
+        return true; // 通常のフォーム送信
+        {% endif %}
+    }
+    </script>
+{% endblock %}

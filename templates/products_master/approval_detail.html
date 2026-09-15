@@ -1,0 +1,212 @@
+{% extends 'base.html' %}
+{% load price_filters %}
+{% load static %}
+
+{% block title %}{{ approval.product_name }} - 承認詳細 - デジタル価格表システム{% endblock %}
+
+{% block breadcrumb %}
+    {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
+{% endblock %}
+
+{% block content %}
+    {% include 'components/page_header.html' with page_title=approval.product_name page_subtitle="申請内容の確認" %}
+    
+    <div class="container main-content">
+        <div class="row">
+            <!-- 商品基本情報 -->
+            <div class="col-md-8">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">申請内容</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if is_editable %}
+                            <form id="productForm" method="POST">
+                                {% csrf_token %}
+                                <product-basic-info-component 
+                                    product-data='{{ approval|approval_to_json }}'
+                                    form-data='{{ approval|approval_to_json }}'
+                                    livestock-types='{{ livestock_types_json|default:"[]" }}'
+                                    categories='{{ categories_json|default:"[]" }}'
+                                    manufacturers='{{ manufacturers_json|default:"[]" }}'
+                                    editable="true">
+                                </product-basic-info-component>
+                            </form>
+                        {% else %}
+                            <product-basic-info-component 
+                                product-data='{{ approval|approval_to_json }}'
+                                livestock-types='{{ livestock_types_json|default:"[]" }}'
+                                categories='{{ categories_json|default:"[]" }}'
+                                manufacturers='{{ manufacturers_json|default:"[]" }}'
+                                editable="false">
+                            </product-basic-info-component>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- サイドバー -->
+            <div class="col-md-4">
+
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">ユーザ情報</h6>
+                    </div>
+                    <div class="card-body">
+                        <small class="text-muted">
+                            {% if approval.applicant %}
+                                <div><strong>申請者:</strong> {{ approval.applicant }}</div>
+                            {% endif %}
+                        </small>
+                    </div>
+                </div>
+                
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h6 class="mb-0">申請情報</h6>
+                    </div>
+                    <div class="card-body">
+                        <small class="text-muted">
+                            <div>申請日時: {{ approval.created_at|date:"Y/m/d H:i" }}</div>
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 価格履歴 -->
+        <div class="row mt-4">
+            <div class="col-12">
+                {% include 'components/price_history_section.html' with section_title="申請価格履歴" show_diff_note=not_is_new_product show_add_button=is_editable histories_json=price_histories|approval_histories_to_json mode=is_editable|yesno:"approval_edit,approval" show_diff=True editable=is_editable %}
+            </div>
+        </div>
+    </div>
+
+    <!-- ボトムアクションバー -->
+    {% include 'components/bottom_action_bar.html' with action_type='approval_detail' %}
+
+    <!-- 送料詳細モーダル -->
+    <div class="modal fade" id="shippingFeeModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">送料詳細</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="shippingFeeContent" style="white-space: pre-wrap;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- メーカー選択モーダル -->
+    {% include 'components/manufacturer_modal.html' %}
+
+    <!-- 承認・却下・取消フォーム -->
+    <form id="approveForm" method="POST" action="{% url 'products_master:approve_application' approval.pk %}" style="display: none;">
+        {% csrf_token %}
+    </form>
+    <form id="rejectForm" method="POST" action="{% url 'products_master:reject_application' approval.pk %}" style="display: none;">
+        {% csrf_token %}
+    </form>
+    <form id="cancelForm" method="POST" action="{% url 'products_master:cancel_application' approval.pk %}" style="display: none;">
+        {% csrf_token %}
+    </form>
+
+    <script>
+
+    // 送料モーダル表示関数
+    window.showShippingFeeModal = function(shippingFeeText) {
+        const content = document.getElementById('shippingFeeContent');
+        if (content) {
+            // \\n を実際の改行に変換し、改行コードを正規化
+            let cleanText = shippingFeeText.replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
+            const lines = cleanText.split('\n');
+            while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+                lines.pop();
+            }
+            cleanText = lines.join('\n');
+            content.textContent = cleanText;
+            const modalElement = document.getElementById('shippingFeeModal');
+            if (modalElement) {
+                const modal = new bootstrap.Modal(modalElement);
+                modal.show();
+            }
+        }
+    };
+    
+    // 承認処理
+    window.acceptApplication = function() {
+        if (confirm('この申請を承認しますか？')) {
+            document.getElementById('approveForm').submit();
+        }
+    }
+    
+    // 申請却下処理
+    window.rejectApplication = function() {
+        if (confirm('この申請を却下しますか？（再申請待ちに変更）')) {
+            document.getElementById('rejectForm').submit();
+        }
+    }
+    
+    // 申請取消処理
+    window.cancelApplication = function() {
+        if (confirm('この申請を取消しますか？')) {
+            document.getElementById('cancelForm').submit();
+        }
+    }
+    
+    // 保存処理
+    window.handleSave = function(event) {
+        event.preventDefault();
+        const form = document.getElementById('productForm');
+        const formData = new FormData(form);
+        
+        fetch(form.action || window.location.href, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                // Web Componentのデータを更新
+                const component = document.querySelector('product-basic-info-component');
+                if (component) {
+                    const currentFormData = {};
+                    const inputs = form.querySelectorAll('input, textarea');
+                    inputs.forEach(input => {
+                        if (input.name) {
+                            currentFormData[input.name] = input.value;
+                        }
+                    });
+                    component.setAttribute('product-data', JSON.stringify(currentFormData));
+                    component.setAttribute('form-data', JSON.stringify(currentFormData));
+                }
+            } else {
+                alert('エラー: ' + (data.message || '保存に失敗しました'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('エラーが発生しました');
+        });
+        
+        return false;
+    }
+    </script>
+
+{% endblock %}
+
+{% block extra_js %}
+    <script src="{% static 'js/gross-margin-utils.js' %}"></script>
+    <script src="{% static 'js/components/product-basic-info-component.js' %}"></script>
+    <script src="{% static 'js/components/price-history-component.js' %}"></script>
+{% endblock %}

@@ -1,0 +1,247 @@
+{% extends 'base.html' %}
+
+{% block title %}商品一覧 - デジタル価格表システム{% endblock %}
+
+{% block breadcrumb %}
+    {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
+{% endblock %}
+
+{% block content %}
+    {% url 'products_master:ai_extract' as ai_extract_url %}
+    {% include 'components/page_header.html' with page_title="商品一覧" page_subtitle="登録されている商品の一覧" header_actions='<a href="'|add:ai_extract_url|add:'" class="btn btn-warning me-2">🤖 AI価格抽出</a><a href="/products/new/" class="btn btn-primary">新規登録</a>' %}
+    
+    <div class="container">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <!-- 検索フォームと表示切り替え -->
+        <div class="row mb-4">
+            <div class="col-md-8">
+                <search-form-component 
+                    search-query="{{ search_query }}"
+                    placeholder="商品名、メーカー、商品コードで検索"
+                    clear-url="{% url 'products_master:product_list' %}">
+                </search-form-component>
+            </div>
+            <div class="col-md-4 text-end">
+                <div class="btn-group" role="group">
+                    <a href="?show_deleted=false{% if search_query %}&search={{ search_query }}{% endif %}" 
+                       class="btn {% if not show_deleted %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                        有効商品
+                    </a>
+                    <a href="?show_deleted=true{% if search_query %}&search={{ search_query }}{% endif %}" 
+                       class="btn {% if show_deleted %}btn-danger{% else %}btn-outline-danger{% endif %}">
+                        削除済み
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                {% if page_obj %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th style="min-width: 80px;">商品番号</th>
+                                    <th style="min-width: 100px;">商品コード</th>
+                                    <th style="min-width: 200px;">商品名</th>
+                                    <th style="min-width: 60px;">畜種</th>
+                                    <th style="min-width: 60px;">分類</th>
+                                    <th style="min-width: 120px;">メーカー</th>
+                                    <th style="min-width: 80px;">発送単位</th>
+                                    <th style="min-width: 200px;">操作</th>
+                                    <th style="min-width: 100px;">ステータス</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for product in page_obj %}
+                                    <tr {% if show_deleted %}class="table-danger"{% endif %}>
+                                        <td>{{ product.pk }}</td>
+                                        <td>{{ product.product_code|default:"未設定" }}</td>
+                                        <td>
+                                            <a href="{% url 'products_master:product_detail' product.pk %}" class="text-decoration-none">
+                                                {{ product.product_name }}
+                                            </a>
+                                            {% if show_deleted %}
+                                                <span class="badge bg-danger ms-2">削除済み</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ product.livestock_type|default:"-" }}</td>
+                                        <td>{{ product.category|default:"-" }}</td>
+                                        <td>{{ product.manufacturer|default:"-" }}</td>
+                                        <td>{{ product.shipping_unit|default:"-" }}</td>
+                                        <td style="white-space: nowrap; min-width: 200px;">
+                                            <div class="btn-group btn-group-sm">
+                                                {% if not show_deleted %}
+                                                    <a href="{% url 'products_master:product_detail' product.pk %}" class="btn btn-outline-primary">詳細</a>
+                                                    <a href="{% url 'products_master:product_copy' product.pk %}" class="btn btn-outline-success">コピー</a>
+                                                    <a href="{% url 'products_master:product_delete' product.pk %}" class="btn btn-outline-danger">削除</a>
+                                                {% else %}
+                                                    <button type="button" class="btn btn-outline-success" onclick="toggleProductStatus({{ product.pk }}, '復元')"
+                                                            data-bs-toggle="tooltip" title="商品を復元します">復元</button>
+                                                {% endif %}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            {% if show_deleted %}
+                                                {% if product.status and product.status != '' %}
+                                                    <span class="badge bg-warning">申請中</span>
+                                                    <small class="text-muted d-block">削除日: {{ product.deleted_at|date:"Y/m/d H:i" }}</small>
+                                                {% else %}
+                                                    <span class="badge bg-danger">削除済み</span>
+                                                    <small class="text-muted d-block">削除日: {{ product.deleted_at|date:"Y/m/d H:i" }}</small>
+                                                {% endif %}
+                                            {% elif product.status and product.status != '' %}
+                                                <span class="badge bg-warning">申請中</span>
+                                            {% else %}
+                                                <span class="badge bg-success">申請なし</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- ページネーション -->
+                    {% if page_obj.has_other_pages %}
+                        <nav aria-label="商品一覧ページネーション" class="mt-4">
+                            <ul class="pagination justify-content-center">
+                                <!-- 最初へ -->
+                                {% if page_obj.has_previous %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page=1{% if search_query %}&search={{ search_query|urlencode }}{% endif %}{% if show_deleted %}&show_deleted={{ show_deleted }}{% endif %}">&laquo;</a>
+                                    </li>
+                                {% endif %}
+                                
+                                <!-- 前へ -->
+                                {% if page_obj.has_previous %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search_query %}&search={{ search_query|urlencode }}{% endif %}{% if show_deleted %}&show_deleted={{ show_deleted }}{% endif %}">&lsaquo;</a>
+                                    </li>
+                                {% endif %}
+                                
+                                <!-- ページ番号 -->
+                                {% with page_obj.paginator.num_pages as total_pages %}
+                                {% with page_obj.number as current_page %}
+                                    
+                                    <!-- 最初の方のページ -->
+                                    {% if current_page > 4 %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page=1{% if search_query %}&search={{ search_query|urlencode }}{% endif %}{% if show_deleted %}&show_deleted={{ show_deleted }}{% endif %}">1</a>
+                                        </li>
+                                        {% if current_page > 5 %}
+                                            <li class="page-item disabled">
+                                                <span class="page-link">...</span>
+                                            </li>
+                                        {% endif %}
+                                    {% endif %}
+                                    
+                                    <!-- 現在ページ周辺 -->
+                                    {% for page_num in page_obj.paginator.page_range %}
+                                        {% if page_num >= current_page|add:"-2" and page_num <= current_page|add:"2" %}
+                                            {% if page_num == current_page %}
+                                                <li class="page-item active">
+                                                    <span class="page-link">{{ page_num }}</span>
+                                                </li>
+                                            {% else %}
+                                                <li class="page-item">
+                                                    <a class="page-link" href="?page={{ page_num }}{% if search_query %}&search={{ search_query|urlencode }}{% endif %}{% if show_deleted %}&show_deleted={{ show_deleted }}{% endif %}">{{ page_num }}</a>
+                                                </li>
+                                            {% endif %}
+                                        {% endif %}
+                                    {% endfor %}
+                                    
+                                    <!-- 最後の方のページ -->
+                                    {% if current_page < total_pages|add:"-3" %}
+                                        {% if current_page < total_pages|add:"-4" %}
+                                            <li class="page-item disabled">
+                                                <span class="page-link">...</span>
+                                            </li>
+                                        {% endif %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page={{ total_pages }}{% if search_query %}&search={{ search_query|urlencode }}{% endif %}{% if show_deleted %}&show_deleted={{ show_deleted }}{% endif %}">{{ total_pages }}</a>
+                                        </li>
+                                    {% endif %}
+                                    
+                                {% endwith %}
+                                {% endwith %}
+                                
+                                <!-- 次へ -->
+                                {% if page_obj.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search_query %}&search={{ search_query|urlencode }}{% endif %}{% if show_deleted %}&show_deleted={{ show_deleted }}{% endif %}">&rsaquo;</a>
+                                    </li>
+                                {% endif %}
+                                
+                                <!-- 最後へ -->
+                                {% if page_obj.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&search={{ search_query|urlencode }}{% endif %}{% if show_deleted %}&show_deleted={{ show_deleted }}{% endif %}">&raquo;</a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    {% endif %}
+                {% else %}
+                    <div class="text-center py-5">
+                        <div class="mb-3" style="font-size: 3rem; color: #6c757d;">📦</div>
+                        {% if show_deleted %}
+                            <h5 class="text-muted">削除済み商品がありません</h5>
+                            <p class="text-muted">削除済みの商品はありません。</p>
+                        {% else %}
+                            <h5 class="text-muted">商品が登録されていません</h5>
+                            <p class="text-muted">最初の商品を登録してください。</p>
+                            <a href="{% url 'products_master:product_new' %}" class="btn btn-primary">新規登録</a>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Webコンポーネント読み込み -->
+    {% load static %}
+    <script src="{% static 'js/components/search-form-component.js' %}"></script>
+    
+    <script>
+    function toggleProductStatus(productId, action) {
+        if (!confirm(`商品の${action}申請を作成しますか？`)) {
+            return;
+        }
+        
+        fetch(`/products/products/${productId}/toggle-status/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                location.reload();
+            } else {
+                alert('エラーが発生しました: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('エラーが発生しました: ' + error);
+        });
+    }
+    </script>
+    
+    <!-- CSRFトークン -->
+    {% csrf_token %}
+    
+
+{% endblock %}

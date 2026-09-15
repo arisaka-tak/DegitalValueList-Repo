@@ -1,0 +1,95 @@
+<!-- ボトムアクションバー共通部品 -->
+<div class="bottom-action-bar">
+    <div class="container">
+        <div class="bottom-action-content">
+            {% if action_type == 'product_detail' %}
+                <!-- 商品詳細画面 -->
+                <div class="d-flex justify-content-between align-items-center w-100">
+                    <div style="width: 60px;"></div> <!-- 左側スペーサー -->
+                    <div class="d-flex gap-2">
+                        {% if not is_new %}
+                            <a href="{% url 'products_master:product_copy' product.pk %}" class="btn btn-outline-primary btn-sm">コピー作成</a>
+                        {% endif %}
+                        <button type="submit" 
+                                form="productForm"
+                                formmethod="post"
+                                class="btn btn-success btn-sm"
+                                onclick="return submitApplication(this)">申請</button>
+                        {% if request.GET.from == 'pricelist' %}
+                            <button type="button" onclick="history.back()" class="btn btn-outline-secondary btn-sm">価格表に戻る</button>
+                        {% else %}
+                            <button type="button" onclick="history.back()" class="btn btn-outline-secondary btn-sm">戻る</button>
+                        {% endif %}
+                    </div>
+                    {% if not is_new %}
+                        <a href="{% url 'products_master:product_delete' product.pk %}" class="btn btn-danger btn-sm">削除</a>
+                    {% else %}
+                        <div style="width: 60px;"></div> <!-- 右側スペーサー -->
+                    {% endif %}
+                </div>
+            
+            {% elif action_type == 'approval_detail' %}
+                <!-- 承認詳細画面 -->
+                <div class="d-flex justify-content-between align-items-center w-100">
+                    <div style="width: 60px;"></div> <!-- 左側スペーサー -->
+                    <div class="d-flex gap-2">
+                        {% if is_editable %}
+                            <!-- 再申請待ちの場合 -->
+                            <button type="submit" form="productForm" class="btn btn-outline-primary btn-sm" onclick="return handleSave(event)">一時保存</button>
+                            <button type="submit" form="productForm" name="submit_approval" value="1" class="btn btn-success btn-sm">申請</button>
+                            <a href="{% url 'products_master:approval_list' %}" class="btn btn-outline-secondary btn-sm">一覧に戻る</a>
+                        {% else %}
+                            <!-- 通常の申請の場合 -->
+                            <button onclick="acceptApplication()" class="btn btn-success btn-sm">承認</button>
+                            <button onclick="rejectApplication()" class="btn btn-warning btn-sm">却下</button>
+                            <a href="{% url 'products_master:approval_list' %}" class="btn btn-outline-secondary btn-sm">一覧に戻る</a>
+                        {% endif %}
+                    </div>
+                    <button onclick="cancelApplication()" class="btn btn-danger btn-sm">申請取消</button>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+/* メインコンテンツ領域 */
+.main-content {
+    padding-bottom: 80px;
+}
+
+/* 固定ボトムバー */
+.bottom-action-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1050;
+    background: white;
+    border-top: 1px solid #dee2e6;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+    padding: 12px 0;
+}
+
+.bottom-action-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+    .main-content {
+        padding-bottom: 100px;
+    }
+    
+    .bottom-action-bar {
+        padding: 16px 0;
+    }
+    
+    .bottom-action-content {
+        gap: 8px;
+    }
+}
+</style>

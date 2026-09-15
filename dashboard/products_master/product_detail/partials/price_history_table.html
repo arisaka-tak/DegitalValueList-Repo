@@ -1,0 +1,21 @@
+{% load price_filters %}
+<div class="table-responsive">
+    <table class="table table-sm" id="priceHistoryTable">
+        <thead>
+            <tr>
+                <th>年度</th>
+                <th>適用年月</th>
+                <th>仕切価格</th>
+                <th>県連価格</th>
+                <th>粗利率</th>
+                <th>改定額</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for history in price_histories %}
+                {% include 'products_master/partials/price_history_row.html' %}
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

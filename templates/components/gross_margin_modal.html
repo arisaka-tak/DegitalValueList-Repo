@@ -1,0 +1,219 @@
+<!-- 粗利率管理モーダル -->
+<div class="modal fade" id="grossMarginModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">粗利率管理</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="grossMarginContent">
+                    <div class="text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">読み込み中...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+                <button type="button" class="btn btn-primary" onclick="saveGrossMargins()">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// モーダル表示時に粗利率データを読み込み
+document.getElementById('grossMarginModal').addEventListener('show.bs.modal', function() {
+    loadGrossMargins();
+});
+
+function loadGrossMargins() {
+    const pathParts = window.location.pathname.split('/').filter(p => p);
+    // products/products/59/ または products/products/59/submit-approval/ から59を取得
+    let productId = null;
+    for (let i = 0; i < pathParts.length; i++) {
+        if (pathParts[i] === 'products' && pathParts[i+1] === 'products' && pathParts[i+2]) {
+            productId = pathParts[i+2];
+            break;
+        }
+    }
+    
+    console.log('Loading gross margins for product ID:', productId);
+    
+    fetch(`/products/api/gross-margins/${productId}/`)
+        .then(response => {
+            console.log('Response status:', response.status);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Gross margin data:', data);
+            renderGrossMarginTable(data);
+        })
+        .catch(error => {
+            console.error('Error loading gross margins:', error);
+            document.getElementById('grossMarginContent').innerHTML = 
+                `<div class="alert alert-danger">データの読み込みに失敗しました: ${error.message}</div>`;
+        });
+}
+
+function renderGrossMarginTable(margins) {
+    const content = `
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>年度</th>
+                    <th>粗利率</th>
+                    <th>算定根拠</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${margins.map(margin => `
+                    <tr data-period-year="${margin.period_year}">
+                        <td>${margin.period_year}年度</td>
+                        <td>
+                            <input type="number" class="form-control form-control-sm gross-margin-input" 
+                                   value="${((1 - margin.gross_margin_rate) * 100).toFixed(1)}" 
+                                   step="0.1" min="0" max="100"
+                                   data-period-year="${margin.period_year}">
+                            <small class="text-muted">%</small>
+                        </td>
+                        <td>
+                            <small class="text-muted">
+                                ${margin.calculation_note || '手動設定'}
+                            </small>
+                        </td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-outline-danger" 
+                                    onclick="deleteGrossMargin(${margin.period_year})">削除</button>
+                        </td>
+                    </tr>
+                `).join('')}
+                <tr>
+                    <td>
+                        <input type="number" class="form-control form-control-sm" 
+                               id="newPeriodYear" placeholder="年度" min="2020" max="2030">
+                    </td>
+                    <td>
+                        <input type="number" class="form-control form-control-sm" 
+                               id="newGrossMargin" placeholder="粗利率" step="0.1" min="0" max="100">
+                        <small class="text-muted">%</small>
+                    </td>
+                    <td>
+                        <small class="text-muted">手動設定</small>
+                    </td>
+                    <td>
+                        <button type="button" class="btn btn-sm btn-outline-primary" 
+                                onclick="addGrossMargin()">追加</button>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    `;
+    
+    document.getElementById('grossMarginContent').innerHTML = content;
+}
+
+function addGrossMargin() {
+    const periodYear = document.getElementById('newPeriodYear').value;
+    const grossMargin = document.getElementById('newGrossMargin').value;
+    
+    if (!periodYear || !grossMargin) {
+        alert('年度と粗利率を入力してください');
+        return;
+    }
+    
+    // 既存行をチェック
+    if (document.querySelector(`tr[data-period-year="${periodYear}"]`)) {
+        alert('この年度は既に存在します');
+        return;
+    }
+    
+    // 新しい行を追加
+    const tbody = document.querySelector('#grossMarginContent tbody');
+    const newRow = document.createElement('tr');
+    newRow.setAttribute('data-period-year', periodYear);
+    newRow.innerHTML = `
+        <td>${periodYear}年度</td>
+        <td>
+            <input type="number" class="form-control form-control-sm gross-margin-input" 
+                   value="${grossMargin}" step="0.1" min="0" max="100"
+                   data-period-year="${periodYear}">
+            <small class="text-muted">%</small>
+        </td>
+        <td>
+            <small class="text-muted">手動設定</small>
+        </td>
+        <td>
+            <button type="button" class="btn btn-sm btn-outline-danger" 
+                    onclick="deleteGrossMargin(${periodYear})">削除</button>
+        </td>
+    `;
+    
+    tbody.insertBefore(newRow, tbody.lastElementChild);
+    
+    // 入力フィールドをクリア
+    document.getElementById('newPeriodYear').value = '';
+    document.getElementById('newGrossMargin').value = '';
+}
+
+function deleteGrossMargin(periodYear) {
+    if (confirm(`${periodYear}年度の粗利率を削除しますか？`)) {
+        document.querySelector(`tr[data-period-year="${periodYear}"]`).remove();
+    }
+}
+
+function saveGrossMargins() {
+    const pathParts = window.location.pathname.split('/').filter(p => p);
+    // products/products/59/ または products/products/59/submit-approval/ から59を取得
+    let productId = null;
+    for (let i = 0; i < pathParts.length; i++) {
+        if (pathParts[i] === 'products' && pathParts[i+1] === 'products' && pathParts[i+2]) {
+            productId = pathParts[i+2];
+            break;
+        }
+    }
+    const margins = [];
+    
+    document.querySelectorAll('.gross-margin-input').forEach(input => {
+        const periodYear = input.dataset.periodYear;
+        const grossMarginPercent = parseFloat(input.value);
+        const grossMarginRate = 1 - (grossMarginPercent / 100); // %を倍率に変換（正しい式）
+        
+        margins.push({
+            period_year: parseInt(periodYear),
+            gross_margin_rate: grossMarginRate
+        });
+    });
+    
+    fetch(`/products/api/gross-margins/${productId}/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({margins: margins})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('粗利率を保存しました');
+            // モーダルを閉じる
+            bootstrap.Modal.getInstance(document.getElementById('grossMarginModal')).hide();
+            // ページをリロードして反映
+            location.reload();
+        } else {
+            alert('保存に失敗しました: ' + (data.error || '不明なエラー'));
+        }
+    })
+    .catch(error => {
+        alert('保存に失敗しました');
+        console.error('Error:', error);
+    });
+}
+</script>

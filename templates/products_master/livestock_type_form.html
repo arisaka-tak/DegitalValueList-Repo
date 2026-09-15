@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if livestock_type %}畜種編集{% else %}畜種新規作成{% endif %} - デジタル価格表システム{% endblock %}
+
+{% block breadcrumb %}
+    {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
+{% endblock %}
+
+{% block content %}
+    {% include 'components/page_header.html' with page_title=livestock_type.name|default:"新規畜種" page_subtitle="畜種の編集" %}
+    
+    <div class="container main-content">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">{% if livestock_type %}畜種編集{% else %}畜種新規作成{% endif %}</h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="post">
+                            {% csrf_token %}
+                            <div class="mb-3">
+                                <label for="name" class="form-label">畜種名 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="name" name="name" value="{{ livestock_type.name|default:'' }}" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="sort_order" class="form-label">表示順</label>
+                                <input type="number" class="form-control" id="sort_order" name="sort_order" value="{{ livestock_type.sort_order|default:0 }}">
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <a href="{% url 'products_master:livestock_type_list' %}" class="btn btn-secondary">戻る</a>
+                                <button type="submit" class="btn btn-primary">保存</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

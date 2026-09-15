@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ product.product_name }} - 削除申請 - デジタル価格表システム{% endblock %}
+
+{% block breadcrumb %}
+    {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
+{% endblock %}
+
+{% block content %}
+    {% include 'components/page_header.html' with page_title="商品削除申請" page_subtitle="以下の商品の削除申請を行いますか？" %}
+    
+    <div class="container">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header bg-danger text-white">
+                        <h5 class="mb-0">⚠️ 削除申請</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-warning">
+                            <strong>注意:</strong> この操作は商品の削除申請を行います。承認されると商品が削除されます。
+                        </div>
+
+                        <!-- 商品情報表示 -->
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label text-muted">商品番号</label>
+                                    <div class="fw-bold">{{ product.product_number }}</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label text-muted">商品名</label>
+                                    <div class="fw-bold">{{ product.product_name }}</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label text-muted">畜種</label>
+                                    <div>{{ product.livestock_type }}</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label text-muted">分類</label>
+                                    <div>{{ product.category }}</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label text-muted">メーカー</label>
+                                    <div>{{ product.manufacturer }}</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label text-muted">発送単位</label>
+                                    <div>{{ product.shipping_unit }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 価格履歴件数 -->
+                        <div class="mb-3">
+                            <label class="form-label text-muted">関連する価格履歴</label>
+                            <div>{{ product.price_histories.count }}件</div>
+                        </div>
+
+                        <form method="post" class="mt-4">
+                            {% csrf_token %}
+                            <div class="d-flex justify-content-between">
+                                <a href="{% url 'products_master:product_list' %}" class="btn btn-secondary">
+                                    キャンセル
+                                </a>
+                                <button type="submit" class="btn btn-danger">
+                                    削除申請
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 代替案の提案 -->
+                <!--
+                <div class="card mt-4">
+                    <div class="card-body">
+                        <h6 class="card-title">💡 代替案</h6>
+                        <p class="card-text text-muted">
+                            商品情報を変更したい場合は、削除ではなく<strong>コピー機能</strong>を使用して新しい商品番号で作成することをお勧めします。
+                        </p>
+                        <a href="{% url 'products_master:product_copy' product.pk %}" class="btn btn-outline-primary">
+                            コピーして新規作成
+                        </a>
+                    </div>
+                </div>
+                -->
+            </div>
+        </div>
+    </div>
+{% endblock %}

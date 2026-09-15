@@ -1,0 +1,456 @@
+#!/usr/bin/env python
+"""
+AI抽出バッチ処理スクリプト
+指定フォルダのPDFを自動処理してAI抽出結果をデータベースに保存
+"""
+import os
+import sys
+import tempfile
+import shutil
+import uuid
+import configparser
+import logging
+import traceback
+from datetime import datetime
+from pathlib import Path
+
+# プロジェクトルートを追加
+project_root = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(project_root)
+
+# Django設定
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'digital_pricelist_system.settings')
+import django
+django.setup()
+
+from dashboard.products_master.pdf_processing.extract_di_only import main as extract_di_main
+from dashboard.products_master.pdf_processing.process_ai_simple import main as process_ai_main
+from dashboard.products_master.ai_extract_models import AIExtractTransaction, AIExtractTransactionDetail
+from dashboard.products_master.ai_services import process_extraction_results
+from dashboard.products_master.models import Product
+from dashboard.products_master.ai_services import get_master_data
+from django.core.files.base import ContentFile
+
+from digital_pricelist_system.config_paths import CONFIG_PATH
+
+def validate_config_paths():
+    """設定ファイルのパスを検証"""
+    if not CONFIG_PATH.exists():
+        print(f"❗ エラー: 設定ファイルが見つかりません: {CONFIG_PATH}")
+        sys.exit(1)
+    
+    config = configparser.ConfigParser()
+    config.read(CONFIG_PATH, encoding='utf-8')
+    
+    # バッチ処理用フォルダチェック
+    watch_folder = config.get('AI_BATCH', 'watch_folder', fallback=r'C:\S3\batch_input')
+    error_folder = config.get('AI_BATCH', 'error_folder', fallback=r'C:\S3\batch_error')
+    
+    if not Path(watch_folder).exists():
+        print(f"❗ エラー: 監視フォルダが見つかりません: {watch_folder}")
+        print("config.iniの[AI_BATCH]watch_folder設定を確認してください")
+        sys.exit(1)
+    
+    if not Path(error_folder).exists():
+        print(f"❗ エラー: エラーフォルダが見つかりません: {error_folder}")
+        print("config.iniの[AI_BATCH]error_folder設定を確認してください")
+        sys.exit(1)
+    
+    # データベースファイルチェック
+    db_path = config.get('DATABASE', 'path', fallback='db.sqlite3')
+    if not Path(db_path).exists():
+        print(f"❗ エラー: データベースファイルが見つかりません: {db_path}")
+        print("config.iniの[DATABASE]path設定を確認してください")
+        sys.exit(1)
+
+def load_config():
+    """設定ファイルを読み込み"""
+    config = configparser.ConfigParser()
+    
+    # デフォルト値
+    defaults = {
+        'watch_folder': r'C:\S3\batch_input',
+        'error_folder': r'C:\S3\batch_error',
+        'completed_folder': r'C:\S3\batch_completed',
+        'media_root': 'media',
+        'http_proxy': '',
+        'https_proxy': '',
+        'proxy_auth': '',
+        'pac_url': ''
+    }
+    
+    if CONFIG_PATH.exists():
+        try:
+            config.read(CONFIG_PATH, encoding='utf-8')
+            watch_folder = config.get('AI_BATCH', 'watch_folder', fallback=defaults['watch_folder'])
+            error_folder = config.get('AI_BATCH', 'error_folder', fallback=defaults['error_folder'])
+            completed_folder = config.get('AI_BATCH', 'completed_folder', fallback=defaults['completed_folder'])
+            media_root = config.get('FILES', 'media_root', fallback=defaults['media_root'])
+            http_proxy = config.get('PROXY', 'http_proxy', fallback=defaults['http_proxy'])
+            https_proxy = config.get('PROXY', 'https_proxy', fallback=defaults['https_proxy'])
+            proxy_auth = config.get('PROXY', 'proxy_auth', fallback=defaults['proxy_auth'])
+            pac_url = config.get('PROXY', 'pac_url', fallback=defaults['pac_url'])
+            return watch_folder, error_folder, completed_folder, media_root, http_proxy, https_proxy, proxy_auth, pac_url
+        except Exception:
+            pass
+    
+    return defaults['watch_folder'], defaults['error_folder'], defaults['completed_folder'], defaults['media_root'], defaults['http_proxy'], defaults['https_proxy'], defaults['proxy_auth'], defaults['pac_url']
+
+def setup_proxy_environment(http_proxy, https_proxy, proxy_auth):
+    """プロキシ環境変数を設定"""
+    if http_proxy:
+        clean_proxy = http_proxy.replace('http://', '').replace('https://', '')
+        if proxy_auth:
+            proxy_url = f"http://{proxy_auth}@{clean_proxy}"
+        else:
+            proxy_url = f"http://{clean_proxy}"
+        
+        # 環境変数に設定（テスト失敗でも削除しない）
+        os.environ['HTTP_PROXY'] = proxy_url
+        os.environ['HTTPS_PROXY'] = proxy_url
+        print(f"プロキシ設定完了: {clean_proxy}")
+    else:
+        print("プロキシ設定なし")
+    
+    print(f"環境変数: HTTP_PROXY={os.environ.get('HTTP_PROXY', 'なし')}, HTTPS_PROXY={os.environ.get('HTTPS_PROXY', 'なし')}")
+
+# 設定読み込み
+WATCH_FOLDER, ERROR_FOLDER, COMPLETED_FOLDER, MEDIA_ROOT, HTTP_PROXY, HTTPS_PROXY, PROXY_AUTH, PAC_URL = load_config()
+
+def ensure_folders():
+    """必要なフォルダを作成"""
+    try:
+        for folder in [WATCH_FOLDER, ERROR_FOLDER, COMPLETED_FOLDER]:
+            Path(folder).mkdir(parents=True, exist_ok=True)
+        # logフォルダをinputフォルダの下に作成
+        log_folder = Path(WATCH_FOLDER) / "log"
+        log_folder.mkdir(exist_ok=True)
+        print(f"フォルダ作成完了")
+        return log_folder
+    except Exception as e:
+        print(f"フォルダ作成エラー: {e}")
+        sys.exit(1)
+
+def process_pdf_file(pdf_path, prepared_master):
+    """単一PDFファイルを処理"""
+    logger = logging.getLogger(__name__)
+    logger.info(f"処理開始: {pdf_path}")
+    print(f"処理開始: {pdf_path}")
+    
+    try:
+        # 一時ファイルパス
+        temp_dir = tempfile.gettempdir()
+        di_result_path = os.path.join(temp_dir, f"batch_di_{os.getpid()}_{uuid.uuid4().hex[:8]}.pkl")
+        ai_result_path = os.path.join(temp_dir, f"batch_ai_{os.getpid()}_{uuid.uuid4().hex[:8]}.json")
+        
+        # Document Intelligence処理
+        logger.info("  Document Intelligence処理中...")
+        print("  Document Intelligence処理中...")
+        extract_di_main(str(pdf_path), di_result_path)
+        logger.info("  Document Intelligence処理完了")
+        print("  Document Intelligence処理完了")
+        
+        # AI解析処理
+        logger.info("  AI解析処理中...")
+        print("  AI解析処理中...")
+        ai_results = process_ai_main(di_result_path, ai_result_path)
+        logger.info(f"  AI解析結果: {ai_results is not None}")
+        print(f"  AI解析結果: {ai_results is not None}")
+        
+        if ai_results is None:
+            logger.warning("  AI解析がNoneを返しました")
+            print("  AI解析がNoneを返しました")
+            return False
+        
+        products = ai_results.get('products', [])
+        logger.info(f"  抽出された商品数: {len(products)}")
+        print(f"  抽出された商品数: {len(products)}")
+        
+        if not products:
+            logger.warning("  商品情報が抽出できませんでした")
+            print("  商品情報が抽出できませんでした")
+            return False
+        
+        # トランザクション作成
+        logger.info("  トランザクション作成中...")
+        print("  トランザクション作成中...")
+        transaction_id = f"BATCH_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+        
+        document_metadata = ai_results.get('document_metadata', {})
+        sender = document_metadata.get('sender', '')
+        reason = document_metadata.get('reason', 'バッチ処理によるAI抽出')
+        logger.info(f"  送信元: {sender}, 理由: {reason}")
+        print(f"  送信元: {sender}, 理由: {reason}")
+        
+        # PDFファイルを読み込み
+        logger.info("  PDFファイル読み込み中...")
+        print("  PDFファイル読み込み中...")
+        with open(pdf_path, 'rb') as f:
+            pdf_content = f.read()
+        logger.info(f"  PDFサイズ: {len(pdf_content)} bytes")
+        print(f"  PDFサイズ: {len(pdf_content)} bytes")
+        
+        logger.info("  データベースにトランザクション保存中...")
+        print("  データベースにトランザクション保存中...")
+        match_transaction = AIExtractTransaction.objects.create(
+            transaction_id=transaction_id,
+            executor='batch_system',
+            effective_year_month='',
+            revision_reason=reason,
+            remarks=f"バッチ処理 - {pdf_path.name} (送信元: {sender})",
+            uploaded_pdf=ContentFile(pdf_content, name=pdf_path.name),
+            total_products=len(ai_results['products']),
+            status='照合中'
+        )
+        logger.info(f"  トランザクションID: {transaction_id}")
+        print(f"  トランザクションID: {transaction_id}")
+        
+        # PDF保存パスをログ出力
+        logger.info(f"  PDF保存パス: {match_transaction.uploaded_pdf.path}")
+        print(f"  PDF保存パス: {match_transaction.uploaded_pdf.path}")
+        
+        # 商品照合処理
+        logger.info("  商品照合処理中...")
+        print("  商品照合処理中...")
+        json_data = {
+            'document_metadata': document_metadata,
+            'products': [
+                {
+                    'product_name': entity.get('name'),
+                    'new_price': entity.get('price'),
+                    'model_number': entity.get('model'),
+                    'manufacturer': sender if sender else None,
+                    'specification': entity.get('spec')
+                }
+                for entity in ai_results['products']
+            ]
+        }
+        logger.info(f"  照合対象商品数: {len(json_data['products'])}")
+        print(f"  照合対象商品数: {len(json_data['products'])}")
+        
+        results = process_extraction_results(json_data, prepared_master)
+        logger.info(f"  照合結果: {results is not None}")
+        print(f"  照合結果: {results is not None}")
+        
+        if results is None:
+            logger.error("  商品照合処理が失敗しました")
+            print("  商品照合処理が失敗しました")
+            return False
+        
+        # 照合結果を明細テーブルに保存
+        logger.info("  明細データ保存中...")
+        print("  明細データ保存中...")
+        results_list = results.get('results', [])
+        logger.info(f"  保存対象明細数: {len(results_list)}")
+        print(f"  保存対象明細数: {len(results_list)}")
+
+        detail_objects = []
+        for i, result in enumerate(results_list):
+            extracted_data = result.get('extracted_data', {})
+            candidates = result.get('candidates', [])
+            
+            matched_product = None
+            match_score = None
+            if candidates:
+                best_candidate = candidates[0]
+                matched_product_id = best_candidate.get('product', {}).get('pk')
+                if matched_product_id:
+                    try:
+                        matched_product = Product.objects.get(pk=matched_product_id)
+                        match_score = best_candidate.get('score', 0)
+                    except Product.DoesNotExist:
+                        pass
+            
+            detail = AIExtractTransactionDetail(
+                transaction=match_transaction,
+                sequence=i + 1,
+                extracted_product_name=extracted_data.get('product_name'),
+                extracted_model_number=extracted_data.get('model_number'),
+                extracted_manufacturer=extracted_data.get('manufacturer'),
+                extracted_specification=extracted_data.get('specification'),
+                extracted_price=str(extracted_data.get('new_price', '')),
+                extracted_revision_reason='',
+                matched_product=matched_product,
+                match_score=match_score,
+                status='未処理'
+            )
+            detail_objects.append(detail)
+            logger.info(f"    明細{i+1}: {extracted_data.get('product_name')} -> {matched_product.product_name if matched_product else 'マッチなし'}")
+            print(f"    明細{i+1}: {extracted_data.get('product_name')} -> {matched_product.product_name if matched_product else 'マッチなし'}")
+
+        # 明細全件まとめて一括保存
+        if detail_objects:
+            AIExtractTransactionDetail.objects.bulk_create(detail_objects)
+
+        # 一時ファイル削除
+        for temp_file in [di_result_path, ai_result_path]:
+            if os.path.exists(temp_file):
+                os.unlink(temp_file)
+        
+        logger.info(f"  処理完了: トランザクションID {transaction_id}")
+        logger.info(f"  抽出商品数: {len(ai_results['products'])}")
+        logger.info(f"  保存された明細数: {len(results_list)}")
+        print(f"  処理完了: トランザクションID {transaction_id}")
+        print(f"  抽出商品数: {len(ai_results['products'])}")
+        print(f"  保存された明細数: {len(results_list)}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"  エラー: {str(e)}")
+        print(f"  エラー: {str(e)}")
+        # PyInstaller環境では詳細なエラー情報をログに出力
+        error_detail = traceback.format_exc()
+        logger.error(f"  詳細エラー: {error_detail}")
+        print(f"  詳細エラー: {error_detail}")
+        
+        # ログファイルにも詳細エラーを出力
+        logger.error(f"PDF処理エラー: {pdf_path.name}")
+        logger.error(f"エラー詳細: {str(e)}")
+        logger.error(f"スタックトレース: {error_detail}")
+        
+        return False
+
+def move_file(src_path, dest_folder):
+    """ファイルを移動"""
+    dest_path = Path(dest_folder) / src_path.name
+    counter = 1
+    while dest_path.exists():
+        stem = src_path.stem
+        suffix = src_path.suffix
+        dest_path = Path(dest_folder) / f"{stem}_{counter}{suffix}"
+        counter += 1
+    
+    shutil.move(str(src_path), str(dest_path))
+    return dest_path
+
+def main():
+    """メイン処理"""
+    print("\n" + "="*60)
+    print("  AI価格抽出バッチ処理")
+    print("  起動中... (初回起動は20-30秒かかります)")
+    print("="*60 + "\n")
+    
+    # 設定ファイル検証
+    validate_config_paths()
+    print(f"[バッチ] config.iniパス: {CONFIG_PATH}")
+    print(f"[バッチ] config.ini存在: {CONFIG_PATH.exists()}")
+    print(f"監視フォルダ: {WATCH_FOLDER}")
+    print(f"エラーフォルダ: {ERROR_FOLDER}")
+    print(f"入力済フォルダ: {COMPLETED_FOLDER}")
+    print(f"PDF保存先: {MEDIA_ROOT} (画面と同じ場所)")
+    print(f"設定ファイル: config.ini")
+    
+    # DBパスを取得・表示
+    from digital_pricelist_system.settings import get_database_path
+    db_path = get_database_path()
+    print(f"DBファイル: {db_path}")
+    
+    # プロキシ設定を環境変数に設定
+    setup_proxy_environment(HTTP_PROXY, HTTPS_PROXY, PROXY_AUTH)
+    
+    # フォルダ作成
+    log_folder = ensure_folders()
+    
+    # ログ設定
+    log_file = log_folder / f"batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    
+    # ファイルハンドラーを作成
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    
+    # コンソールハンドラーを作成
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    
+    # ルートロガーを設定
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+    
+    logger = logging.getLogger(__name__)
+    
+    logger.info("=== AI抽出バッチ処理開始 ===")
+    logger.info(f"設定ファイル: {CONFIG_PATH} {'(存在)' if CONFIG_PATH.exists() else '(デフォルト値使用)'}")
+    logger.info(f"監視フォルダ: {WATCH_FOLDER}")
+    logger.info(f"エラーフォルダ: {ERROR_FOLDER}")
+    logger.info(f"入力済フォルダ: {COMPLETED_FOLDER}")
+    logger.info(f"DBファイル: {db_path}")
+    logger.info(f"ログファイル: {log_file}")
+    
+    # MEDIA_ROOTパスを表示
+    from digital_pricelist_system.settings import get_media_root
+    media_root = get_media_root()
+    logger.info(f"MEDIA_ROOT: {media_root}")
+    
+    # PDFファイルを検索
+    watch_path = Path(WATCH_FOLDER)
+    pdf_files = list(watch_path.glob("*.pdf"))
+    
+    if not pdf_files:
+        print("処理対象のPDFファイルがありません")
+        return
+    
+    print(f"処理対象ファイル数: {len(pdf_files)}")
+    logger.info(f"処理対象ファイル数: {len(pdf_files)}")
+    
+    success_count = 0
+    error_count = 0
+
+    logger.info("照合用マスタデータロード中...")
+    prepared_master = get_master_data()
+
+    for pdf_file in pdf_files:
+        print(f"\n--- {pdf_file.name} ---")
+        logger.info(f"--- {pdf_file.name} ---")
+        
+        # ファイル存在確認
+        print(f"  処理前ファイル存在: {pdf_file.exists()}")
+        logger.info(f"  処理前ファイル存在: {pdf_file.exists()}")
+        
+        process_result = process_pdf_file(pdf_file, prepared_master)
+        
+        # 処理後のファイル存在確認
+        print(f"  処理後ファイル存在: {pdf_file.exists()}")
+        logger.info(f"  処理後ファイル存在: {pdf_file.exists()}")
+        
+        if not pdf_file.exists():
+            print(f"  警告: ファイルが既に削除されています")
+            logger.warning(f"  警告: ファイルが既に削除されています")
+            if process_result:
+                success_count += 1
+            else:
+                error_count += 1
+            continue
+        
+        if process_result:
+            # 成功時は入力済フォルダに移動
+            print(f"  入力済フォルダに移動開始: {COMPLETED_FOLDER}")
+            logger.info(f"  入力済フォルダに移動開始: {COMPLETED_FOLDER}")
+            dest_path = move_file(pdf_file, COMPLETED_FOLDER)
+            print(f"  処理完了: 入力済フォルダに移動 -> {dest_path}")
+            logger.info(f"処理成功: {pdf_file.name} -> {dest_path}")
+            success_count += 1
+        else:
+            # 失敗時はエラーフォルダに移動
+            print(f"  エラーフォルダに移動開始: {ERROR_FOLDER}")
+            logger.info(f"  エラーフォルダに移動開始: {ERROR_FOLDER}")
+            dest_path = move_file(pdf_file, ERROR_FOLDER)
+            print(f"  エラーファイル移動先: {dest_path}")
+            logger.error(f"処理失敗: {pdf_file.name} -> {dest_path}")
+            error_count += 1
+    
+    print(f"\n=== 処理結果 ===")
+    print(f"成功: {success_count}件")
+    print(f"エラー: {error_count}件")
+    print("=== バッチ処理終了 ===")
+    
+    logger.info(f"=== 処理結果 ===")
+    logger.info(f"成功: {success_count}件")
+    logger.info(f"エラー: {error_count}件")
+    logger.info("=== バッチ処理終了 ===")
+
+if __name__ == "__main__":
+    main()

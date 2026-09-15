@@ -1,0 +1,503 @@
+{% extends 'base.html' %}
+{% load price_filters %}
+
+{% block title %}{{ product.product_name }} - デジタル価格表システム{% endblock %}
+
+{% block breadcrumb %}
+    {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
+{% endblock %}
+
+{% block content %}
+    {% include 'components/page_header.html' with page_title=product.product_name page_subtitle="商品詳細情報" %}
+    
+    <div class="container main-content">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+        
+        {% if error_message %}
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                {{ error_message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endif %}
+
+        <div class="row">
+            <!-- 商品基本情報 -->
+            <div class="col-md-8">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">基本情報</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="productForm" method="post">
+                            {% csrf_token %}
+                            <product-basic-info-component 
+                                product-data='{{ product_json|default:"{}" }}'
+                                form-data='{{ form_data_json|default:"{}" }}'
+                                livestock-types='{{ livestock_types_json|default:"[]" }}'
+                                categories='{{ categories_json|default:"[]" }}'
+                                editable="true"
+                                is-new="{{ is_new|yesno:'true,false' }}"
+                                diff-flags='{{ diff_flags_json|default:"{}" }}'
+                                error-fields='{{ error_fields_json|default:"[]" }}'>
+                            </product-basic-info-component>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- サイドバー -->
+            {% if not is_new %}
+            <div class="col-md-4">
+
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">ユーザ情報</h6>
+                    </div>
+                    <div class="card-body">
+                        <small class="text-muted">
+                            {% if product.applicant %}
+                                <div><strong>申請者:</strong> {{ product.applicant }}</div>
+                            {% endif %}
+                            {% if product.approver %}
+                                <div><strong>承認者:</strong> {{ product.approver }}</div>
+                            {% endif %}
+                        </small>
+                    </div>
+                </div>
+                
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h6 class="mb-0">システム情報</h6>
+                    </div>
+                    <div class="card-body">
+                        <small class="text-muted">
+                            <div>作成日時: {{ product.created_at|date:"Y/m/d H:i" }}</div>
+                            <div>更新日時: {{ product.updated_at|date:"Y/m/d H:i" }}</div>
+                        </small>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- 価格履歴 -->
+        <div class="row mt-4">
+            <div class="col-12">
+                {% include 'components/price_history_section.html' with section_title="価格改定履歴" show_diff_note=False show_add_button=True histories_json=price_histories_json|default:"[]" mode="edit" show_diff=False editable=True %}
+            </div>
+        </div>
+    </div>
+
+    <!-- ボトムアクションバー -->
+    {% include 'components/bottom_action_bar.html' with action_type='product_detail' %}
+
+    <!-- トースト表示エリア -->
+    <div id="toast-area"></div>
+    
+    <!-- 保存確認モーダル -->
+    <div id="save-preview-modal"></div>
+    
+    <!-- 送料詳細モーダル -->
+    <div class="modal fade" id="shippingFeeModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">送料詳細</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="shippingFeeContent" style="white-space: pre-wrap;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- メーカー選択モーダル -->
+    {% include 'components/manufacturer_modal.html' %}
+    
+    <!-- 粗利率管理モーダル -->
+    {% include 'components/gross_margin_modal.html' %}
+
+    <style>
+    .htmx-indicator {
+        display: none;
+    }
+    .htmx-request .htmx-indicator {
+        display: inline-block;
+    }
+    .table-warning {
+        background-color: #fff3cd !important;
+    }
+    .editable-cell {
+        cursor: pointer;
+        background-color: #f8f9fa;
+    }
+    .editable-cell:hover {
+        background-color: #e9ecef;
+    }
+    .table-secondary {
+        background-color: #e9ecef !important;
+    }
+    .table-secondary td {
+        color: #6c757d !important;
+    }
+    </style>
+    
+    <script>
+    // 価格履歴機能はWebコンポーネントに移行済み
+    
+    // 新規行追加制御（1行まで）
+    let hasNewRow = false;
+    
+
+    
+    // 新規行削除時の処理
+    document.addEventListener('click', function(e) {
+        if (e.target.dataset.action === 'remove-new-row') {
+            hasNewRow = false;
+            
+            // ボタンを有効化
+            const addButton = document.getElementById('addPriceRowBtn');
+            if (addButton) {
+                addButton.textContent = '新規追加';
+                addButton.disabled = false;
+                addButton.classList.remove('btn-secondary');
+                addButton.classList.add('btn-outline-primary');
+            }
+        }
+    });
+    
+    // ページ読み込み後の初期化
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Page loaded, addPriceRow function ready');
+        
+        // Webコンポーネント読み込み後に関数を再定義
+        setTimeout(function() {
+            window.addPriceRow = function() {
+                console.log('Override addPriceRow called, hasNewRow:', hasNewRow);
+                
+                if (hasNewRow) {
+                    alert('新規行は1つまでしか追加できません。');
+                    return;
+                }
+                
+                const component = document.querySelector('price-history-component');
+                if (component) {
+                    component.addPriceRow();
+                    hasNewRow = true;
+                    
+                    // ボタンを無効化
+                    const addButton = document.getElementById('addPriceRowBtn');
+                    if (addButton) {
+                        addButton.textContent = '編集中';
+                        addButton.disabled = true;
+                        addButton.classList.remove('btn-outline-primary');
+                        addButton.classList.add('btn-secondary');
+                    }
+                }
+            };
+            console.log('addPriceRow function overridden');
+        }, 500);
+    });
+    
+    // 申請ボタン処理
+    window.submitApplication = function(button) {
+        console.log('submitApplication called');
+        
+        // ダブルクリック防止
+        if (button.disabled) {
+            console.log('Button already disabled');
+            return false;
+        }
+        
+        // 1. エラーチェックを先に実行
+        const errors = validateForm();
+        console.log('Validation errors:', errors);
+        if (errors.length > 0) {
+            alert('エラーがあります：\n' + errors.join('\n'));
+            return false;
+        }
+        
+        // 2. エラーがない場合のみ確認アラート
+        if (!confirm('この内容で申請しますか？')) {
+            console.log('User cancelled');
+            return false;
+        }
+        
+        console.log('Proceeding with form submission');
+        button.disabled = true;
+        button.textContent = '処理中...';
+        
+        // フォームを取得
+        const form = document.getElementById('productForm');
+        console.log('Form found:', form);
+        
+        // ページ内のすべての入力要素をフォームに追加
+        const allInputs = document.querySelectorAll('input, textarea, select');
+        console.log('Found inputs:', allInputs.length);
+        
+        allInputs.forEach(input => {
+            if (input.name && !form.querySelector(`[name="${input.name}"]`)) {
+                console.log('Adding hidden input:', input.name, '=', input.value);
+                const hiddenInput = document.createElement('input');
+                hiddenInput.type = 'hidden';
+                hiddenInput.name = input.name;
+                hiddenInput.value = input.value;
+                form.appendChild(hiddenInput);
+            }
+        });
+        
+        // フォームデータを作成
+        const formData = new FormData(form);
+        
+        // Fetch APIで送信
+        fetch(form.action || window.location.pathname, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => {
+            if (response.ok) {
+                if (response.headers.get('content-type')?.includes('application/json')) {
+                    return response.json();
+                } else {
+                    // HTMLレスポンス（成功時のリダイレクト用JavaScript）
+                    return response.text().then(html => {
+                        document.write(html);
+                        document.close();
+                    });
+                }
+            } else {
+                return response.json().then(data => {
+                    throw new Error(data.error || 'エラーが発生しました');
+                });
+            }
+        })
+        .then(data => {
+            if (data && data.error) {
+                throw new Error(data.error);
+            }
+        })
+        .catch(error => {
+            alert(error.message);
+            // ボタンを元に戻す
+            button.disabled = false;
+            button.textContent = '申請';
+        });
+        
+        return false;
+    }
+    
+    // フォームバリデーション関数
+    function validateForm() {
+        const errors = [];
+        
+        // 商品名のチェック
+        const productNameInput = document.querySelector('input[name="product_name"], textarea[name="product_name"]');
+        const productName = productNameInput?.value?.trim();
+        console.log('Product name input found:', productNameInput);
+        console.log('Product name value:', productName);
+        if (!productName) {
+            errors.push('商品名は必須です');
+        }
+        
+        // 畜種のチェック
+        const livestockType = document.querySelector('select[name="livestock_type"]')?.value;
+        if (!livestockType) {
+            errors.push('畜種は必須です');
+        }
+        
+        // 分類のチェック
+        const category = document.querySelector('select[name="category"]')?.value;
+        if (!category) {
+            errors.push('分類は必須です');
+        }
+        
+        // メーカーのチェック
+        const manufacturer = document.querySelector('input[name="manufacturer"]')?.value;
+        if (!manufacturer) {
+            errors.push('メーカーは必須です');
+        }
+        
+        // 商品コードのチェック
+        const productCode = document.querySelector('input[name="product_code"]')?.value?.trim();
+        if (productCode && (!/^\d{9}$/.test(productCode))) {
+            errors.push('商品コードは9桁の数字で入力してください');
+        }
+        
+        // 新規価格履歴のチェック
+        const newDateInputs = document.querySelectorAll('input[name^="new_effective_year_month_"]');
+        newDateInputs.forEach(input => {
+            const value = input.value.trim();
+            if (value && !/^\d{4}\/\d{1,2}$/.test(value)) {
+                errors.push(`適用年月はYYYY/MM形式で入力してください: ${value}`);
+            }
+        });
+        
+        return errors;
+    }
+    
+    // 送料モーダル表示関数
+    window.showShippingFeeModal = function(shippingFeeText) {
+        const content = document.getElementById('shippingFeeContent');
+        if (content) {
+            // \\n を実際の改行に変換し、改行コードを正規化
+            let cleanText = shippingFeeText.replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
+            const lines = cleanText.split('\n');
+            while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+                lines.pop();
+            }
+            cleanText = lines.join('\n');
+            content.textContent = cleanText;
+            const modalElement = document.getElementById('shippingFeeModal');
+            if (modalElement) {
+                const modal = new bootstrap.Modal(modalElement);
+                modal.show();
+            }
+        }
+    };
+    
+    // 価格フィールドのカンマ区切り整形と粗利率更新
+    document.addEventListener('blur', function(e) {
+        if (e.target.name && (e.target.name.includes('wholesale_price') || 
+                              e.target.name.includes('kenren_price') || 
+                              e.target.name.includes('retail_price'))) {
+            const value = e.target.value.trim();
+            if (value && value !== '都度見積' && value !== 'オープン' && !isNaN(value.replace(/,/g, ''))) {
+                const numValue = parseFloat(value.replace(/,/g, ''));
+                e.target.value = numValue.toLocaleString();
+            }
+            
+            // 仕切価格または県連価格の変更時に自動算出を更新
+            if (e.target.name.includes('wholesale_price') || e.target.name.includes('kenren_price')) {
+                updateKenrenPriceDisplay(e.target);
+                if (e.target.name.includes('kenren_price')) {
+                    updateGrossMargin(e.target);
+                }
+            }
+        }
+    }, true);
+    
+    // 粗利率更新関数
+    function updateGrossMargin(kenrenInput) {
+        const kenrenValue = kenrenInput.value.trim();
+        if (!kenrenValue || kenrenValue === '都度見積' || isNaN(kenrenValue.replace(/,/g, ''))) {
+            return;
+        }
+        
+        // 同じ行の仕切価格を取得
+        const row = kenrenInput.closest('tr');
+        if (!row) return;
+        
+        let wholesaleInput;
+        if (kenrenInput.name.startsWith('new_')) {
+            const index = kenrenInput.name.split('_').pop();
+            wholesaleInput = row.querySelector(`input[name="new_wholesale_price_${index}"]`);
+        } else {
+            const historyId = kenrenInput.name.split('_').pop();
+            wholesaleInput = row.querySelector(`input[name="edit_wholesale_price_${historyId}"]`);
+        }
+        
+        if (!wholesaleInput) return;
+        
+        const wholesaleValue = wholesaleInput.value.trim();
+        if (!wholesaleValue || wholesaleValue === '都度見積' || isNaN(wholesaleValue.replace(/,/g, ''))) {
+            return;
+        }
+        
+        // 共通関数で粗利率を計算
+        const kenrenNum = parseFloat(kenrenValue.replace(/,/g, ''));
+        const wholesaleNum = parseFloat(wholesaleValue.replace(/,/g, ''));
+        
+        const marginRate = window.GrossMarginUtils.calculateGrossMarginRate(wholesaleNum, kenrenNum);
+        if (marginRate !== null) {
+            const profitDisplay = window.GrossMarginUtils.formatGrossMarginRate(marginRate);
+            
+            // 粗利率セルを更新
+            const marginCell = row.querySelector('td:nth-child(7)');
+            if (marginCell) {
+                marginCell.textContent = profitDisplay;
+                marginCell.style.color = 'blue';
+                marginCell.style.fontWeight = 'bold';
+            }
+        }
+    }
+    
+    // 県連価格の自動算出表示を更新
+    function updateKenrenPriceDisplay(changedInput) {
+        const row = changedInput.closest('tr');
+        if (!row) return;
+        
+        let wholesaleInput, kenrenInput;
+        
+        if (changedInput.name.startsWith('new_')) {
+            // 新規行の場合
+            const index = changedInput.name.split('_').pop();
+            wholesaleInput = row.querySelector(`input[name="new_wholesale_price_${index}"]`);
+            kenrenInput = row.querySelector(`input[name="new_kenren_price_${index}"]`);
+        } else {
+            // 既存行の場合
+            const historyId = changedInput.name.split('_').pop();
+            wholesaleInput = row.querySelector(`input[name="edit_wholesale_price_${historyId}"]`);
+            kenrenInput = row.querySelector(`input[name="edit_kenren_price_${historyId}"]`);
+        }
+        
+        if (!wholesaleInput || !kenrenInput) return;
+        
+        const wholesaleValue = wholesaleInput.value.trim();
+        const kenrenValue = kenrenInput.value.trim();
+        const marginCell = row.querySelector('td:nth-child(6)');
+        const marginText = marginCell?.textContent.trim();
+        
+        // 県連価格が空で仕切価格と粗利率がある場合、プレースホルダーとして表示
+        if (!kenrenValue && wholesaleValue && wholesaleValue !== '都度見積' && 
+            marginText && marginText !== '自動算定' && marginText.includes('%')) {
+            
+            try {
+                const wholesaleNum = parseFloat(wholesaleValue.replace(/,/g, ''));
+                const marginPercent = parseFloat(marginText.replace('%', ''));
+                const marginRate = 1 - (marginPercent / 100);
+                
+                // 共通関数で県連価格を計算
+                const calculatedKenren = window.GrossMarginUtils.calculateKenrenPrice(wholesaleNum, marginRate);
+                
+                if (calculatedKenren !== null) {
+                    // プレースホルダーとして表示
+                    kenrenInput.placeholder = calculatedKenren.toLocaleString();
+                    kenrenInput.style.color = 'green';
+                    kenrenInput.style.fontWeight = 'bold';
+                }
+                
+            } catch (e) {
+                // エラー時はクリア
+                kenrenInput.placeholder = '';
+                kenrenInput.style.color = '';
+                kenrenInput.style.fontWeight = '';
+            }
+        } else {
+            // 通常表示に戻す
+            kenrenInput.placeholder = '県連価格';
+            kenrenInput.style.color = '';
+            kenrenInput.style.fontWeight = '';
+        }
+    }
+    </script>
+    
+    <!-- Webコンポーネント読み込み -->
+    {% load static %}
+    <script src="{% static 'js/gross-margin-utils.js' %}"></script>
+    <script src="{% static 'js/components/price-history-component.js' %}"></script>
+    <script src="{% static 'js/components/product-basic-info-component.js' %}"></script>
+{% endblock %}

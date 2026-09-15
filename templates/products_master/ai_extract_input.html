@@ -1,0 +1,381 @@
+{% extends 'base.html' %}
+
+{% block title %}AI価格抽出 - デジタル価格表システム{% endblock %}
+
+{% block breadcrumb %}
+    {% include 'components/breadcrumb.html' with breadcrumbs=breadcrumbs %}
+{% endblock %}
+
+{% block content %}
+    {% include 'components/page_header.html' with page_title="AI価格抽出" page_subtitle="PDFアップロード・テストデータ入力" %}
+    
+    <div class="container main-content">
+        <!-- タブナビゲーション -->
+        <ul class="nav nav-tabs mb-4" id="extractTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="pdf-tab" data-bs-toggle="tab" data-bs-target="#pdf-upload" type="button" role="tab">
+                    📄 PDFアップロード
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="manual-tab" data-bs-toggle="tab" data-bs-target="#manual-input" type="button" role="tab">
+                    📝 手動入力（テスト用）
+                </button>
+            </li>
+        </ul>
+        
+        <div class="tab-content" id="extractTabsContent">
+            <!-- PDFアップロードタブ -->
+            <div class="tab-pane fade show active" id="pdf-upload" role="tabpanel">
+                <div class="row justify-content-center">
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">📄 PDFファイルからAI抽出</h5>
+                            </div>
+                            <div class="card-body">
+                                <form method="post" enctype="multipart/form-data" action="{% url 'products_master:ai_extract_pdf_process' %}">
+                                    {% csrf_token %}
+                                    
+                                    <div class="mb-3">
+                                        {{ pdf_form.transaction_name.label_tag }}
+                                        {{ pdf_form.transaction_name }}
+                                        {% if pdf_form.transaction_name.help_text %}
+                                            <div class="form-text">{{ pdf_form.transaction_name.help_text }}</div>
+                                        {% endif %}
+                                        {% if pdf_form.transaction_name.errors %}
+                                            <div class="text-danger">{{ pdf_form.transaction_name.errors }}</div>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        {{ pdf_form.pdf_file.label_tag }}
+                                        {{ pdf_form.pdf_file }}
+                                        {% if pdf_form.pdf_file.help_text %}
+                                            <div class="form-text">{{ pdf_form.pdf_file.help_text }}</div>
+                                        {% endif %}
+                                        {% if pdf_form.pdf_file.errors %}
+                                            <div class="text-danger">{{ pdf_form.pdf_file.errors }}</div>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <div class="alert alert-info">
+                                        <h6>📋 処理の流れ</h6>
+                                        <ol class="mb-0">
+                                            <li>PDFファイルをアップロード</li>
+                                            <li>Azure OpenAI APIでテキスト抽出・エンティティ認識</li>
+                                            <li>商品マスタとの自動マッチング</li>
+                                            <li>手動調整・申請処理</li>
+                                        </ol>
+                                    </div>
+                                    
+                                    <div class="d-flex justify-content-between">
+                                        <a href="{% url 'products_master:ai_extract' %}" class="btn btn-secondary">
+                                            戻る
+                                        </a>
+                                        <button type="submit" class="btn btn-primary" id="pdfSubmitBtn">
+                                            <span id="btnIcon">🤖</span> <span id="btnText">AI抽出開始</span>
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 手動入力タブ -->
+            <div class="tab-pane fade" id="manual-input" role="tabpanel">
+                <div class="row justify-content-center">
+                    <div class="col-md-10">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">📝 テストデータ入力フォーム</h5>
+                                <button type="button" class="btn btn-outline-primary btn-sm" onclick="addProduct()">
+                                    + 商品追加
+                                </button>
+                            </div>
+                    <div class="card-body">
+                        <form id="extractForm">
+                            {% csrf_token %}
+                            
+                            <div id="productsContainer">
+                                <!-- 商品フォームがここに追加される -->
+                            </div>
+                            
+                            <div class="d-flex justify-content-between mt-4">
+                                <a href="{% url 'products_master:ai_extract' %}" class="btn btn-secondary">
+                                    戻る
+                                </a>
+                                <button type="submit" class="btn btn-primary">
+                                    商品照合を実行
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+                        <!-- サンプルデータ読み込み -->
+                        <div class="card mt-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">💡 サンプルデータ</h6>
+                            </div>
+                            <div class="card-body">
+                                <button type="button" class="btn btn-outline-info btn-sm" onclick="loadSampleData()">
+                                    サンプルデータを読み込み
+                                </button>
+                                <small class="text-muted ms-2">表記揺れありのサンプルデータ（全角・半角混在、スペース、略記等）でAI照合性能をテストできます</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // Bootstrapタブの初期化
+    document.addEventListener('DOMContentLoaded', function() {
+        // タブの初期化
+        const triggerTabList = [].slice.call(document.querySelectorAll('#extractTabs button'))
+        triggerTabList.forEach(function (triggerEl) {
+            const tabTrigger = new bootstrap.Tab(triggerEl)
+        });
+        
+        // 初期化時に1つの商品フォームを追加
+        addProduct();
+        
+        // PDFフォームのローディング表示を初期化
+        const submitBtn = document.getElementById('pdfSubmitBtn');
+        
+        // いろいろなセレクタでフォームを探す
+        let pdfForm = document.querySelector('form[action*="ai_extract_pdf_process"]');
+        if (!pdfForm) {
+            pdfForm = document.querySelector('form[method="post"][enctype="multipart/form-data"]');
+        }
+        if (!pdfForm && submitBtn) {
+            pdfForm = submitBtn.closest('form');
+        }
+        
+        console.log('Submit button:', submitBtn);
+        console.log('PDF Form:', pdfForm);
+        console.log('All forms:', document.querySelectorAll('form'));
+        
+        if (submitBtn) {
+            // ボタンクリックでローディング開始
+            submitBtn.addEventListener('click', function(e) {
+                e.preventDefault(); // デフォルトの送信を一旦停止
+                
+                const form = this.closest('form');
+                const fileInput = form ? form.querySelector('input[type="file"]') : null;
+                
+                console.log('Button clicked');
+                console.log('Form found:', form);
+                console.log('File input:', fileInput);
+                console.log('Files:', fileInput ? fileInput.files.length : 0);
+                
+                if (!fileInput || !fileInput.files.length) {
+                    console.log('No file selected');
+                    return;
+                }
+                
+                console.log('Starting loading animation');
+                
+                // ローディング表示
+                this.disabled = true;
+                this.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>AI抽出実行中...';
+                
+                // 他の入力を無効化（必要なフィールドは除外）
+                if (form) {
+                    const inputs = form.querySelectorAll('input:not([type="file"]):not([type="submit"]):not([name="csrfmiddlewaretoken"]):not([name="transaction_name"]), select, textarea');
+                    inputs.forEach(input => input.disabled = true);
+                    
+                    // ローディング表示後にフォーム送信
+                    setTimeout(() => {
+                        console.log('Submitting form');
+                        form.submit();
+                    }, 100);
+                }
+            });
+        } else {
+            console.log('Submit button not found');
+        }
+    });
+    
+    let productCount = 0;
+    
+    // 商品フォーム追加
+    function addProduct(data = {}) {
+        productCount++;
+        const container = document.getElementById('productsContainer');
+        
+        const productDiv = document.createElement('div');
+        productDiv.className = 'card mb-3';
+        productDiv.id = `product_${productCount}`;
+        
+        productDiv.innerHTML = `
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">商品 ${productCount}</h6>
+                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeProduct(${productCount})">
+                    削除
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">商品名</label>
+                            <input type="text" class="form-control" name="product_name_${productCount}" value="${data.product_name || ''}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">型式</label>
+                            <input type="text" class="form-control" name="model_number_${productCount}" value="${data.model_number || ''}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">メーカー</label>
+                            <input type="text" class="form-control" name="manufacturer_${productCount}" value="${data.manufacturer || ''}">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">規格</label>
+                            <input type="text" class="form-control" name="specification_${productCount}" value="${data.specification || ''}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">現在価格</label>
+                            <input type="number" class="form-control" name="current_price_${productCount}" value="${data.current_price || ''}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">新価格</label>
+                            <input type="number" class="form-control" name="new_price_${productCount}" value="${data.new_price || ''}">
+                        </div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">改定理由</label>
+                    <input type="text" class="form-control" name="revision_reason_${productCount}" value="${data.revision_reason || ''}">
+                </div>
+            </div>
+        `;
+        
+        container.appendChild(productDiv);
+    }
+    
+    // 商品フォーム削除
+    function removeProduct(id) {
+        const element = document.getElementById(`product_${id}`);
+        if (element) {
+            element.remove();
+        }
+    }
+    
+    // サンプルデータ読み込み
+    function loadSampleData() {
+        // 既存のフォームをクリア
+        document.getElementById('productsContainer').innerHTML = '';
+        productCount = 0;
+        
+        // サンプルデータ（表記揺れありでAI照合テスト用）
+        const samples = [
+            {
+                product_name: 'エコクーラー装置',  // 「装置」追加
+                model_number: 'EC－１',  // 全角ハイフン、全角数字
+                manufacturer: 'カワバタ産業株式会社',  // 正式社名
+                specification: '制御盤付き',  // 「き」追加
+                current_price: 420000,
+                new_price: 435000,
+                revision_reason: '原材料費高騰による価格改定'
+            },
+            {
+                product_name: 'ボルナド ファン',  // スペース追加
+                model_number: '740-HD',  // ハイフン追加
+                manufacturer: 'カワバタ産業',
+                specification: '単相１００Ｖ',  // 全角数字
+                current_price: 85000,
+                new_price: 89000,
+                revision_reason: '電子部品価格上昇'
+            },
+            {
+                product_name: 'ボルナドファンユニット',  // 「ユニット」追加
+                model_number: '712型',  // 「型」追加
+                manufacturer: 'カワバタ産業（株）',  // 略記表記
+                specification: '三相２００V',  // 漢数字、全角
+                current_price: 120000,
+                new_price: 125000,
+                revision_reason: 'モーター部品コスト増'
+            }
+        ];
+        
+        samples.forEach(sample => addProduct(sample));
+    }
+    
+
+
+    // フォーム送信処理
+    document.getElementById('extractForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        // フォームデータをJSONに変換
+        const formData = new FormData(this);
+        const products = [];
+        
+        // 各商品のデータを収集
+        for (let i = 1; i <= productCount; i++) {
+            const productDiv = document.getElementById(`product_${i}`);
+            if (!productDiv) continue;
+            
+            const product = {
+                product_name: formData.get(`product_name_${i}`) || null,
+                model_number: formData.get(`model_number_${i}`) || null,
+                manufacturer: formData.get(`manufacturer_${i}`) || null,
+                specification: formData.get(`specification_${i}`) || null,
+                current_price: formData.get(`current_price_${i}`) ? parseInt(formData.get(`current_price_${i}`)) : null,
+                new_price: formData.get(`new_price_${i}`) ? parseInt(formData.get(`new_price_${i}`)) : null,
+                revision_reason: formData.get(`revision_reason_${i}`) || null
+            };
+            
+            // 空の商品を除外（すべてのフィールドが空の場合）
+            const hasData = Object.values(product).some(value => value !== null && value !== '');
+            if (hasData) {
+                products.push(product);
+            }
+        }
+        
+        if (products.length === 0) {
+            alert('少なくとも1つの商品情報を入力してください。');
+            return;
+        }
+        
+        const jsonData = { products: products };
+        
+        const submitBtn = this.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = '処理中...';
+        
+        // JSONデータを送信
+        const postData = new FormData();
+        postData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        postData.append('json_data', JSON.stringify(jsonData));
+        
+        fetch('{% url "products_master:ai_extract_process" %}', {
+            method: 'POST',
+            body: postData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = data.redirect_url;
+            } else {
+                alert('エラー: ' + data.error);
+                submitBtn.disabled = false;
+                submitBtn.textContent = '商品照合を実行';
+            }
+        })
+        .catch(error => {
+            alert('通信エラー: ' + error.message);
+            submitBtn.disabled = false;
+            submitBtn.textContent = '商品照合を実行';
+        });
+    });
+    </script>
+{% endblock %}
