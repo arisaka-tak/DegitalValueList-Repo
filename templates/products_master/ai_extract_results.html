@@ -561,6 +561,27 @@
         });
     }
     
+     // 金額をカンマ区切りにする関数
+    function formatPrice(value) {
+        if (!value || value === '-') return '-';
+        // 一旦カンマを除去して純粋な数字かチェック
+        const strVal = String(value).replace(/,/g, ''); 
+        if (!isNaN(strVal) && strVal.trim() !== '') {
+            return Number(strVal).toLocaleString('ja-JP');
+        }
+        return value; // 「別途」や「都度見積」などの文字はそのまま返す
+    }
+
+    // 粗利率を少数第1位にする関数
+    function formatMargin(value) {
+        if (!value || value === '-') return '-';
+        const num = parseFloat(value);
+        if (!isNaN(num)) {
+            return num.toFixed(1); // 例: 0.930000 -> 0.9 に変換
+        }
+        return value;
+    }
+
     // 商品詳細カード表示切り替え
     function showProductDetail(index, productId) {
         const card = document.getElementById(`product_detail_${index}`);
@@ -575,35 +596,47 @@
         const candidate = candidates.find(c => c.product.pk == productId);
         
         if (candidate) {
-            document.getElementById(`current_price_${index}`).textContent = candidate.product.current_wholesale_price || '-';
+            // 現在仕切価格にもフォーマット適用
+            const rawPrice = candidate.product.current_wholesale_price || '-';
+            document.getElementById(`current_price_${index}`).textContent = formatPrice(rawPrice);
+            
             document.getElementById(`model_${index}`).textContent = candidate.product.model_number || '-';
             document.getElementById(`spec_${index}`).textContent = candidate.product.specification || '-';
             document.getElementById(`mfg_${index}`).textContent = candidate.product.manufacturer || '-';
             
-            // 🆕 追加：表示用カードの更新
+            // 両方のデータ名に対応
+            const kenrenVal = candidate.product.current_kenren_price || candidate.product.kenren_price || '-';
+            const shippingVal = candidate.product.current_shipping_fee || candidate.product.shipping_fee || '-';
+            const marginVal = candidate.product.current_gross_margin_rate || candidate.product.gross_margin_rate || '-';
+
+            // 表示用カードの更新（フォーマット適用）
             const elKenren = document.getElementById(`current_kenren_price_${index}`);
-            if(elKenren) elKenren.textContent = candidate.product.current_kenren_price || '-';
+            if(elKenren) elKenren.textContent = formatPrice(kenrenVal);
+            
             const elShipping = document.getElementById(`current_shipping_fee_${index}`);
-            if(elShipping) elShipping.textContent = candidate.product.current_shipping_fee || '-';
+            if(elShipping) elShipping.textContent = formatPrice(shippingVal);
+            
             const elMargin = document.getElementById(`current_gross_margin_${index}`);
             if(elMargin) {
-                const marginVal = candidate.product.current_gross_margin_rate;
-                elMargin.textContent = (marginVal && marginVal !== '-') ? marginVal + '%' : '-';
+                const formattedMargin = formatMargin(marginVal);
+                elMargin.textContent = (formattedMargin !== '-') ? formattedMargin + '%' : '-';
             }
 
-            // 🆕 追加：左側の申請用フォーム(input)に値をセット
+            // 左側の申請用フォーム(input)に値をセット（カンマ無し）
             const inputKenren = document.querySelector(`input[name="kenren_price_${index}"]`);
-            if(inputKenren) inputKenren.value = (candidate.product.current_kenren_price !== '-') ? candidate.product.current_kenren_price : '';
+            if(inputKenren) inputKenren.value = (kenrenVal !== '-' && kenrenVal !== undefined) ? kenrenVal : '';
+            
             const inputShipping = document.querySelector(`input[name="shipping_fee_${index}"]`);
-            if(inputShipping) inputShipping.value = (candidate.product.current_shipping_fee !== '-') ? candidate.product.current_shipping_fee : '';
+            if(inputShipping) inputShipping.value = (shippingVal !== '-' && shippingVal !== undefined) ? shippingVal : '';
+            
             const inputMargin = document.querySelector(`input[name="gross_margin_${index}"]`);
-            if(inputMargin) inputMargin.value = (candidate.product.current_gross_margin_rate !== '-') ? candidate.product.current_gross_margin_rate : '';
+            if(inputMargin) inputMargin.value = (marginVal !== '-' && marginVal !== undefined) ? marginVal : '';
 
             card.style.display = 'block';
         } else {
             card.style.display = 'none';
         }
-    }
+    }    
     
     // 候補データをJavaScriptで使用できるように保存
     window.candidatesData = {};
@@ -626,17 +659,15 @@
             // データベースに一括保存
             saveBatchEditChanges(index)
                 .then(() => {
-                    console.log(`Debug: Batch save completed for index ${index}`);
                     display.style.display = 'block';
                     edit.style.display = 'none';
-                    btn.innerHTML = '✏️';
+                    btn.innerHTML = '✏️️';
                     btn.title = '編集';
                     
                     // 保存後に自動で再照合実行
                     setTimeout(() => reMatch(index), 100);
                 })
                 .catch(error => {
-                    console.error(`Debug: Batch save failed for index ${index}:`, error);
                     alert('保存に失敗しました: ' + error.message);
                 });
         }
@@ -670,12 +701,10 @@
             btn.innerHTML = '⏳';
         }
         
-        // データベースから最新データを取得してから再照合を実行
         {% if is_history_view and transaction %}
         const transactionPk = {{ transaction.pk }};
         const sequence = index + 1;
         
-        // データベースから最新データを取得
         fetch('/products/ai-extract/get-detail/', {
             method: 'POST',
             headers: {
@@ -696,17 +725,13 @@
                 specification: detailData.extracted_specification || null
             };
             
-            // 再照合を実行
             performRematch(index, extractedData, btn, originalText);
         })
         .catch(error => {
-            console.error('データ取得エラー:', error);
-            // フォールバック: 編集モードからデータを取得
             const extractedData = getExtractedDataFromForm(index);
             performRematch(index, extractedData, btn, originalText);
         });
         {% else %}
-        // 編集モードからデータを取得
         const extractedData = getExtractedDataFromForm(index);
         performRematch(index, extractedData, btn, originalText);
         {% endif %}
@@ -720,7 +745,6 @@
         const specificationEl = document.getElementById(`specification_${index}`);
         
         if (productNameEl && productNameEl.offsetParent !== null) {
-            // 編集モードが表示中
             return {
                 product_name: productNameEl.value || null,
                 model_number: modelNumberEl ? modelNumberEl.value || null : null,
@@ -728,12 +752,10 @@
                 specification: specificationEl ? specificationEl.value || null : null
             };
         } else {
-            // 表示モードからデータを抽出（履歴詳細画面用）
             const displayEl = document.getElementById(`display_${index}`);
             if (displayEl) {
                 const lines = displayEl.textContent.split('\n').map(line => line.trim()).filter(line => line);
                 const productName = lines[0] || null;
-                
                 let modelNumber = null;
                 let specification = null;
                 let manufacturer = null;
@@ -741,7 +763,6 @@
                 if (lines.length > 1) {
                     const detailLine = lines[1];
                     const parts = detailLine.split('|').map(part => part.trim());
-                    
                     for (const part of parts) {
                         if (part.startsWith('型式:')) {
                             modelNumber = part.replace('型式:', '').trim();
@@ -789,7 +810,6 @@
             })
         })
         {% else %}
-        // 履歴画面以外では旧形式を使用（後方互換性）
         fetch('/products/ai-extract/rematch/', {
             method: 'POST',
             headers: {
@@ -887,7 +907,7 @@
                         <div class="row g-1">
                             <div class="col-6">
                                 <div class="small text-muted">現在仕切価格</div>
-                                <div class="fw-bold" id="current_price_${index}">${result.candidates && result.candidates[0] ? result.candidates[0].product.current_wholesale_price || '-' : '-'}</div>
+                                <div class="fw-bold" id="current_price_${index}">${formatPrice(result.candidates && result.candidates[0] ? result.candidates[0].product.current_wholesale_price : '-')}</div>
                             </div>
                             <div class="col-6">
                                 <div class="small text-muted">型式</div>
@@ -904,17 +924,18 @@
 
                             <div class="col-6 mt-1">
                                 <div class="small text-muted">現在県連価格</div>
-                                <div class="fw-bold" id="current_kenren_price_${index}">${result.candidates && result.candidates[0] ? result.candidates[0].product.current_kenren_price || '-' : '-'}</div>
+                                <div class="fw-bold" id="current_kenren_price_${index}">${formatPrice(result.candidates && result.candidates[0] ? (result.candidates[0].product.current_kenren_price || result.candidates[0].product.kenren_price) : '-')}</div>
                             </div>
                             <div class="col-6 mt-1">
                                 <div class="small text-muted">現在送料</div>
-                                <div id="current_shipping_fee_${index}">${result.candidates && result.candidates[0] ? result.candidates[0].product.current_shipping_fee || '-' : '-'}</div>
+                                <div id="current_shipping_fee_${index}">${formatPrice(result.candidates && result.candidates[0] ? (result.candidates[0].product.current_shipping_fee || result.candidates[0].product.shipping_fee) : '-')}</div>
                             </div>
                             <div class="col-6 mt-1">
                                 <div class="small text-muted">現在粗利率</div>
                                 <div id="current_gross_margin_${index}">${(() => {
-                                    const rate = result.candidates && result.candidates[0] ? result.candidates[0].product.current_gross_margin_rate : '-';
-                                    return (rate && rate !== '-') ? rate + '%' : '-';
+                                    const rate = result.candidates && result.candidates[0] ? (result.candidates[0].product.current_gross_margin_rate || result.candidates[0].product.gross_margin_rate) : '-';
+                                    const fRate = formatMargin(rate);
+                                    return (fRate && fRate !== '-') ? fRate + '%' : '-';
                                 })()}</div>
                             </div>
                         </div>
@@ -950,16 +971,6 @@
         
         const retailInput = document.querySelector(`input[name="retail_price_${index}"]`);
         if (retailInput) updates.push({ sequence: sequence, field: 'extracted_retail_price', value: retailInput.value });
-
-        // 20260710 該当行コメント
-        // const kenrenInput = document.querySelector(`input[name="kenren_price_${index}"]`);
-        // if (kenrenInput) updates.push({ sequence: sequence, field: 'extracted_kenren_price', value: kenrenInput.value });
-
-        // const shippingInput = document.querySelector(`input[name="shipping_fee_${index}"]`);
-        // if (shippingInput) updates.push({ sequence: sequence, field: 'extracted_shipping_fee', value: shippingInput.value });
-
-        // const marginInput = document.querySelector(`input[name="gross_margin_${index}"]`);
-        // if (marginInput) updates.push({ sequence: sequence, field: 'extracted_gross_margin', value: marginInput.value });
         
         const reasonInput = document.querySelector(`input[name="revision_reason_${index}"]`);
         if (reasonInput) updates.push({ sequence: sequence, field: 'extracted_revision_reason', value: reasonInput.value });
@@ -1004,58 +1015,6 @@
         {% endif %}
     }
     
-    // 編集内容をデータベースに保存（旧版・互換性のため保持）
-    function saveEditChanges(index) {
-        {% if is_history_view and transaction %}
-        const transactionPk = {{ transaction.pk }};
-        const sequence = index + 1;
-        const savePromises = [];
-        
-        const createFetch = (field, value) => {
-            return fetch('{% url "products_master:ai_extract_update_detail" %}', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value },
-                body: JSON.stringify({ transaction_pk: transactionPk, sequence: sequence, field: field, value: value })
-            });
-        };
-
-        const priceInput = document.querySelector(`input[name="new_price_${index}"]`);
-        const retailInput = document.querySelector(`input[name="retail_price_${index}"]`);
-        // 20260710 該当行コメント
-        // const kenrenInput = document.querySelector(`input[name="kenren_price_${index}"]`);
-        // const shippingInput = document.querySelector(`input[name="shipping_fee_${index}"]`);
-        // const marginInput = document.querySelector(`input[name="gross_margin_${index}"]`);
-        const reasonInput = document.querySelector(`input[name="revision_reason_${index}"]`);
-        const productSelect = document.querySelector(`select[name="product_match_${index}"]`);
-        const productNameInput = document.getElementById(`product_name_${index}`);
-        const modelNumberInput = document.getElementById(`model_number_${index}`);
-        const specificationInput = document.getElementById(`specification_${index}`);
-        const manufacturerInput = document.getElementById(`manufacturer_${index}`);
-
-        if (priceInput) savePromises.push(createFetch('extracted_price', priceInput.value));
-        if (retailInput) savePromises.push(createFetch('extracted_retail_price', retailInput.value));
-        // 20260710 該当行コメント
-        // if (kenrenInput) savePromises.push(createFetch('extracted_kenren_price', kenrenInput.value));
-        // if (shippingInput) savePromises.push(createFetch('extracted_shipping_fee', shippingInput.value));
-        // if (marginInput) savePromises.push(createFetch('extracted_gross_margin', marginInput.value));
-        if (reasonInput) savePromises.push(createFetch('extracted_revision_reason', reasonInput.value));
-        if (productSelect) savePromises.push(createFetch('matched_product', productSelect.value));
-        if (productNameInput) savePromises.push(createFetch('extracted_product_name', productNameInput.value));
-        if (modelNumberInput) savePromises.push(createFetch('extracted_model_number', modelNumberInput.value));
-        if (specificationInput) savePromises.push(createFetch('extracted_specification', specificationInput.value));
-        if (manufacturerInput) savePromises.push(createFetch('extracted_manufacturer', manufacturerInput.value));
-        
-        return Promise.all(savePromises);
-        {% else %}
-        return Promise.resolve();
-        {% endif %}
-    }
-    
-    // 再照合なしで保存のみ実行
-    function saveEditChangesOnly(index) {
-        return saveEditChanges(index);
-    }
-    
     // 関数をグローバルスコープに公開
     window.toggleEdit = toggleEdit;
     window.reMatch = reMatch;
@@ -1069,96 +1028,70 @@
     let currentSearchIndex = null;
     let searchTimeout = null;
     
-    // 商品検索モーダルを開く
     function openProductSearchModal(index) {
         currentSearchIndex = index;
         document.getElementById('productSearchInput').value = '';
         document.getElementById('searchResults').innerHTML = '<div class="text-center text-muted p-3">絞り込み条件を選択するか、キーワードを入力してください</div>';
         
-        // メーカーフィルターをクリア
         document.getElementById('manufacturerFilter').value = '';
         document.getElementById('manufacturerFilterDisplay').value = '';
         document.getElementById('manufacturerFilterDisplay').placeholder = '全て';
         
-        // メーカー一括訂正で設定されたメーカーがあるかチェック
         const manufacturerInput = document.getElementById(`manufacturer_${index}`);
         if (manufacturerInput && manufacturerInput.value) {
-            const manufacturerName = manufacturerInput.value.trim();
-            // マスタデータから一致するメーカーを探してデフォルトに設定
-            setDefaultManufacturerIfExists(manufacturerName);
+            setDefaultManufacturerIfExists(manufacturerInput.value.trim());
         }
         
-        // マスタデータを読み込み
         loadMasterData();
         
         const modal = new bootstrap.Modal(document.getElementById('productSearchModal'));
         modal.show();
         
-        // モーダルが表示されたら検索フィールドにフォーカス
-        setTimeout(() => {
-            document.getElementById('productSearchInput').focus();
-        }, 500);
+        setTimeout(() => document.getElementById('productSearchInput').focus(), 500);
     }
     
-    // メーカー名がマスタに存在する場合はデフォルトに設定
     function setDefaultManufacturerIfExists(manufacturerName) {
         fetch('{% url "products_master:ai_extract_get_masters" %}')
         .then(response => response.json())
         .then(data => {
             if (data.manufacturers) {
-                const matchingManufacturer = data.manufacturers.find(m => m.name === manufacturerName);
-                if (matchingManufacturer) {
-                    document.getElementById('manufacturerFilter').value = matchingManufacturer.id;
-                    document.getElementById('manufacturerFilterDisplay').value = matchingManufacturer.name;
+                const match = data.manufacturers.find(m => m.name === manufacturerName);
+                if (match) {
+                    document.getElementById('manufacturerFilter').value = match.id;
+                    document.getElementById('manufacturerFilterDisplay').value = match.name;
                     setTimeout(() => performSearch(), 100);
                 }
             }
         })
-        .catch(error => {
-            console.error('メーカーチェックエラー:', error);
-        });
+        .catch(e => console.error(e));
     }
     
-    // マスタデータ読み込み
     function loadMasterData() {
         fetch('{% url "products_master:ai_extract_get_masters" %}')
         .then(response => response.json())
         .then(data => {
-            if (data.error) {
-                console.error('マスタデータ取得エラー:', data.error);
-                return;
-            }
-            
+            if (data.error) return;
             const categorySelect = document.getElementById('categoryFilter');
             categorySelect.innerHTML = '<option value="">全て</option>';
-            data.categories.forEach(category => {
+            data.categories.forEach(c => {
                 const option = document.createElement('option');
-                option.value = category.id;
-                option.textContent = category.name;
+                option.value = c.id; option.textContent = c.name;
                 categorySelect.appendChild(option);
             });
-            
             const livestockSelect = document.getElementById('livestockTypeFilter');
             livestockSelect.innerHTML = '<option value="">全て</option>';
-            data.livestock_types.forEach(livestock => {
+            data.livestock_types.forEach(l => {
                 const option = document.createElement('option');
-                option.value = livestock.id;
-                option.textContent = livestock.name;
+                option.value = l.id; option.textContent = l.name;
                 livestockSelect.appendChild(option);
             });
         })
-        .catch(error => {
-            console.error('マスタデータ取得エラー:', error);
-        });
+        .catch(e => console.error(e));
     }
     
-    // メーカー選択モーダルを開く（絞り込み用）
     function openManufacturerModalForFilter() {
         const productSearchModal = bootstrap.Modal.getInstance(document.getElementById('productSearchModal'));
-        if (productSearchModal) {
-            productSearchModal.hide();
-        }
-        
+        if (productSearchModal) productSearchModal.hide();
         setTimeout(() => {
             const manufacturerModal = new bootstrap.Modal(document.getElementById('manufacturerModal'));
             manufacturerModal.show();
@@ -1171,26 +1104,15 @@
         if (bulkManufacturerMode) {
             document.getElementById('bulkManufacturerValue').value = manufacturerId;
             document.getElementById('bulkManufacturerDisplay').value = manufacturerName;
-            
-            const manufacturerModal = bootstrap.Modal.getInstance(document.getElementById('manufacturerModal'));
-            manufacturerModal.hide();
-            
-            setTimeout(() => {
-                const bulkModal = new bootstrap.Modal(document.getElementById('bulkManufacturerModal'));
-                bulkModal.show();
-            }, 300);
-            
+            bootstrap.Modal.getInstance(document.getElementById('manufacturerModal')).hide();
+            setTimeout(() => new bootstrap.Modal(document.getElementById('bulkManufacturerModal')).show(), 300);
             bulkManufacturerMode = false;
         } else if (currentSearchIndex !== null) {
             document.getElementById('manufacturerFilter').value = manufacturerId;
             document.getElementById('manufacturerFilterDisplay').value = manufacturerName;
-            
-            const manufacturerModal = bootstrap.Modal.getInstance(document.getElementById('manufacturerModal'));
-            manufacturerModal.hide();
-            
+            bootstrap.Modal.getInstance(document.getElementById('manufacturerModal')).hide();
             setTimeout(() => {
-                const productSearchModal = new bootstrap.Modal(document.getElementById('productSearchModal'));
-                productSearchModal.show();
+                new bootstrap.Modal(document.getElementById('productSearchModal')).show();
                 performSearch();
             }, 300);
         }
@@ -1211,7 +1133,6 @@
     
     function selectSearchedProduct(productData) {
         if (currentSearchIndex === null) return;
-        
         const select = document.querySelector(`select[name="product_match_${currentSearchIndex}"]`);
         const hiddenInput = document.querySelector(`input[name="product_match_${currentSearchIndex}"]`);
         
@@ -1222,13 +1143,10 @@
                 newOption.value = productData.pk;
                 newOption.textContent = `手動 [${productData.pk}] ${productData.product_name.substring(0, 25)}`;
                 newOption.selected = true;
-                
-                const skipOption = select.querySelector('option[value=""]');
-                select.insertBefore(newOption, skipOption);
+                select.insertBefore(newOption, select.querySelector('option[value=""]'));
             } else {
                 existingOption.selected = true;
             }
-            
             showProductDetail(currentSearchIndex, productData.pk);
         } else if (hiddenInput) {
             hiddenInput.value = productData.pk;
@@ -1242,25 +1160,22 @@
                         </button>
                     </div>
                     <div class="small fw-bold mt-1">[${productData.pk}] ${productData.product_name}</div>
+                    <div class="small text-muted">型式: ${productData.model_number} | 規格: ${productData.specification} | メーカー: ${productData.manufacturer}</div>
+                    <div class="small text-success mb-1">現在仕切価格: ${formatPrice(productData.current_wholesale_price)}</div>
                     <div class="small text-muted">
-                        型式: ${productData.model_number} | 規格: ${productData.specification} | メーカー: ${productData.manufacturer}
-                    </div>
-                    <div class="small text-success mb-1">現在仕切価格: ${productData.current_wholesale_price || '-'}</div>
-                    
-                    <div class="small text-muted">
-                        県連価格: ${productData.kenren_price || '-'} | 
-                        送料: ${productData.shipping_fee || '-'} | 
-                        粗利率: ${productData.gross_margin_rate && productData.gross_margin_rate !== '-' ? productData.gross_margin_rate + '%' : '-'}
+                        県連価格: ${formatPrice(productData.kenren_price)} | 
+                        送料: ${formatPrice(productData.shipping_fee)} | 
+                        粗利率: ${(() => {
+                            const r = formatMargin(productData.gross_margin_rate);
+                            return r !== '-' ? r + '%' : '-';
+                        })()}
                     </div>
                     <input type="hidden" name="product_match_${currentSearchIndex}" value="${productData.pk}">
                 `;
             }
         }
         
-        if (!window.candidatesData[currentSearchIndex]) {
-            window.candidatesData[currentSearchIndex] = [];
-        }
-        
+        if (!window.candidatesData[currentSearchIndex]) window.candidatesData[currentSearchIndex] = [];
         let existingCandidate = window.candidatesData[currentSearchIndex].find(c => c.product.pk == productData.pk);
         if (!existingCandidate) {
             window.candidatesData[currentSearchIndex].unshift({
@@ -1273,9 +1188,6 @@
         }
         
         {% if is_history_view and transaction %}
-        const transactionPk = {{ transaction.pk }};
-        const sequence = currentSearchIndex + 1;
-        
         fetch('{% url "products_master:ai_extract_update_detail" %}', {
             method: 'POST',
             headers: {
@@ -1283,80 +1195,44 @@
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
             },
             body: JSON.stringify({
-                transaction_pk: transactionPk,
-                sequence: sequence,
+                transaction_pk: {{ transaction.pk }},
+                sequence: currentSearchIndex + 1,
                 field: 'matched_product',
                 value: productData.pk
             })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (!data.success) console.error('データベース保存エラー:', data.error);
-        })
-        .catch(error => console.error('データベース保存エラー:', error));
+        }).catch(e => console.error(e));
         {% endif %}
         
-        const modal = bootstrap.Modal.getInstance(document.getElementById('productSearchModal'));
-        modal.hide();
+        bootstrap.Modal.getInstance(document.getElementById('productSearchModal')).hide();
         currentSearchIndex = null;
     }
 
-    // グローバルスコープへの公開（既存の window.selectSearchedProduct = ... の近くに追加）
     window.showProductInfoModal = showProductInfoModal;
-
-    // 商品詳細情報モーダルを表示する関数
     function showProductInfoModal(event, productData) {
         event.stopPropagation();
-        
-        // モーダル内にデータをセット
         document.getElementById('detailModal_id').textContent = productData.pk;
         document.getElementById('detailModal_name').textContent = productData.product_name;
         document.getElementById('detailModal_model').textContent = productData.model_number || '-';
         document.getElementById('detailModal_spec').textContent = productData.specification || '-';
         document.getElementById('detailModal_mfg').textContent = productData.manufacturer || '-';
-        document.getElementById('detailModal_price').textContent = productData.current_wholesale_price || '-';
-        
-        // ※20260708 定義漏れ項目の追記※
+        document.getElementById('detailModal_price').textContent = formatPrice(productData.current_wholesale_price);
         document.getElementById('detailModal_category').textContent = productData.category_name;
         document.getElementById('detailModal_shippingUnit').textContent = productData.shipping_unit;
-
-        // --- ここから追加：新しく追加した4項目をセット ---
-        // --- 今回指定された特定のカラムデータをセット ---
-        document.getElementById('detailModal_kenrenPrice').textContent = productData.kenren_price || '-';
-        document.getElementById('detailModal_shippingFee').textContent = productData.shipping_fee || '-';
-
-        const rate = productData.gross_margin_rate;
+        document.getElementById('detailModal_kenrenPrice').textContent = formatPrice(productData.kenren_price);
+        document.getElementById('detailModal_shippingFee').textContent = formatPrice(productData.shipping_fee);
+        const rate = formatMargin(productData.gross_margin_rate);
         document.getElementById('detailModal_grossMarginRate').textContent = rate !== '-' ? rate + '%' : '-';
-        // document.getElementById('detailModal_grossMarginRate').textContent = productData.gross_margin_rate || '-';
-        // ---------------------------------------------
-        // --- ここまで追加 ---
-        
         document.getElementById('detailModal_remarks').textContent = productData.remarks || '-';
-
-        // モーダルを表示
-        const detailModal = new bootstrap.Modal(document.getElementById('productDetailInfoModal'));
-        detailModal.show();
+        new bootstrap.Modal(document.getElementById('productDetailInfoModal')).show();
     }
     
-    document.getElementById('productSearchInput').addEventListener('input', function(e) {
-        triggerSearch();
-    });
-    
-    document.getElementById('categoryFilter').addEventListener('change', function(e) {
-        triggerSearch();
-    });
-    
-    document.getElementById('livestockTypeFilter').addEventListener('change', function(e) {
-        triggerSearch();
-    });
+    document.getElementById('productSearchInput').addEventListener('input', triggerSearch);
+    document.getElementById('categoryFilter').addEventListener('change', triggerSearch);
+    document.getElementById('livestockTypeFilter').addEventListener('change', triggerSearch);
     
     function triggerSearch() {
-        if (searchTimeout) {
-            clearTimeout(searchTimeout);
-        }
-        searchTimeout = setTimeout(() => {
-            performSearch();
-        }, 300);
+        if (searchTimeout) clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(performSearch, 300);
     }
     
     function performSearch() {
@@ -1364,32 +1240,19 @@
         const categoryId = document.getElementById('categoryFilter').value;
         const livestockTypeId = document.getElementById('livestockTypeFilter').value;
         const manufacturerId = document.getElementById('manufacturerFilter').value;
-        
         if (!query && !categoryId && !livestockTypeId && !manufacturerId) {
             document.getElementById('searchResults').innerHTML = '<div class="text-center text-muted p-3">絞り込み条件を選択するか、キーワードを入力してください</div>';
             return;
         }
-        
         searchProducts(query, categoryId, livestockTypeId, manufacturerId);
     }
     
     function searchProducts(query, categoryId, livestockTypeId, manufacturerId) {
         document.getElementById('searchResults').innerHTML = '<div class="text-center p-3"><div class="spinner-border spinner-border-sm" role="status"></div> 検索中...</div>';
-        
-        const searchData = {
-            query: query || '',
-            category_id: categoryId || null,
-            livestock_type_id: livestockTypeId || null,
-            manufacturer_id: manufacturerId || null
-        };
-        
         fetch('{% url "products_master:ai_extract_search_products" %}', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-            },
-            body: JSON.stringify(searchData)
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value },
+            body: JSON.stringify({ query: query || '', category_id: categoryId || null, livestock_type_id: livestockTypeId || null, manufacturer_id: manufacturerId || null })
         })
         .then(response => response.json())
         .then(data => {
@@ -1397,43 +1260,30 @@
                 document.getElementById('searchResults').innerHTML = `<div class="text-center text-danger p-3">${data.error}</div>`;
                 return;
             }
-            
-            const products = data.products || [];
-            if (products.length === 0) {
+            if (!data.products || data.products.length === 0) {
                 document.getElementById('searchResults').innerHTML = '<div class="text-center text-muted p-3">該当する商品が見つかりません</div>';
                 return;
             }
-            
             let html = '';
-            products.forEach(product => {
+            data.products.forEach(product => {
                 const productJson = JSON.stringify(product).replace(/"/g, '&quot;');
                 html += `
                     <div class="border-bottom p-2 product-search-item d-flex justify-content-between align-items-center">
                         <div style="cursor: pointer; flex-grow: 1;" onclick="selectSearchedProduct(${productJson})">
                             <div class="fw-bold">[${product.pk}] ${product.product_name}</div>
-                            <div class="small text-muted">
-                                型式: ${product.model_number} | 規格: ${product.specification} | メーカー: ${product.manufacturer}
-                            </div>
-                            <div class="small text-success">現在仕切価格: ${product.current_wholesale_price}</div>
+                            <div class="small text-muted">型式: ${product.model_number} | 規格: ${product.specification} | メーカー: ${product.manufacturer}</div>
+                            <div class="small text-success">現在仕切価格: ${formatPrice(product.current_wholesale_price)}</div>
                         </div>
                         <div class="ms-2">
-                            <button type="button" class="btn btn-outline-info btn-sm text-nowrap" onclick="showProductInfoModal(event, ${productJson})">
-                                📄 詳細
-                            </button>
+                            <button type="button" class="btn btn-outline-info btn-sm text-nowrap" onclick="showProductInfoModal(event, ${productJson})">📄 詳細</button>
                         </div>
                     </div>
                 `;
             });
-            
             document.getElementById('searchResults').innerHTML = html;
-            
             document.querySelectorAll('.product-search-item').forEach(item => {
-                item.addEventListener('mouseenter', function() {
-                    this.style.backgroundColor = '#f8f9fa';
-                });
-                item.addEventListener('mouseleave', function() {
-                    this.style.backgroundColor = '';
-                });
+                item.addEventListener('mouseenter', function() { this.style.backgroundColor = '#f8f9fa'; });
+                item.addEventListener('mouseleave', function() { this.style.backgroundColor = ''; });
             });
         })
         .catch(error => {
@@ -1453,9 +1303,9 @@
                 specification: "{{ candidate.product.specification|default:'-'|escapejs }}",
                 manufacturer: "{{ candidate.product.manufacturer|default:'-'|escapejs }}",
                 current_wholesale_price: "{{ candidate.product.current_wholesale_price|default:'-'|escapejs }}",
-                current_kenren_price: "{{ candidate.product.current_kenren_price|default:'-'|escapejs }}",       // 追加
-                current_shipping_fee: "{{ candidate.product.current_shipping_fee|default:'-'|escapejs }}",       // 追加
-                current_gross_margin_rate: "{{ candidate.product.current_gross_margin_rate|default:'-'|escapejs }}" // 追加
+                current_kenren_price: "{{ candidate.product.current_kenren_price|default:'-'|escapejs }}",
+                current_shipping_fee: "{{ candidate.product.current_shipping_fee|default:'-'|escapejs }}",
+                current_gross_margin_rate: "{{ candidate.product.current_gross_margin_rate|default:'-'|escapejs }}"
             },
             score: {{ candidate.score }},
             matched_field: "{{ candidate.matched_field|escapejs }}",
@@ -1472,46 +1322,25 @@
     function openBulkManufacturerModal() {
         document.getElementById('bulkManufacturerValue').value = '';
         document.getElementById('bulkManufacturerDisplay').value = '';
-        
-        const modal = new bootstrap.Modal(document.getElementById('bulkManufacturerModal'));
-        modal.show();
+        new bootstrap.Modal(document.getElementById('bulkManufacturerModal')).show();
     }
     
     function openManufacturerModalForBulk() {
         bulkManufacturerMode = true;
-        
-        const bulkModal = bootstrap.Modal.getInstance(document.getElementById('bulkManufacturerModal'));
-        if (bulkModal) {
-            bulkModal.hide();
-        }
-        
-        setTimeout(() => {
-            const manufacturerModal = new bootstrap.Modal(document.getElementById('manufacturerModal'));
-            manufacturerModal.show();
-        }, 300);
+        bootstrap.Modal.getInstance(document.getElementById('bulkManufacturerModal')).hide();
+        setTimeout(() => new bootstrap.Modal(document.getElementById('manufacturerModal')).show(), 300);
     }
     
     function executeBulkManufacturerUpdate() {
         const manufacturerName = document.getElementById('bulkManufacturerDisplay').value;
+        if (!manufacturerName) return alert('メーカーを選択してください。');
+        if (!confirm(`全商品のメーカーを「${manufacturerName}」に変更し、再照合しますか？`)) return;
         
-        if (!manufacturerName) {
-            alert('メーカーを選択してください。');
-            return;
-        }
-        
-        if (!confirm(`全商品のメーカーを「${manufacturerName}」に変更し、再照合しますか？`)) {
-            return;
-        }
-        
-        const modal = bootstrap.Modal.getInstance(document.getElementById('bulkManufacturerModal'));
-        modal.hide();
+        bootstrap.Modal.getInstance(document.getElementById('bulkManufacturerModal')).hide();
         
         {% for result in results.results %}
         const manufacturerInput{{ result.index }} = document.getElementById('manufacturer_{{ result.index }}');
-        if (manufacturerInput{{ result.index }}) {
-            manufacturerInput{{ result.index }}.value = manufacturerName;
-        }
-        
+        if (manufacturerInput{{ result.index }}) manufacturerInput{{ result.index }}.value = manufacturerName;
         const display{{ result.index }} = document.getElementById('display_{{ result.index }}');
         if (display{{ result.index }}) {
             const lines = display{{ result.index }}.innerHTML.split('</div>');
@@ -1529,24 +1358,35 @@
         
         Promise.all(savePromises)
             .then(() => {
-                console.log('メーカー一括更新完了');
                 {% for result in results.results %}
                 setTimeout(() => reMatch({{ result.index }}), {{ result.index|add:1 }} * 200);
                 {% endfor %}
             })
-            .catch(error => {
-                console.error('メーカー一括更新エラー:', error);
-                alert('メーカー更新に失敗しました: ' + error.message);
-            });
+            .catch(error => alert('メーカー更新に失敗しました: ' + error.message));
     }
     
+    // 初期表示時の画面一斉フォーマット適用処理
+    setTimeout(() => {
+        document.querySelectorAll('[id^="current_price_"], [id^="current_kenren_price_"], [id^="current_shipping_fee_"]').forEach(el => {
+            if (el && el.textContent) el.textContent = formatPrice(el.textContent.trim());
+        });
+        document.querySelectorAll('[id^="current_gross_margin_"]').forEach(el => {
+            if (el && el.textContent) {
+                const text = el.textContent.trim();
+                if (text !== '-') {
+                    const val = text.replace('%', '');
+                    const formatted = formatMargin(val);
+                    if (formatted !== '-') el.textContent = formatted + '%';
+                }
+            }
+        });
+    }, 100);
+
     }); // DOMContentLoaded終了
     
-    // 全明細の編集内容を保存してから申請処理を実行
     function saveAllBeforeSubmit() {
         {% if is_history_view %}
         const form = document.querySelector('form');
-        
         {% for result in results.results %}
         const index{{ result.index }} = {{ result.index }};
         const productNameInput{{ result.index }} = document.getElementById(`product_name_${index{{ result.index }}}`);
@@ -1555,38 +1395,26 @@
         const manufacturerInput{{ result.index }} = document.getElementById(`manufacturer_${index{{ result.index }}}`);
         
         if (productNameInput{{ result.index }}) {
-            const hiddenName = document.createElement('input');
-            hiddenName.type = 'hidden';
-            hiddenName.name = `extracted_product_name_${index{{ result.index }}}`;
-            hiddenName.value = productNameInput{{ result.index }}.value;
+            const hiddenName = document.createElement('input'); hiddenName.type = 'hidden';
+            hiddenName.name = `extracted_product_name_${index{{ result.index }}}`; hiddenName.value = productNameInput{{ result.index }}.value;
             form.appendChild(hiddenName);
         }
-        
         if (modelNumberInput{{ result.index }}) {
-            const hiddenModel = document.createElement('input');
-            hiddenModel.type = 'hidden';
-            hiddenModel.name = `extracted_model_number_${index{{ result.index }}}`;
-            hiddenModel.value = modelNumberInput{{ result.index }}.value;
+            const hiddenModel = document.createElement('input'); hiddenModel.type = 'hidden';
+            hiddenModel.name = `extracted_model_number_${index{{ result.index }}}`; hiddenModel.value = modelNumberInput{{ result.index }}.value;
             form.appendChild(hiddenModel);
         }
-        
         if (specificationInput{{ result.index }}) {
-            const hiddenSpec = document.createElement('input');
-            hiddenSpec.type = 'hidden';
-            hiddenSpec.name = `extracted_specification_${index{{ result.index }}}`;
-            hiddenSpec.value = specificationInput{{ result.index }}.value;
+            const hiddenSpec = document.createElement('input'); hiddenSpec.type = 'hidden';
+            hiddenSpec.name = `extracted_specification_${index{{ result.index }}}`; hiddenSpec.value = specificationInput{{ result.index }}.value;
             form.appendChild(hiddenSpec);
         }
-        
         if (manufacturerInput{{ result.index }}) {
-            const hiddenMfg = document.createElement('input');
-            hiddenMfg.type = 'hidden';
-            hiddenMfg.name = `extracted_manufacturer_${index{{ result.index }}}`;
-            hiddenMfg.value = manufacturerInput{{ result.index }}.value;
+            const hiddenMfg = document.createElement('input'); hiddenMfg.type = 'hidden';
+            hiddenMfg.name = `extracted_manufacturer_${index{{ result.index }}}`; hiddenMfg.value = manufacturerInput{{ result.index }}.value;
             form.appendChild(hiddenMfg);
         }
         {% endfor %}
-        
         return true; 
         {% else %}
         return true; 
