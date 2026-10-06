@@ -219,10 +219,7 @@ class PriceHistoryComponent extends HTMLElement {
             <td><input type="text" class="form-control form-control-sm" name="new_wholesale_price_${this.rowIndex}" form="productForm" placeholder="仕切価格"></td>
             <td><input type="text" class="form-control form-control-sm" name="new_kenren_price_${this.rowIndex}" form="productForm" placeholder="県連価格"></td>
             <td><input type="text" class="form-control form-control-sm" name="new_retail_price_${this.rowIndex}" form="productForm" placeholder="参考小売価格"></td>
-
-            <!-- <td><textarea class="form-control form-control-sm" name="new_shipping_fee_${this.rowIndex}" form="productForm" placeholder="送料改修範囲"></textarea></td> -->
-            <td><textarea class="form-control form-control-sm" name="new_shipping_fee_${this.rowIndex}" form="productForm" placeholder="送料改修範囲">${beforeShippingFee}</textarea></td>
-            
+            <td><textarea class="form-control form-control-sm" name="new_shipping_fee_${this.rowIndex}" form="productForm" placeholder="送料">${beforeShippingFee}</textarea></td>
             <td class="text-muted gross-margin-${this.rowIndex}">自動算定</td>
             <td class="text-muted">自動算出</td>
             <td><input type="text" class="form-control form-control-sm" name="new_revision_reason_${this.rowIndex}" form="productForm" placeholder="改定理由"></td>

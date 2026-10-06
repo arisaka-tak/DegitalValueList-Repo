@@ -171,12 +171,18 @@ def _process_ai_extract_submission(request, results, json_data):
 
     try:
         logger.info(f"=== AI価格抽出申請処理開始 ===")
+        logger.info(f"処理対象件数: {len(results.get('results', []))}件")
 
         # 適用年月を取得
         effective_year_month = request.POST.get("effective_year_month")
+        logger.info(f"適用年月: {effective_year_month}")
         if not effective_year_month:
             messages.error(request, "適用年月を指定してください。")
+            logger.error("適用年月が未入力")
             return redirect(request.path)
+
+        # 年月をdatetimeに変換
+        effective_date = datetime.strptime(effective_year_month, "%Y-%m").date()
 
         # 一括改定理由を取得
         revision_reason = request.POST.get("revision_reason", "AI価格抽出による更新")
@@ -207,8 +213,10 @@ def _process_ai_extract_submission(request, results, json_data):
         created_count = 0
         skipped_count = 0
 
+        print(f"Debug: Processing {len(results.get('results', []))} results")
         for i, result in enumerate(results.get("results", [])):
             product_match = request.POST.get(f"product_match_{i}")
+            print(f"Debug: Product {i}: match={product_match}")
 
             detail, created = AIExtractTransactionDetail.objects.get_or_create(
                 transaction=transaction,
@@ -230,6 +238,8 @@ def _process_ai_extract_submission(request, results, json_data):
                 },
             )
 
+            print(f"Debug: Using form data product_match_{i} = {product_match}")
+
             if detail.status in ["スキップ", "申請済"]:
                 continue
 
@@ -247,6 +257,7 @@ def _process_ai_extract_submission(request, results, json_data):
                 detail.status = "エラー"
                 detail.error_message = f"商品ID {product_match} が見つかりません"
                 detail.save()
+                messages.warning(request, f"商品ID {product_match} が見つかりません。")
                 continue
 
             if (
@@ -258,6 +269,9 @@ def _process_ai_extract_submission(request, results, json_data):
                 detail.status = "エラー"
                 detail.error_message = "既に申請中です"
                 detail.save()
+                messages.warning(
+                    request, f"商品「{product.product_name}」は既に申請中です。"
+                )
                 continue
 
             # フォームから新価格を取得
@@ -271,14 +285,31 @@ def _process_ai_extract_submission(request, results, json_data):
                 detail.status = "エラー"
                 detail.error_message = "新価格が入力されていません"
                 detail.save()
+                messages.warning(
+                    request,
+                    f"商品「{product.product_name}」の新価格が入力されていません。",
+                )
                 continue
 
             try:
                 new_price = Decimal(str(new_price_str).strip())
+                if new_price < 0:
+                    detail.status = "エラー"
+                    detail.error_message = "新価格は0以上で入力してください"
+                    detail.save()
+                    messages.warning(
+                        request,
+                        f"商品「{product.product_name}」の新価格は0以上で入力してください。",
+                    )
+                    continue
             except (ValueError, TypeError):
                 detail.status = "エラー"
                 detail.error_message = f"新価格「{new_price_str}」が無効です"
                 detail.save()
+                messages.warning(
+                    request,
+                    f"商品「{product.product_name}」の新価格「{new_price_str}」が無効です。",
+                )
                 continue
 
             year, month = map(int, effective_year_month.split("-"))
@@ -342,36 +373,50 @@ def _process_ai_extract_submission(request, results, json_data):
 
             mock_request = MockRequest(mock_post)
 
+            print(f"Debug: 申請前の商品ステータス: '{product.status}'")
+
             from dashboard.products_master.product_detail.product_detail_views import (
                 submit_approval_core,
             )
 
             try:
+                print(
+                    f"Debug: Calling submit_approval_core with product.pk={product.pk}"
+                )
                 product_approval = submit_approval_core(mock_request, product.pk)
+
+                print(
+                    f"Debug: 申請成功 - ProductApproval created: {product_approval.pk}"
+                )
+
                 current_user = get_current_user()
                 product_approval.applicant = current_user
                 product_approval.save()
                 product_approval.price_histories.update(applicant=current_user)
 
             except Exception as submit_error:
+                error_detail = str(submit_error)
+                traceback_info = traceback.format_exc()
+
                 detail.status = "エラー"
-                detail.error_message = f"申請処理エラー: {str(submit_error)}"
+                detail.error_message = f"申請処理エラー: {error_detail}"
                 detail.save()
+
+                print(
+                    f"Submit approval error for product {product.product_name}: {error_detail}"
+                )
+                print(f"Traceback: {traceback_info}")
+
+                messages.error(
+                    request,
+                    f"商品「{product.product_name}」の申請に失敗しました。原因: {error_detail}",
+                )
                 continue
 
             detail.extracted_price = new_price_str
             detail.extracted_retail_price = (
                 retail_price_str if retail_price_str else None
             )
-            # detail.extracted_kenren_price = (
-            #     kenren_price_str if kenren_price_str else None
-            # )
-            # detail.extracted_shipping_fee = (
-            #     shipping_fee_str if shipping_fee_str else None
-            # )
-            # detail.extracted_gross_margin = (
-            #     gross_margin_str if gross_margin_str else None
-            # )
             detail.matched_product = product
             detail.selected_candidate_text = (
                 f"{detail.match_score or 0}% - {product.product_name}"
@@ -382,6 +427,7 @@ def _process_ai_extract_submission(request, results, json_data):
             detail.save()
 
             created_count += 1
+            print(f"Debug: Created approval for product {product.product_name}")
 
         transaction.success_count = created_count
         transaction.skip_count = skipped_count
@@ -395,15 +441,22 @@ def _process_ai_extract_submission(request, results, json_data):
 
         if created_count > 0:
             messages.success(
-                request, f"{created_count}件の価格履歴申請を作成しました。"
+                request,
+                f"{created_count}件の価格履歴申請を作成しました。(トランザクションID: {transaction_id})",
             )
+            logger.info(f"申請成功: {created_count}件")
         if skipped_count > 0:
             messages.info(request, f"{skipped_count}件をスキップしました。")
+            logger.info(f"スキップ: {skipped_count}件")
 
+        logger.info(f"=== AI価格抽出申請処理完了 ===")
         return redirect(request.path)
 
     except Exception as e:
-        messages.error(request, f"申請データ作成中にエラーが発生しました: {str(e)}")
+        error_msg = f"申請データ作成中にエラーが発生しました: {str(e)}"
+        logger.error(error_msg)
+        logger.error(f"トレースバック: {traceback.format_exc()}")
+        messages.error(request, error_msg)
         return redirect(request.path)
 
 
@@ -606,6 +659,8 @@ def setup_proxy_from_config():
 
 def ai_extract_pdf_process(request):
     """PDFアップロード・AI抽出処理"""
+    print(f"=== ai_extract_pdf_process called: method={request.method} ===")
+
     setup_proxy_from_config()
 
     if request.method != "POST":
@@ -613,7 +668,10 @@ def ai_extract_pdf_process(request):
         return redirect("products_master:ai_extract")
 
     pdf_form = PDFUploadForm(request.POST, request.FILES)
+    print(f"Form is_valid: {pdf_form.is_valid()}")
+
     if not pdf_form.is_valid():
+        print(f"Form errors: {pdf_form.errors}")
         messages.error(request, f"フォームにエラーがあります: {pdf_form.errors}")
         return render(
             request,
@@ -631,6 +689,7 @@ def ai_extract_pdf_process(request):
             pdf_form.cleaned_data["transaction_name"]
             or f'PDF抽出_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
         )
+        print(f"PDF file: {pdf_file.name}, Transaction: {transaction_name}")
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
             for chunk in pdf_file.chunks():
@@ -638,18 +697,31 @@ def ai_extract_pdf_process(request):
             temp_pdf_path = temp_file.name
 
         try:
+            print("Starting Document Intelligence + AI processing...")
+            print(
+                f"プロキシ設定: HTTP={os.environ.get('HTTP_PROXY', 'なし')}, HTTPS={os.environ.get('HTTPS_PROXY', 'なし')}"
+            )
+            print("PDF処理を開始します...")
+
             temp_dir = tempfile.gettempdir()
             di_result_path = os.path.join(temp_dir, f"di_result_{os.getpid()}.pkl")
             ai_result_path = os.path.join(temp_dir, f"ai_results_{os.getpid()}.json")
 
+            print(f"DI処理実行: {temp_pdf_path} -> {di_result_path}")
             extract_di_main(temp_pdf_path, di_result_path)
+
+            print(f"AI処理実行: {di_result_path} -> {ai_result_path}")
             ai_results = process_ai_main(di_result_path, ai_result_path)
 
             for path in [di_result_path, ai_result_path]:
                 if os.path.exists(path):
                     os.unlink(path)
 
+        except ImportError as e:
+            print(f"インポートエラー: {e}")
+            raise Exception(f"PDF処理モジュールのインポートに失敗: {e}")
         except Exception as e:
+            print(f"PDF処理エラー: {e}")
             if "getaddrinfo failed" in str(e) or "Failed to resolve" in str(e):
                 messages.error(
                     request,
@@ -664,7 +736,10 @@ def ai_extract_pdf_process(request):
             return redirect("products_master:ai_extract")
 
         entities = ai_results.get("products", [])
+        print(f"AI entities extracted: {len(entities)}")
+
         if not entities:
+            print("No entities found")
             messages.warning(request, "PDFから商品情報を抽出できませんでした。")
             return redirect("products_master:ai_extract")
 
@@ -741,21 +816,6 @@ def ai_extract_pdf_process(request):
                 if extracted_data.get("retail_price")
                 else None
             ),
-            # extracted_kenren_price=(
-            #     str(extracted_data.get("kenren_price", ""))
-            #     if extracted_data.get("kenren_price")
-            #     else None
-            # ),
-            # extracted_shipping_fee=(
-            #     str(extracted_data.get("shipping_fee", ""))
-            #     if extracted_data.get("shipping_fee")
-            #     else None
-            # ),
-            # extracted_gross_margin=(
-            #     str(extracted_data.get("gross_margin", ""))
-            #     if extracted_data.get("gross_margin")
-            #     else None
-            # ),
             extracted_revision_reason="",
             matched_product=matched_product,
             match_score=match_score,

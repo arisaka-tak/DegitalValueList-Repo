@@ -1291,6 +1291,7 @@
         });
     }
     
+    // 候補データを個別に設定
     {% for result in results.results %}
     {% if result.candidates %}
     window.candidatesData[{{ result.index }}] = [
@@ -1319,38 +1320,47 @@
     {% endif %}
     {% endfor %}
     
+    // メーカー一括訂正モーダルを開く
     function openBulkManufacturerModal() {
         document.getElementById('bulkManufacturerValue').value = '';
         document.getElementById('bulkManufacturerDisplay').value = '';
         new bootstrap.Modal(document.getElementById('bulkManufacturerModal')).show();
     }
     
+    // メーカー選択モーダルを開く（一括訂正用）
     function openManufacturerModalForBulk() {
         bulkManufacturerMode = true;
         bootstrap.Modal.getInstance(document.getElementById('bulkManufacturerModal')).hide();
         setTimeout(() => new bootstrap.Modal(document.getElementById('manufacturerModal')).show(), 300);
     }
     
+    // メーカー一括更新・再照合実行
     function executeBulkManufacturerUpdate() {
         const manufacturerName = document.getElementById('bulkManufacturerDisplay').value;
         if (!manufacturerName) return alert('メーカーを選択してください。');
         if (!confirm(`全商品のメーカーを「${manufacturerName}」に変更し、再照合しますか？`)) return;
         
+        // モーダルを閉じる
         bootstrap.Modal.getInstance(document.getElementById('bulkManufacturerModal')).hide();
         
+        // 全明細のメーカーを更新（編集モードと表示モード両方）
         {% for result in results.results %}
+        // 編集モードの入力フィールド
         const manufacturerInput{{ result.index }} = document.getElementById('manufacturer_{{ result.index }}');
         if (manufacturerInput{{ result.index }}) manufacturerInput{{ result.index }}.value = manufacturerName;
+        // 表示モードの更新
         const display{{ result.index }} = document.getElementById('display_{{ result.index }}');
         if (display{{ result.index }}) {
             const lines = display{{ result.index }}.innerHTML.split('</div>');
             if (lines.length >= 3) {
+                // メーカー部分（最後の行）を更新
                 lines[2] = `            <div class="small text-muted">${manufacturerName}`;
                 display{{ result.index }}.innerHTML = lines.join('</div>');
             }
         }
         {% endfor %}
         
+        // 全明細を保存してから再照合
         const savePromises = [];
         {% for result in results.results %}
         savePromises.push(saveBatchEditChanges({{ result.index }}));
@@ -1358,6 +1368,7 @@
         
         Promise.all(savePromises)
             .then(() => {
+                // 全明細を再照合
                 {% for result in results.results %}
                 setTimeout(() => reMatch({{ result.index }}), {{ result.index|add:1 }} * 200);
                 {% endfor %}
@@ -1384,9 +1395,11 @@
 
     }); // DOMContentLoaded終了
     
+    // 全明細の編集内容を保存してから申請処理を実行
     function saveAllBeforeSubmit() {
         {% if is_history_view %}
         const form = document.querySelector('form');
+        // 編集モードの値をフォームにhiddenフィールドとして追加
         {% for result in results.results %}
         const index{{ result.index }} = {{ result.index }};
         const productNameInput{{ result.index }} = document.getElementById(`product_name_${index{{ result.index }}}`);
@@ -1415,9 +1428,9 @@
             form.appendChild(hiddenMfg);
         }
         {% endfor %}
-        return true; 
+        return true;  // フォーム送信を続行
         {% else %}
-        return true; 
+        return true;  // 通常のフォーム送信
         {% endif %}
     }
     </script>
