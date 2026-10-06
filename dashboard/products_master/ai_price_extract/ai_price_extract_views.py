@@ -300,9 +300,11 @@ def _process_ai_extract_submission(request, results, json_data):
 
             form_data = {
                 "product_code": product.product_code,
-                "livestock_type": product.livestock_type,
-                "category": product.category,
-                "manufacturer": product.manufacturer,
+                "livestock_type": (
+                    product.livestock_type.id if product.livestock_type else ""
+                ),
+                "category": product.category.id if product.category else "",
+                "manufacturer": product.manufacturer.id if product.manufacturer else "",
                 "product_name": product.product_name,
                 "model_number": product.model_number,
                 "specification": product.specification,
