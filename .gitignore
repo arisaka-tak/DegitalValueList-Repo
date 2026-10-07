@@ -63,3 +63,8 @@ deploy_onedir/
 
 # Test files
 *.pdf
+
+# Config
+config.ini
+digital_pricelist_system/config_paths.py
+dashboard/products_master/pdf_processing/extract_di_only.py
